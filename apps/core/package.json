@@ -1,0 +1,23 @@
+{
+  "name": "@clip/core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "doctor": "node src/doctor.ts",
+    "hardware": "node src/hardware.ts --write",
+    "db:generate": "drizzle-kit generate",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.2.0",
+    "drizzle-orm": "^0.45.4",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.6",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2"
+  }
+}

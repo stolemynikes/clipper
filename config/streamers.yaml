@@ -1,0 +1,16 @@
+# Only streamers with an active campaign or written permission.
+# Example entry (remove `enabled: false` once the campaign is real):
+
+streamers:
+  - name: example_streamer
+    enabled: false
+    platform: twitch
+    channel: example_streamer
+    facecam: { x: 0.0, y: 0.0, w: 0.25, h: 0.25 } # fraction of the source frame
+    tag: "@example_streamer"
+    campaign:
+      platform: content_rewards
+      ratePer1k: 0
+      maxPerClip: 0
+      endsAt: 2026-12-31
+      rules: {}

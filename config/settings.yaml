@@ -1,0 +1,36 @@
+# Global settings. Scoring weights are tuned later by the Learner.
+
+scoring:
+  windowSec: 5
+  topN: 10
+  leadInSec: [30, 60] # chat reacts after the moment, so start this much before the peak
+  weights:
+    chatRate: 1.0
+    emoteScore: 0.8
+    viewerClipHits: 2.0
+    audioPeak: 0.5
+  emotes:
+    LUL: 1.0
+    KEKW: 1.0
+    OMEGALUL: 1.2
+    Pog: 1.0
+    PogChamp: 1.0
+
+clip:
+  minSec: 15
+  maxSec: 60
+  disclosure: true # default on; campaigns can override
+
+limits:
+  maxPostsPerAccountPerDay: 3
+
+platforms:
+  tiktok: false
+  youtube: false
+  instagram: false
+
+retention:
+  keepSourceDays: 2 # delete source VODs this long after clips are done
+
+queue:
+  maxAttempts: 3

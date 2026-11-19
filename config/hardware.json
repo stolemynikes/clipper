@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-19",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "vramMiB": 12227,
+    "driver": "610.88"
+  },
+  "ramGB": 31.9,
+  "cpu": {
+    "name": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cores": 8,
+    "threads": 16
+  },
+  "nvenc": [
+    "av1_nvenc",
+    "h264_nvenc",
+    "hevc_nvenc"
+  ],
+  "workDrive": {
+    "letter": "E",
+    "freeGB": 409,
+    "mediaType": "HDD"
+  },
+  "whisperModelVod": "large-v3",
+  "whisperModelLive": "large-v3-turbo",
+  "encoder": "h264_nvenc",
+  "maxParallelRenders": 2,
+  "workDir": "E:\\dev\\clipping-tool\\data",
+  "warnings": [
+    "E: is an HDD: downloads and renders will be I/O bound"
+  ]
+}

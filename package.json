@@ -1,0 +1,18 @@
+{
+  "name": "clipping-tool",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "doctor": "npm run doctor -w @clip/core",
+    "hardware": "npm run hardware -w @clip/core",
+    "db:generate": "npm run db:generate -w @clip/core",
+    "test": "npm test -w @clip/core",
+    "typecheck": "npm run typecheck -w @clip/core"
+  }
+}
