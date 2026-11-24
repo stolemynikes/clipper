@@ -1,0 +1,1 @@
+ALTER TABLE `clips` ADD `title_style` text;

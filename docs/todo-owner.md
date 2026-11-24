@@ -20,7 +20,14 @@ Things only the owner can do. Checked against the official docs on 2026-11-24.
 - [ ] Let the Ollama app start at login (Start menu > Ollama, it adds itself to startup). Set the user environment variable `OLLAMA_MODELS=E:\dev\cache\ollama` first, or it downloads the models again to C:.
   Without Ollama, clips still work, but get a plain fallback title.
 
-## Zernio (TikTok and Instagram posting through their audited app)
+## Buffer (first choice for TikTok and Instagram posting, checked 2026-11-24)
+Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram business/creator and YouTube Shorts, max 10 queued posts per channel.
+- [ ] Create a free account at https://buffer.com.
+- [ ] Connect the TikTok account as a **business** account and Instagram as **business or creator** (personal Instagram only gets reminders, no auto-post).
+- [ ] Create an API key at https://publish.buffer.com/settings/api. Put it in `.env` as `BUFFER_API_KEY=` (never in chat).
+- [ ] Buffer has no upload endpoint: it fetches the video from a public URL. Plan: Tailscale Funnel serving only approved clips under a random link. Enable Funnel for this PC in the Tailscale admin console (Access controls > allow `funnel`), then tell Claude.
+
+## Zernio (backup if Buffer fails)
 - [ ] Create a free account at https://zernio.com (first 2 social accounts free, no card).
 - [ ] Dashboard > API keys > Create API key. Put it in `.env` as `ZERNIO_API_KEY=` (never in chat).
 - [ ] Connect the TikTok test account (new connections use TikTok's Business app: posts are public, max 15 videos per day).
