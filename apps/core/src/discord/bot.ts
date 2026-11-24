@@ -153,21 +153,29 @@ export async function startDiscord(db: Db) {
   const token = process.env.DISCORD_BOT_TOKEN, guildId = process.env.DISCORD_GUILD_ID;
   if (!token || !guildId) return log.info('Discord not set up (DISCORD_BOT_TOKEN / DISCORD_GUILD_ID)');
   client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const setup = async (g: Guild) => {
+    guild = g;
+    const perm = PermissionFlagsBits.ManageGuild;
+    await g.commands.set([
+      { name: 'pause', description: 'Pause all jobs', defaultMemberPermissions: perm },
+      { name: 'resume', description: 'Resume all jobs', defaultMemberPermissions: perm },
+      { name: 'status', description: 'Jobs and clips right now', defaultMemberPermissions: perm },
+    ]);
+    log.info(`Discord ready in ${g.name}`);
+    await syncDiscord(db);
+  };
+  const fail = (e: unknown) => log.error('Discord setup failed', { error: String(e) });
+  client.on(Events.GuildCreate, (g) => { if (g.id === guildId && !guild) setup(g).catch(fail); }); // bot invited while running
   client.on(Events.InteractionCreate, async (i) => {
     if (!i.inGuild() || i.guildId !== guildId || !(i.isButton() || i.isChatInputCommand())) return;
     if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return void i.reply({ content: 'Only the server owner can do this.', ephemeral: true });
     try { await (i.isButton() ? onButton(db, i) : onCommand(db, i as ChatInputCommandInteraction)); } catch (e) { log.error('interaction failed', { error: String(e) }); }
   });
+  client.on(Events.Error, (e) => log.error('Discord error', { error: String(e) }));
   client.once(Events.ClientReady, async (c) => {
-    guild = await c.guilds.fetch(guildId);
-    const perm = PermissionFlagsBits.ManageGuild;
-    await guild.commands.set([
-      { name: 'pause', description: 'Pause all jobs', defaultMemberPermissions: perm },
-      { name: 'resume', description: 'Resume all jobs', defaultMemberPermissions: perm },
-      { name: 'status', description: 'Jobs and clips right now', defaultMemberPermissions: perm },
-    ]);
-    log.info(`Discord ready in ${guild.name}`);
-    await syncDiscord(db).catch((e) => log.error('Discord sync failed', { error: String(e) }));
+    const g = await c.guilds.fetch(guildId).catch(() => null);
+    if (!g) return log.warn(`Discord bot is not in the server yet. Invite it: https://discord.com/oauth2/authorize?client_id=${c.application.id}&scope=bot+applications.commands&permissions=326417632272`);
+    await setup(g).catch(fail);
   });
   await client.login(token); // errors carry no token
 }
