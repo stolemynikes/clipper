@@ -21,4 +21,4 @@ export const paths = {
 
 /** Keys the user must provide; values are never logged. */
 export const requiredKeys = ['BARK_URL', 'BARK_KEY', 'REVIEW_HOST', 'REVIEW_URL', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET'] as const;
-export const optionalKeys = ['ANTHROPIC_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'] as const;
+export const optionalKeys = ['ANTHROPIC_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET', 'TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'] as const;
