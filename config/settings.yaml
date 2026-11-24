@@ -24,8 +24,8 @@ clip:
   disclosure: true # default on; campaigns can override
   disclosureText: "#ad"
   disclosureSec: 3
-  disclosureInVideo: false # a campaign can set disclosureInVideo: true if its brief demands it
-  disclosureInText: false # owner 2026-11-24: no #ad in captions or video; disclosure = platform paid-promotion toggle
+  disclosureInVideo: true # owner 2026-11-24: CR FTC page needs it in the first 10s; small, above the tag
+  disclosureInText: true # owner 2026-11-24: CR FTC page needs written #ad; caption is short so it stays visible (CR rejects #ad at the end of a long caption)
   captionStyle: bold # bold | pop | clean; streamers.yaml can override per streamer
   censor: # caption masking (audio untouched); applied to every clip while any listed platform is on
     platforms: [tiktok]

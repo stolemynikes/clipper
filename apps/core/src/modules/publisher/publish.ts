@@ -152,7 +152,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as AccountPlatform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null }); // owner: no #ad text anywhere, paid-promotion toggle only
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null }); // CR FTC page: written #ad plus the paid-promotion toggle
   const pp = viaPostpeer(account.platform);
   if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
   const token = pp ? '' : await accessToken(accountId, account.platform as Platform);
