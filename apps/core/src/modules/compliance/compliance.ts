@@ -13,6 +13,8 @@ export interface ComplianceInput {
   music?: Music | null;
   transcript: string;
   sourceDate?: Date | null; // when the stream aired
+  budget?: { used: number; total: number } | null; // estimated payout so far vs the campaign budget
+  duplicateOf?: number | null; // earlier clip with the same speech
   now?: Date;
 }
 
@@ -34,6 +36,9 @@ export function checkClip(i: ComplianceInput): Compliance {
 
   const from = i.campaign?.rules?.sourceFrom;
   if (from && i.sourceDate && i.sourceDate < new Date(String(from))) blocks.push(`Stream is older than the campaign allows (from ${String(from)})`);
+
+  if (i.budget && i.budget.total > 0 && i.budget.used >= i.budget.total) blocks.push('The campaign budget is used up');
+  if (i.duplicateOf) blocks.push(`Same moment as clip ${i.duplicateOf}`);
 
   if (i.durationSec < i.limits.minSec) blocks.push(`Too short (${Math.round(i.durationSec)}s, needs ${i.limits.minSec}s)`);
   if (i.durationSec > i.limits.maxSec + 0.5) blocks.push(`Too long (${Math.round(i.durationSec)}s, max ${i.limits.maxSec}s)`);

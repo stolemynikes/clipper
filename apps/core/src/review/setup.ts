@@ -127,16 +127,19 @@ code{background:var(--bg);padding:1px 6px;border-radius:6px;font-size:14px}
 label{display:block;font-size:14px;color:var(--muted);margin:8px 0}input,select{display:block;width:100%;margin-top:4px;min-height:48px;padding:0 12px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px}
 input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:12px;font-weight:600;text-decoration:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
 <header><h1>Accounts</h1><a href="/">Back to review</a>
 <div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div></header>
 <main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
 <section><h2>Your accounts</h2>${list.map(acc).join('\n') || '<p class="empty">No accounts yet. Add one below.</p>'}
-<article class="pad"><h2>Add an account</h2><form onsubmit="return addAcc(event)">
+<article class="pad"><h2>Add an account</h2><form id="add" onsubmit="return addAcc(event)" onchange="ideas()">
 <label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option></select></label>
-<label>Name (for you, e.g. "Clix clips TikTok")<input name="name" required maxlength="60"></label>
-<label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}<option value="">None</option></select></label>
+<label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}" data-name="${esc(s.name)}">${esc(s.name)}</option>`).join('')}<option value="" data-name="">None</option></select></label>
+<label>Name (only for you)<input name="name" required maxlength="60"></label>
+<p class="sub">Username ideas for the new account (tap to copy). Pick one that says it is a clip page, not the streamer.</p>
+<div class="chips" id="ideas"></div>
 <button class="ok">Add</button></form></article></section>
 <section><h2>Platform apps</h2><p class="sub">Needed once per platform, before you can connect accounts.</p>${(['tiktok', 'youtube'] as const).map(app).join('\n')}</section></main>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -151,6 +154,17 @@ async function saveApp(e, p) {
   if (!Object.keys(body).length) { toast('Paste at least one value.'); return false; }
   done(await send('/setup/app/' + p, body).catch(() => null), 'Saved.'); return false;
 }
+// Fan/clip page names: platforms ban accounts that pose as the streamer, so every idea says "clips".
+function ideas() {
+  const f = document.getElementById('add'), o = f.streamerId.selectedOptions[0], n = (o && o.dataset.name || 'stream').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const plat = f.platform.value === 'youtube' ? 'YouTube' : 'TikTok';
+  if (!f.name.dataset.touched) f.name.value = (o && o.dataset.name ? o.dataset.name.charAt(0).toUpperCase() + o.dataset.name.slice(1) + ' clips ' : 'Clips ') + plat;
+  const list = [n + '.clips', n + 'clipsdaily', 'bestof' + n + 'clips', n + '_moments_clips'];
+  document.getElementById('ideas').replaceChildren(...list.map((t) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + t;
+    // clipboard API only exists on https/localhost: over the Tailscale IP the toast shows the name instead.
+    b.onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied ' + t), () => toast(t)); return b; }));
+}
+document.addEventListener('DOMContentLoaded', () => { const f = document.getElementById('add'); f.name.oninput = () => { f.name.dataset.touched = '1'; }; ideas(); });
 async function addAcc(e) { e.preventDefault(); done(await send('/setup/account', Object.fromEntries(new FormData(e.target))).catch(() => null), 'Account added.'); return false; }
 async function removeAcc(id, btn) { if (!confirm('Remove this account? Its posts stay counted.')) return; done(await send('/setup/account/' + id + '/delete').catch(() => null), 'Removed.'); }
 </script></body></html>`;

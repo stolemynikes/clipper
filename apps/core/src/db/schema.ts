@@ -56,6 +56,7 @@ export const clips = sqliteTable('clips', {
   hook: text('hook'),
   title: text('title'),
   compliance: json<Record<string, unknown>>('compliance'),
+  transcript: text('transcript'), // for spotting the same moment twice (re-uploads, overlapping VODs)
   status: text('status', { enum: ['pending_review', 'approved', 'rejected', 'posted'] }).notNull().default('pending_review'),
   createdAt: createdAt(),
 });

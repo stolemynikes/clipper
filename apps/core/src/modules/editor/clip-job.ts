@@ -12,6 +12,8 @@ import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { type ChatLine, matchChat } from './chat-overlay.ts';
 import { checkClip, type Music } from '../compliance/compliance.ts';
+import { findDuplicate } from '../compliance/duplicate.ts';
+import { accountStats } from '../../review/setup.ts';
 import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { transcribe } from './whisper.ts';
@@ -76,11 +78,14 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   const durationSec = moment.endSec - moment.startSec - lead;
   const disclosure = (cfg.campaign?.disclosure ?? settings.clip.disclosure) ? settings.clip.disclosureText : null;
+  const transcript = words.map((w) => w.w).join(' ');
   const music = await detectMusic(src);
+  const used = accountStats(db).filter((a) => a.streamer === cfg.name).reduce((n, a) => n + a.earned, 0);
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
     disclosureRequired: cfg.campaign?.disclosure ?? settings.clip.disclosure, disclosure, music,
-    transcript: words.map((w) => w.w).join(' '),
+    transcript, duplicateOf: source.streamerId ? findDuplicate(db, source.streamerId, transcript) : null,
+    budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
   });
   if (!compliance.ok) {
@@ -108,7 +113,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words))), { cwd: dir });
   rmSync(src, { force: true });
 
-  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, compliance: { ...compliance, music } }).returning().get();
+  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music } }).returning().get();
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
   enqueue(db, 'review.notify', { clipId: clip.id });
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);

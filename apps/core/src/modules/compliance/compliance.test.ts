@@ -50,3 +50,10 @@ test('music: song blocks, some music warns', () => {
   assert.match(some.warnings[0], /background music/);
   assert.match(check({ music: null }).warnings[0], /did not run/);
 });
+
+test('budget used up and duplicates block', () => {
+  assert.match(check({ budget: { used: 100, total: 100 } }).blocks[0], /budget/);
+  assert.equal(check({ budget: { used: 99, total: 100 } }).ok, true);
+  assert.equal(check({ budget: { used: 50, total: 0 } }).ok, true); // pool campaign: no budget set
+  assert.match(check({ duplicateOf: 12 }).blocks[0], /clip 12/);
+});
