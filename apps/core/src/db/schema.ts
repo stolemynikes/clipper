@@ -60,11 +60,20 @@ export const clips = sqliteTable('clips', {
   createdAt: createdAt(),
 });
 
+// One row per social account. Linked to a streamer = that streamer's campaign. OAuth refresh token lives in .env (ACCOUNT_<id>_TOKEN), never here.
+export const accounts = sqliteTable('accounts', {
+  id: id(),
+  platform: text('platform', { enum: ['tiktok', 'youtube', 'instagram'] }).notNull(),
+  name: text('name').notNull(),
+  streamerId: integer('streamer_id').references(() => streamers.id),
+  createdAt: createdAt(),
+});
+
 export const posts = sqliteTable('posts', {
   id: id(),
   clipId: integer('clip_id').notNull().references(() => clips.id),
+  accountId: integer('account_id').notNull().references(() => accounts.id),
   platform: text('platform', { enum: ['tiktok', 'youtube', 'instagram'] }).notNull(),
-  account: text('account').notNull(),
   url: text('url'),
   postedAt: integer('posted_at', { mode: 'timestamp_ms' }),
   submitted: integer('submitted', { mode: 'boolean' }).notNull().default(false),
