@@ -2,6 +2,11 @@
 
 Things only the owner can do. Checked against the official docs on 2026-11-24.
 
+## Content Rewards
+- [x] Whop connected in CR settings (2026-11-24).
+- [ ] Link the posting accounts in CR: open the CR Chrome (`.venv/Scripts/python -I workers/cr_browser.py open https://contentrewards.com/c/settings`), log into TikTok, Google and Instagram there yourself, then Settings > Accounts > Connect account > platform > approve. Without a linked account CR refuses every submit ("Your account is not linked").
+- [ ] Lauren Hamden pays on Instagram only and wants a dedicated account; Boeshi: account may only post GTA 6. Check this before switching them to clips.
+
 ## YouTube
 - [ ] Google Cloud > OAuth consent screen > Audience: set the publishing status to **In production**.
   In "Testing", refresh tokens expire after 7 days, so every account would need a reconnect each week.
