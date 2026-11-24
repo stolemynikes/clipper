@@ -12,6 +12,18 @@ test('range header: open, closed, suffix, invalid', () => {
   assert.equal(parseRange('bytes=-', 1000), null);
 });
 
+test('auto-keep: needs viewer clips AND chat, no warnings, never loudness alone', async () => {
+  const { autoKeep } = await import('./review.ts');
+  const cfg = { enabled: true, minViewerClips: 5, minChatRate: 1 };
+  assert.equal(autoKeep({ viewerClipHits: 7, chatRate: 1.9 }, [], cfg), true);
+  assert.equal(autoKeep({ viewerClipHits: 7, chatRate: 1.9 }, ['Some background music'], cfg), false);
+  assert.equal(autoKeep({ viewerClipHits: 9, chatRate: -0.1 }, [], cfg), false);
+  assert.equal(autoKeep({ viewerClipHits: 0, chatRate: 9, audioPeak: 5 }, [], cfg), false);
+  assert.equal(autoKeep({ viewerClipHits: 7, chatRate: 2, website: 1 }, [], cfg), false);
+  assert.equal(autoKeep({ viewerClipHits: 7, chatRate: 2 }, [], { ...cfg, enabled: false }), false);
+  assert.equal(autoKeep({ viewerClipHits: 7, chatRate: 2 }, [], undefined), false);
+});
+
 test('reasons: plain language, fallback when no signal stands out', async () => {
   const { reasons } = await import('./server.ts');
   assert.deepEqual(reasons({ viewerClipHits: 2, chatRate: 3, emoteScore: 1.5 }), ['2 viewers clipped this moment', 'Chat went wild', 'Lots of laughing and hype emotes']);

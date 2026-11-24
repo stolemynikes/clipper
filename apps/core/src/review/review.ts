@@ -5,6 +5,7 @@ import { count, eq, max } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { clips, jobs, moments, sources, streamers } from '../db/schema.ts';
 import { paths } from '../env.ts';
+import { loadSettings, type AutoKeep } from '../config.ts';
 import { logger, redact } from '../log.ts';
 import type { Job } from '../queue/queue.ts';
 import { queuePublish } from '../modules/publisher/publish.ts';
@@ -58,10 +59,22 @@ export function decide(db: Db, id: number, approved: boolean): boolean {
   return true;
 }
 
+/** Auto-keep only on human signals (viewer clips + chat), never on loudness, and only with a clean compliance check. */
+export function autoKeep(signals: Record<string, number>, warnings: string[], cfg: AutoKeep | undefined): boolean {
+  if (!cfg?.enabled || warnings.length) return false;
+  return (signals.viewerClipHits ?? 0) >= cfg.minViewerClips && (signals.chatRate ?? 0) >= cfg.minChatRate && !signals.website;
+}
+
 /** Job handler: tell the phone a clip waits for review; the tap opens the review page at that clip. */
 export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
   const row = clipRows(db).where(eq(clips.id, clipId)).get();
   if (!row) throw new Error(`clip ${clipId} not found`);
+  if (row.clip.status !== 'pending_review') return;
+  const warnings = (row.clip.compliance?.warnings ?? []) as string[];
+  if (autoKeep((row.moment.signals ?? {}) as Record<string, number>, warnings, loadSettings().review?.autoKeep) && decide(db, clipId, true)) {
+    log.info(`clip ${clipId} auto-kept`);
+    return bark(`Auto-kept · ${row.streamer.name}`, 'Viewers clipped it and chat reacted. Tap to watch.', { url: `${reviewUrl()}/#clip-${clipId}`, level: 'passive' });
+  }
   await bark(`New clip · ${row.streamer.name}`, `${Math.round(row.clip.durationSec ?? 0)} seconds. Tap to watch and choose Keep or Skip.`,
     { url: `${reviewUrl()}/#clip-${clipId}` });
 }

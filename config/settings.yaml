@@ -31,6 +31,14 @@ clip:
     platforms: [tiktok]
     words: [fuck, shit, bitch, cunt, nigg, fag, retard]
 
+review:
+  # Keep a clip without asking when people (not loudness) say it is good: several viewers clipped it AND chat reacted.
+  # Any compliance warning still goes to manual review. First guess 2026-11-24 (3 of 25 pending clips pass); tune with real views.
+  autoKeep:
+    enabled: true
+    minViewerClips: 5
+    minChatRate: 1.0 # chat z-score vs the stream's baseline
+
 limits:
   maxPostsPerAccountPerDay: 3
   # Content Rewards pauses submissions when too many are still unapproved (Terms 7.14); posts pending over 7 days get reviewed (7.2).

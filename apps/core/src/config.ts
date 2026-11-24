@@ -16,7 +16,10 @@ export interface Settings {
   queue: { maxAttempts: number };
   watcher: { enabled?: boolean; pollMinutes: number; maxVodAgeDays: number };
   study?: { extra?: string[] };
+  review?: { autoKeep?: AutoKeep };
 }
+
+export interface AutoKeep { enabled: boolean; minViewerClips: number; minChatRate: number }
 
 export interface StreamerConfig {
   name: string;
