@@ -7,7 +7,7 @@ import { activeStreamers, loadSettings } from './config.ts';
 import { paths } from './env.ts';
 import { readHardwareConfig } from './hardware.ts';
 import { runCmd } from './proc.ts';
-import { profitScore } from './modules/compliance/campaign-notes.ts';
+import { profitScore, viewsToPay } from './modules/compliance/campaign-notes.ts';
 import { stopWhisper, transcribe } from './modules/editor/whisper.ts';
 import { getTopClips, getUserId } from './twitch.ts';
 import { hasYoutubeKey, topShorts } from './youtube.ts';
@@ -18,11 +18,11 @@ const model = readHardwareConfig()?.whisperModelVod ?? 'medium';
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
 
 const camp = activeStreamers().filter((s) => s.platform === 'twitch' && s.campaign)
-  .sort((a, b) => profitScore(b.campaign!) - profitScore(a.campaign!));
-// Campaign streamers first (most profitable first), then extra channels we only learn from.
+  .sort((a, b) => viewsToPay(a.campaign!) - viewsToPay(b.campaign!));
+// Campaign streamers first (fewest views to first pay first), then extra channels we only learn from.
 const list: { name: string; channel: string; campaign?: (typeof camp)[number]['campaign'] }[] = [...camp,
   ...(loadSettings().study?.extra ?? []).filter((c) => !camp.some((s) => s.channel === c)).map((c) => ({ name: c, channel: c }))];
-const pay = (s: (typeof list)[number]) => (s.campaign ? `~$${profitScore(s.campaign).toFixed(1)} per 1K views (rough)` : 'no campaign, study only');
+const pay = (s: (typeof list)[number]) => (s.campaign ? `first $10 at ~${viewsToPay(s.campaign).toLocaleString('en-US')} views, ~$${profitScore(s.campaign).toFixed(1)} per 1K (rough)` : 'no campaign, study only');
 console.log(list.map((s) => `${s.name}: ${pay(s)}`).join('\n'));
 
 try {

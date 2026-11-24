@@ -34,3 +34,11 @@ export function profitScore(c: Campaign): number {
   const bar = Math.max(Number(c.rules?.minViews ?? 0), 100_000); // shortcut: no bar -> assume 100K views, upgrade once we know real pool shares
   return ((c.pool ?? 0) * 1000) / bar;
 }
+
+/** Views one clip needs before it earns its first $10 (owner: work on the lowest bar first).
+ * Rate: $10 (or the min payout, if higher) at the rate, but never under the views bar. Pool: the bar (share unknown). */
+export function viewsToPay(c: Campaign): number {
+  const bar = Number(c.rules?.minViews ?? 0);
+  if (c.ratePer1k > 0) return Math.max(bar, (Math.max(10, Number(c.rules?.minPayout ?? 0)) / c.ratePer1k) * 1000);
+  return Math.max(bar, 100_000); // shortcut: pool share unknown, bar only; upgrade once we see real pool payouts
+}

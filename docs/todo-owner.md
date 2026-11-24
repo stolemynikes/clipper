@@ -47,3 +47,10 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
 - [ ] YouTube Data API key (free), so I can study the layout of top Shorts from other clippers:
       Google Cloud console > same project as YouTube login > APIs & Services > Credentials > Create credentials > API key.
       Restrict it to "YouTube Data API v3". Put it in `.env` as `YOUTUBE_API_KEY=` (never in chat).
+- [ ] Join ALL streamer clipping campaigns on Content Rewards (2026-11-24). Briefs, rules and channel names show only after joining.
+      Then tell Claude; it reads each brief and adds the campaign (no gambling). Lowest pay bar first:
+      - Dasgasd3m x RUCKUS GTA 6: $2/1K, min payout $20 (~10K views), max $150/clip, TikTok + YouTube, GTA 6-only account. https://contentrewards.com/c/campaigns/051002dd-5c46-43d0-a446-43f2957ba3a9
+      - Michael Sartain: $1-2/1K (~5-10K views for $10), ~$4.2K left. https://contentrewards.com/c/campaigns/86842687-ba2b-4638-a024-995dcf3d25a3
+      - BenDaDonnn x Puffco GTA 6: $1/1K, min $2. Puffco is a vape brand: your call. https://contentrewards.com/c/campaigns/bb66f9eb-b90e-4dd0-8cee-9f3cd566c9a0
+      - Kai Cenat GTA 6: $10K pool, 3.1K clippers. https://contentrewards.com/c/campaigns/1d2bcb00-c904-415f-aa82-f95b96baad86
+      - Rest of the 100+ list at https://contentrewards.com/c/discover/clipping (skip gambling, e.g. 1WIN, VAVADA).
