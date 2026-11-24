@@ -31,3 +31,9 @@ test('chunk splits for API batch limits', () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.deepEqual(chunk([], 20), []);
 });
+
+test('handle check only sends valid names to YouTube', async () => {
+  const { validHandle } = await import('../../review/setup.ts');
+  assert.ok(validHandle('clix.clips.hq') && validHandle('dailyclixclips'));
+  assert.ok(!validHandle('ab') && !validHandle('.dot') && !validHandle('a/b') && !validHandle('x'.repeat(31)) && !validHandle('a&key=x'));
+});

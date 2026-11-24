@@ -20,7 +20,7 @@ export const APPS: Record<Platform, {
 }> = {
   youtube: {
     label: 'YouTube Shorts', idParam: 'client_id', idKey: 'YOUTUBE_CLIENT_ID', secretKey: 'YOUTUBE_CLIENT_SECRET',
-    fields: [['YOUTUBE_CLIENT_ID', 'Client ID', false], ['YOUTUBE_CLIENT_SECRET', 'Client secret', true]],
+    fields: [['YOUTUBE_CLIENT_ID', 'Client ID', false], ['YOUTUBE_CLIENT_SECRET', 'Client secret', true], ['YOUTUBE_API_KEY', 'API key (checks if a name is free)', true]],
     auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token',
     scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
     extra: { access_type: 'offline', prompt: 'consent' }, // prompt=consent: Google only returns a refresh token on consent
@@ -127,7 +127,7 @@ code{background:var(--bg);padding:1px 6px;border-radius:6px;font-size:14px}
 label{display:block;font-size:14px;color:var(--muted);margin:8px 0}input,select{display:block;width:100%;margin-top:4px;min-height:48px;padding:0 12px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px}
 input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:12px;font-weight:600;text-decoration:none}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips .idea{display:flex;align-items:center;gap:2px}.chips a{min-height:44px;display:flex;align-items:center;padding:0 8px;font-size:14px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips .idea{display:flex;align-items:center;gap:2px}.chips .taken{opacity:.45}.chips .taken button{text-decoration:line-through}.chips a.free{color:#4ade80;font-weight:600}.chips a{min-height:44px;display:flex;align-items:center;padding:0 8px;font-size:14px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
 <header><h1>Accounts</h1><a href="/">Back to review</a>
@@ -138,7 +138,7 @@ form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-
 <label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option></select></label>
 <label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}" data-name="${esc(s.name)}">${esc(s.name)}</option>`).join('')}<option value="" data-name="">None</option></select></label>
 <label>Name (only for you)<input name="name" required maxlength="60"></label>
-<p class="sub">Username ideas (tap to copy). Tap Check first: if the page says the account does not exist, the name is free. Pick one that says it is a clip page, not the streamer.</p>
+<p class="sub">Username ideas (tap to copy). YouTube names are checked for you. For TikTok, tap Check: if the page says the account does not exist, the name is free. Pick one that says it is a clip page, not the streamer.</p>
 <div class="chips" id="ideas"></div>
 <button class="ok">Add</button></form></article></section>
 <section><h2>Platform apps</h2><p class="sub">Needed once per platform, before you can connect accounts.</p>${(['tiktok', 'youtube'] as const).map(app).join('\n')}</section></main>
@@ -170,7 +170,12 @@ function ideas() {
     // No official API says if a handle is free, and scraping is not allowed: the user opens the profile page and looks.
     const a = document.createElement('a'); a.href = prof + t; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Check';
     a.setAttribute('aria-label', 'Check if @' + t + ' is free');
-    w.append(b, a); return w; }));
+    w.append(b, a);
+    if (f.platform.value === 'youtube') fetch('/setup/handle/' + encodeURIComponent(t)).then((r) => r.json()).then((j) => {
+      if (j.free === true) { a.textContent = 'Free'; a.className = 'free'; }
+      if (j.free === false) { w.classList.add('taken'); b.disabled = true; a.textContent = 'Taken'; }
+    }, () => {});
+    return w; }));
 }
 document.addEventListener('DOMContentLoaded', () => { const f = document.getElementById('add'); f.name.oninput = () => { f.name.dataset.touched = '1'; }; ideas(); });
 async function addAcc(e) { e.preventDefault(); done(await send('/setup/account', Object.fromEntries(new FormData(e.target))).catch(() => null), 'Account added.'); return false; }
@@ -187,10 +192,27 @@ const text = (res: ServerResponse, code: number, msg: string) => res.writeHead(c
 const back = (res: ServerResponse, msg: string) => res.writeHead(302, { location: `/setup?msg=${encodeURIComponent(msg)}` }).end();
 
 /** Handles /setup, /connect/:id, /oauth/:platform. Returns false if the path is not ours. */
+export const validHandle = (h: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(h);
+
+/** YouTube handle free? Official Data API (channels.list forHandle). null = can't tell (no key, bad name, API error). */
+export async function handleFree(h: string): Promise<boolean | null> {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key || !validHandle(h)) return null;
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=id&forHandle=${encodeURIComponent('@' + h)}&key=${encodeURIComponent(key)}`).catch(() => null);
+  if (!r?.ok) return null;
+  return !((await r.json()) as { items?: unknown[] }).items?.length;
+}
+
 export async function setupRoute(db: Db, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const p = url.pathname;
   if (req.method === 'GET' && p === '/setup') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(page(db, url.searchParams.get('msg')));
+    return true;
+  }
+
+  const handle = /^\/setup\/handle\/([^/]+)$/.exec(p);
+  if (req.method === 'GET' && handle) {
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ free: await handleFree(handle[1].toLowerCase()) }));
     return true;
   }
 

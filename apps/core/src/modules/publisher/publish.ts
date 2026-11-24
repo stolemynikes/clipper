@@ -51,18 +51,23 @@ export function queuePublish(db: Db, clipId: number) {
   }
 }
 
-async function youtube(token: string, file: string, t: { title: string; description: string }, paid: boolean) {
+async function youtube(token: string, file: string, t: { title: string; description: string }, paid: boolean, placement = true): Promise<{ externalId: string; url: string }> {
   const size = statSync(file).size;
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status,paidProductPlacementDetails', {
+  const init = await fetch(`https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status${placement ? ',paidProductPlacementDetails' : ''}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json; charset=UTF-8', 'x-upload-content-type': 'video/mp4', 'x-upload-content-length': String(size) },
     body: JSON.stringify({
       snippet: { title: t.title, description: t.description, categoryId: '20' }, // 20 = Gaming
       status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
-      paidProductPlacementDetails: { hasPaidProductPlacement: paid },
+      ...(placement && { paidProductPlacementDetails: { hasPaidProductPlacement: paid } }),
     }),
   });
   const loc = init.headers.get('location');
+  // If YouTube rejects the paid-promotion field, upload without it: the #ad in the description still discloses.
+  if (init.status === 400 && placement) {
+    log.warn(`YouTube refused paidProductPlacementDetails, retrying without it: ${(await init.text()).slice(0, 200)}`);
+    return youtube(token, file, t, paid, false);
+  }
   if (!init.ok || !loc) throw new Error(`YouTube upload start failed: ${init.status} ${(await init.text()).slice(0, 300)}`);
   const up = await fetch(loc, { method: 'PUT', headers: { 'content-type': 'video/mp4' }, body: readFileSync(file) });
   const v = await up.json().catch(() => ({})) as { id?: string };
@@ -98,7 +103,11 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!clip || !account) throw new Error(`clip ${clipId} or account ${accountId} not found`);
   if (clip.status !== 'approved' && clip.status !== 'posted') return log.info(`clip ${clipId} not approved, not posting`);
-  if (db.select().from(posts).where(and(eq(posts.clipId, clipId), eq(posts.accountId, accountId))).get()) return;
+  const prev = db.select().from(posts).where(and(eq(posts.clipId, clipId), eq(posts.accountId, accountId))).get();
+  if (prev) {
+    if (!prev.externalId) throw new Error(`clip ${clipId} may already be on account ${accountId} (the program stopped mid-upload). Check the account; delete post row ${prev.id} to post again.`);
+    return;
+  }
   const settings = loadSettings();
   if (!settings.platforms[account.platform]) return log.info(`${account.platform} is off in settings, clip ${clipId} not posted`);
 
@@ -115,12 +124,18 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as Platform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid ? settings.clip.disclosureText : null });
+  if (account.platform !== 'youtube' && account.platform !== 'tiktok') return log.warn(`${account.platform} posting is not built yet (no official API in use)`);
   const token = await accessToken(accountId, account.platform as Platform);
-  const r = account.platform === 'youtube' ? await youtube(token, clip.filePath, text, paid)
-    : account.platform === 'tiktok' ? await tiktok(token, clip.filePath, text, paid)
-    : null;
-  if (!r) return log.warn(`${account.platform} posting is not built yet (no official API in use)`);
-  db.insert(posts).values({ clipId, accountId, platform: account.platform, url: r.url, externalId: r.externalId, postedAt: now }).run();
+  // Reserve the post row before uploading: if the process dies mid-upload, the retry sees the row and does not post twice.
+  const postId = db.insert(posts).values({ clipId, accountId, platform: account.platform, postedAt: now }).returning({ id: posts.id }).get().id;
+  let r: { externalId: string; url: string | null };
+  try {
+    r = account.platform === 'youtube' ? await youtube(token, clip.filePath, text, paid) : await tiktok(token, clip.filePath, text, paid);
+  } catch (e) {
+    db.delete(posts).where(eq(posts.id, postId)).run(); // clean failure: nothing went up, so the retry may post again
+    throw e;
+  }
+  db.update(posts).set({ url: r.url, externalId: r.externalId }).where(eq(posts.id, postId)).run();
   db.update(clips).set({ status: 'posted' }).where(eq(clips.id, clipId)).run();
   log.info(`clip ${clipId} posted to ${account.platform} account ${accountId}`);
 }
