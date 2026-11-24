@@ -51,5 +51,6 @@ queue:
   maxAttempts: 3
 
 watcher:
+  enabled: false # off while testing: no new VODs are queued (owner, 2026-11-24)
   pollMinutes: 15
   maxVodAgeDays: 3 # ignore older VODs when a streamer is first added

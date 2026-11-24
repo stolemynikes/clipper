@@ -22,7 +22,7 @@ const db = openDb();
 const server = startReviewServer(db);
 const ac = new AbortController();
 
-const watch = () => { if (!isPaused()) watchOnce(db).catch((e) => log.error('watcher failed', { error: String(e) })); };
+const watch = () => { if (!isPaused() && loadSettings().watcher.enabled !== false) watchOnce(db).catch((e) => log.error('watcher failed', { error: String(e) })); };
 watch();
 const timer = setInterval(watch, loadSettings().watcher.pollMinutes * 60_000);
 const track = () => trackOnce(db).catch((e) => log.error('tracker failed', { error: String(e) }));

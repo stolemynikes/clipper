@@ -27,3 +27,10 @@ export function campaignNotes(c: Campaign, now = new Date()): { facts: string[];
   if (c.ratePer1k > 0 && c.ratePer1k < LOW_RATE) warnings.push('Low rate: likely little pay');
   return { facts, warnings };
 }
+
+/** Rough $ per 1,000 views, to work on the most profitable campaign first. Pool: pool spread over the views bar. */
+export function profitScore(c: Campaign): number {
+  if (c.ratePer1k > 0) return c.ratePer1k;
+  const bar = Math.max(Number(c.rules?.minViews ?? 0), 100_000); // shortcut: no bar -> assume 100K views, upgrade once we know real pool shares
+  return ((c.pool ?? 0) * 1000) / bar;
+}

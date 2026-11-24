@@ -26,7 +26,7 @@ async function helix<T>(path: string, params: Record<string, string>): Promise<{
 }
 
 export interface Vod { id: string; user_id: string; user_login: string; title: string; created_at: string; duration: string; url: string }
-export interface Clip { id: string; video_id: string; vod_offset: number | null; duration: number; view_count: number; created_at: string }
+export interface Clip { id: string; video_id: string; vod_offset: number | null; duration: number; view_count: number; created_at: string; title?: string; url?: string }
 
 /** "3h2m1s" -> 10921 */
 export function parseDuration(d: string): number {
@@ -71,4 +71,9 @@ export async function getVodClips(vod: Vod): Promise<Clip[]> {
     if (!after) break;
   }
   return out;
+}
+
+/** Most-viewed viewer clips of a channel in a time range (Helix returns clips by view count). */
+export async function getTopClips(userId: string, since: Date, first = 20): Promise<Clip[]> {
+  return (await helix<Clip>('clips', { broadcaster_id: userId, started_at: since.toISOString(), ended_at: new Date().toISOString(), first: String(first) })).data;
 }

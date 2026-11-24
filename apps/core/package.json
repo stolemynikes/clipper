@@ -6,6 +6,7 @@
     "doctor": "node src/doctor.ts",
     "start": "node src/main.ts",
     "clip": "node src/clip.ts",
+    "study": "node src/study.ts",
     "hardware": "node src/hardware.ts --write",
     "db:generate": "drizzle-kit generate",
     "test": "node --test \"src/**/*.test.ts\"",

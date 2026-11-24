@@ -44,3 +44,6 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
 - Rules to know (https://zernio.com/content-guidelines): "Only post content you have rights to use", and no "duplicate or substantially similar content". Post each clip once per account. Campaign clips are allowed by the streamer's campaign.
 - [ ] Silky: check the real end date on the campaign page after joining (config assumes 2026-11-30).
 - [ ] YourRAGE: rules page not found (reachclipping.com/YourRAGE gives 404). Share the brief after joining, then I add him.
+- [ ] YouTube Data API key (free), so I can study the layout of top Shorts from other clippers:
+      Google Cloud console > same project as YouTube login > APIs & Services > Credentials > Create credentials > API key.
+      Restrict it to "YouTube Data API v3". Put it in `.env` as `YOUTUBE_API_KEY=` (never in chat).

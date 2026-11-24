@@ -1,7 +1,7 @@
 // Accounts page: platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
 // Secrets go straight into .env and are never rendered back or logged. The page only says "saved".
 import { activeStreamers } from '../config.ts';
-import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
+import { campaignNotes, profitScore } from '../modules/compliance/campaign-notes.ts';
 import { styleStats, styleWinner } from '../modules/learner/title-style.ts';
 import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
@@ -109,11 +109,13 @@ function titleTest(db: Db) {
 function campaignsHtml() {
   const list = activeStreamers();
   if (!list.length) return '<p class="empty">No running campaigns. Clips are only made for streamers with one.</p>';
-  return list.map((s) => {
+  // most profitable first, so the owner joins the best one first
+  return [...list].sort((a, b) => profitScore(b.campaign!) - profitScore(a.campaign!)).map((s) => {
     const { facts, warnings } = campaignNotes(s.campaign!);
     return `<article class="pad"><div class="head"><h2>${esc(s.name)}</h2><span class="pill ${warnings.length ? 'warn' : 'on'}">${warnings.length ? 'Check' : 'Good'}</span></div>
 <ul class="facts">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
 ${warnings.map((w) => `<p class="warn" role="note">${esc(w)}</p>`).join('')}
+<details><summary>How to join</summary><ol class="facts"><li>Open the campaign page and press Join.</li><li>Link the accounts you post from there (the same ones as below).</li><li>Approve clips here. After a post goes live you get a reminder to submit the link within 30 minutes.</li></ol></details>
 ${s.campaign!.url ? `<div class="actions"><a class="btn ok" href="${esc(s.campaign!.url)}" target="_blank" rel="noopener">Open campaign page</a></div>` : ''}</article>`;
   }).join('\n');
 }

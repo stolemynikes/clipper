@@ -14,7 +14,7 @@ export interface Settings {
   titles?: { model: string };
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };
-  watcher: { pollMinutes: number; maxVodAgeDays: number };
+  watcher: { enabled?: boolean; pollMinutes: number; maxVodAgeDays: number };
 }
 
 export interface StreamerConfig {

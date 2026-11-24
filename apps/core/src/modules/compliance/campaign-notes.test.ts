@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { campaignNotes } from './campaign-notes.ts';
+import { campaignNotes, profitScore } from './campaign-notes.ts';
 
 const now = new Date('2026-11-24T12:00:00Z');
 
@@ -21,4 +21,14 @@ test('good campaign has no warnings; ended one says so', () => {
   const c = { platform: 'content_rewards', ratePer1k: 1, maxPerClip: 500, endsAt: '2026-12-31' };
   assert.deepEqual(campaignNotes(c, now).warnings, []);
   assert.deepEqual(campaignNotes({ ...c, endsAt: '2026-11-23' }, now).warnings, ['Ended: no new clips']);
+});
+
+test('profit score: bigger pool and lower bar rank first', () => {
+  const base = { platform: 'content_rewards', ratePer1k: 0, maxPerClip: 0, endsAt: '2026-11-30' };
+  const clix = profitScore({ ...base, pool: 5000, rules: { minViews: 500000 } });
+  const silky = profitScore({ ...base, pool: 7500, rules: { minViews: 250000 } });
+  assert.equal(clix, 10);
+  assert.equal(silky, 30);
+  assert.equal(profitScore({ ...base, ratePer1k: 1.5 }), 1.5);
+  assert.equal(profitScore({ ...base, pool: 1000 }), 10); // no bar: assumed 100K
 });

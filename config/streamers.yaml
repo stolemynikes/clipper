@@ -31,7 +31,7 @@ streamers:
   - name: silky
     platform: twitch
     channel: silky
-    facecam: null # unknown layout: face tracking picks the cam
+    facecam: { x: 0.0, y: 0.53, w: 0.21, h: 0.29 } # bottom-left cam in his GTA 6 marathon (top clips, Nov 2026), chat top-right
     tag: "@Silky"
     campaign:
       platform: content_rewards
