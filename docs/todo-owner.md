@@ -42,3 +42,5 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
 - [ ] Connect the TikTok test account (new connections use TikTok's Business app: posts are public, max 15 videos per day).
 - [ ] Tell Claude when done: the first API test checks whether a free workspace may post. The docs disagree: the pricing page says "no credit card required", but the rate-limits page says writes without billing return `402 workspace_billing_required`.
 - Rules to know (https://zernio.com/content-guidelines): "Only post content you have rights to use", and no "duplicate or substantially similar content". Post each clip once per account. Campaign clips are allowed by the streamer's campaign.
+- [ ] Silky: check the real end date on the campaign page after joining (config assumes 2026-11-30).
+- [ ] YourRAGE: rules page not found (reachclipping.com/YourRAGE gives 404). Share the brief after joining, then I add him.

@@ -24,3 +24,27 @@ streamers:
         sourceFrom: 2026-01-01
         platforms: [tiktok, instagram, youtube] # only these get posts (views elsewhere do not count)
         # audience: "40% of views from US/UK/CA/AU" # optional: shown as a review warning, not checked yet
+
+  # Content Rewards "$7,500 Silky Pool Campaign", read on 2026-11-24.
+  # Brief: https://reachclipping.com/Silky
+  # Campaign page: https://contentrewards.com/c/campaigns/37f68297-664c-4820-a020-9bbb4a703bf9
+  - name: silky
+    platform: twitch
+    channel: silky
+    facecam: null # unknown layout: face tracking picks the cam
+    tag: "@Silky"
+    campaign:
+      platform: content_rewards
+      url: https://contentrewards.com/c/campaigns/37f68297-664c-4820-a020-9bbb4a703bf9
+      ratePer1k: 0 # pool campaign: split by views, paid when the pool ends
+      maxPerClip: 0
+      pool: 7500
+      endsAt: 2026-11-30 # not on the pages ("when the pool ends"); assumed month end like Clix, check the campaign page
+      rules:
+        hashtags: ["#Silky"] # caption must also mention Silky by name
+        minViews: 250000
+        noLogos: true
+        noNegative: true
+        sourceFrom: 2026-11-19 # only his GTA marathon, from Nov 19; Silky must be the main focus
+        platforms: [tiktok, instagram, youtube, x]
+        audience: "At least 50% from US, CA, AU, UK, NZ"
