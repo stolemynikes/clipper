@@ -60,3 +60,6 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
       Then create a Whop app in the developer dashboard; put client id and secret in `.env` as `WHOP_CLIENT_ID=` / `WHOP_CLIENT_SECRET=` (never in chat).
       Claude tests whether CR campaigns show up as Whop bounties (`GET /bounties`). If yes, submits go automatic via `POST /bounty_submissions`.
 - [ ] Discord: private server + bot token from the Developer Portal in `.env` as `DISCORD_BOT_TOKEN=`; invite the bot to the server. Review moves there, Bark stays as backup.
+
+## Whop auto-submit (done: login works, token saved)
+- For each Content Rewards campaign, find its Whop bounty id (starts with `bnty_`), e.g. in the campaign's Whop page URL or its share link, and send it to Claude. It goes in `streamers.yaml` as `campaign.whopBountyId`; links are then submitted automatically. Without it you keep the one-tap push.

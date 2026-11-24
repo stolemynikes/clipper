@@ -1,6 +1,7 @@
-// Submitter: campaigns pay only for links submitted within ~30 minutes of posting. Content Rewards has no official
-// submission API (checked 2026-11-24), so the owner gets a push with the post link copied and the campaign page one tap away.
-// shortcut: manual submit; automate it if the campaign platform gets an official API.
+// Submitter: campaigns pay only for links submitted within ~30 minutes of posting. With a campaign's whopBountyId set and
+// Whop linked (scripts/whop-login.ts), the link goes in via the official Whop API (POST /bounty_submissions, owner's OAuth).
+// Otherwise, or if that fails, the owner gets a push with the post link copied and the campaign page one tap away.
+// shortcut: bounty ids are filled in by hand; GET /bounties refuses user OAuth tokens (checked 2026-11-24).
 import { eq } from 'drizzle-orm';
 import { loadSettings } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
@@ -9,6 +10,7 @@ import { logger } from '../../log.ts';
 import { bark } from '../../review/review.ts';
 import { hasPostpeer } from '../publisher/postpeer.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
+import { hasWhop, whopApi } from './whop.ts';
 
 const log = logger('submitter');
 
@@ -32,6 +34,24 @@ export async function askSubmit(db: Db, { postId }: { postId: number }) {
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
   if (!cfg.campaign) return;
+  if (cfg.campaign.whopBountyId && hasWhop()) {
+    // Mark first: a crash after a successful POST must not lead to a second submit (Terms 7.11). Idempotency-Key covers retries.
+    db.update(posts).set({ submitted: true }).where(eq(posts.id, postId)).run();
+    try {
+      const r = await whopApi('/bounty_submissions', {
+        method: 'POST', headers: { 'Idempotency-Key': `post-${postId}` },
+        body: { bounty_id: cfg.campaign.whopBountyId, deliverable: { urls: [post.url!] } },
+      });
+      if (r.status < 300) {
+        log.info(`post ${postId} submitted to Whop bounty ${cfg.campaign.whopBountyId}`);
+        await bark(`Submitted · ${cfg.name} · ${post.platform}`, post.url!, { url: post.url! });
+        return;
+      }
+      log.warn(`post ${postId} auto-submit failed: HTTP ${r.status} ${r.body?.error?.message ?? ''}`);
+    } catch (e) {
+      log.warn(`post ${postId} auto-submit failed: ${(e as Error).message}`);
+    }
+  }
   await bark(`Submit now · ${cfg.name} · ${post.platform}`, `Link copied. Paste it in the campaign within 30 minutes: ${post.url}`,
     { url: cfg.campaign.url ?? post.url!, copy: post.url!, level: 'timeSensitive' });
   db.update(posts).set({ submitted: true }).where(eq(posts.id, postId)).run(); // asked once: a second push could make a double submit
