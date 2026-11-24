@@ -24,6 +24,7 @@ import { transcribe } from './whisper.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
+const WEBSITE_PENALTY = 0.5;
 const SILENT_DB = -50; // peak below this = mic off / muted stream start: nothing worth clipping
 
 /** Cam box + content crop per clip (cams differ per streamer and per scene), measured on the kept part [start, end]. */
@@ -101,6 +102,10 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   }
 
   const layout = await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  if (layout.fit === 'full') {
+    // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
+    db.update(moments).set({ score: moment.score * WEBSITE_PENALTY, signals: { ...(moment.signals ?? {}), website: 1 } }).where(eq(moments.id, momentId)).run();
+  }
   const chatFile = join(dir, 'chat.json');
   const chatLines = existsSync(chatFile) ? JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[] : [];
   // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.

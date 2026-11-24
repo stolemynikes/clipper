@@ -33,6 +33,7 @@ export function reasons(s: Record<string, number>): string[] {
   if ((s.chatRate ?? 0) >= 2) r.push('Chat went wild');
   else if ((s.chatRate ?? 0) >= 1) r.push('Chat got busy');
   if ((s.emoteScore ?? 0) >= 1) r.push('Lots of laughing and hype emotes');
+  if (s.website) r.push('Mostly a website on screen, so rated lower');
   return r.length ? r : ['Picked by the tool as a highlight'];
 }
 
