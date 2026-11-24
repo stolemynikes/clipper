@@ -72,7 +72,7 @@ export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
   if (!row) throw new Error(`clip ${clipId} not found`);
   if (row.clip.status !== 'pending_review') return;
   const warnings = (row.clip.compliance?.warnings ?? []) as string[];
-  const review = { clipId, streamer: row.streamer.name, file: row.clip.filePath, title: row.clip.title, seconds: row.clip.durationSec ?? 0, signals: (row.moment.signals ?? {}) as Record<string, number>, warnings };
+  const review = { clipId, streamer: row.streamer.name, file: row.clip.filePath, title: row.clip.title, hook: row.clip.hook, seconds: row.clip.durationSec ?? 0, signals: (row.moment.signals ?? {}) as Record<string, number>, warnings };
   if (autoKeep((row.moment.signals ?? {}) as Record<string, number>, warnings, loadSettings().review?.autoKeep) && decide(db, clipId, true)) {
     log.info(`clip ${clipId} auto-kept`);
     // Mark it, so the learner never treats its own decision as the owner's (no circular learning).

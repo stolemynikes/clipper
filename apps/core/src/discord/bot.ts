@@ -1,13 +1,18 @@
-// Discord control hub: one category per campaign in the owner's own server, through an official bot account (no selfbot).
-// Per campaign: information (forum post with the brief), review (clips with Keep/Skip), posted, controls, stats.
-// Channel and message ids live in data/discord.json, so a restart edits the same messages instead of posting new ones.
+// Discord control hub in the owner's own server, through an official bot account (no selfbot). Everything lives in forum posts:
+// - General: one forum with a pinned "Totals" post (all money, views, clips) and the pause button.
+// - Per campaign: a category with one forum. A pinned "Overview" post (brief, stats, buttons) and one post per clip
+//   with Keep/Skip, tagged new / kept / skipped / posted so the forum can be filtered.
+// Channel, post and message ids live in data/discord.json, so a restart edits the same posts instead of making new ones.
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits,
-  type ButtonInteraction, type ChatInputCommandInteraction, type ForumChannel, type Guild, type TextChannel,
+  type APIEmbed, type ButtonInteraction, type ChatInputCommandInteraction, type ForumChannel, type Guild, type ThreadChannel,
 } from 'discord.js';
-import { campaignOpen, type StreamerConfig } from '../config.ts';
+import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
+import { readHardwareConfig } from '../hardware.ts';
+import { runCmd } from '../proc.ts';
+import { postText } from '../modules/publisher/publish.ts';
 import type { Db } from '../db/client.ts';
 import { paths } from '../env.ts';
 import { logger } from '../log.ts';
@@ -20,30 +25,47 @@ import { accountStats } from '../review/setup.ts';
 const log = logger('discord');
 const STATE = join(paths.dataDir, 'discord.json');
 const MAX_FILE = 10 * 1024 * 1024; // Discord upload limit without Nitro boosts
-const TEXT = ['review', 'posted', 'controls', 'stats'] as const;
+const TAGS = ['new', 'kept', 'skipped', 'posted'] as const;
+type Tag = (typeof TAGS)[number];
+const OLD = ['information', 'review', 'posted', 'controls', 'stats', 'overview', 'clips'] as const; // earlier layouts, removed on sync
 
-type Hub = { category: string; information: string; infoThread?: string; controlsMsg?: string; statsMsg?: string } & Partial<Record<(typeof TEXT)[number], string>>;
-const load = (): Record<string, Hub> => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {});
-const save = (s: Record<string, Hub>) => writeFileSync(STATE, JSON.stringify(s, null, 2));
+type Hub = { category: string; forum?: string; post?: string; statsMsg?: string } & Partial<Record<(typeof OLD)[number], string>>;
+type State = { general?: Hub; hubs: Record<string, Hub>; clips: Record<string, string> }; // clips: clip id -> post (thread) id
+const load = (): State => {
+  const s = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {};
+  return s.hubs ? s : { hubs: Object.fromEntries(Object.entries(s).filter(([, v]) => (v as Hub)?.category)) as Record<string, Hub>, clips: {} }; // first layout kept hubs at the top level
+};
+const save = (s: State) => writeFileSync(STATE, JSON.stringify(s, null, 2));
 
 let client: Client | null = null;
 let guild: Guild | null = null;
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
+const num = (n: number) => n.toLocaleString('en-US');
 const fit = (s: string) => (s.length > 1900 ? `${s.slice(0, 1900)}…` : s); // message limit is 2,000
+const stamp = () => `_updated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC_`;
 
-/** Forum post text: what the campaign pays, its rules and what to watch for. */
-export function infoText(s: StreamerConfig, now = new Date()): string {
-  const c = s.campaign!;
+const COLOR = { open: 0x22c55e, closed: 0xef4444, off: 0x64748b, new: 0xf59e0b, kept: 0x22c55e, skipped: 0xef4444, posted: 0x5865f2, info: 0x5865f2 };
+const LABELS: [RegExp, string][] = [[/^Pays only after /, 'Pays after'], [/^Counts on: /, 'Platforms'], [/^Audience: /, 'Audience'], [/^Ends /, 'Ends']];
+
+/** Overview card: what the campaign pays, its rules and what to watch for, as embed fields that read at a glance. */
+export function infoEmbed(s: StreamerConfig, now = new Date()): APIEmbed {
+  const c = s.campaign!, open = campaignOpen(c, now);
   const { facts, warnings } = campaignNotes(c, now);
   const tags = Array.isArray(c.rules?.hashtags) ? (c.rules.hashtags as string[]).join(' ') : '';
-  return fit([
-    `**${s.name}** · ${campaignOpen(c, now) ? 'open' : 'closed'} · ${s.enabled === false ? 'clips off' : 'clips on'}`,
-    ...facts.map((f) => `• ${f}`),
-    s.tag ? `• Tag: ${s.tag}` : '', tags ? `• Hashtags: ${tags}` : '',
-    ...[...warnings, ...accountWarnings(c)].map((w) => `⚠️ ${w}`),
-    c.url ? `\n${c.url}` : '',
-  ].filter(Boolean).join('\n'));
+  const fields = facts.map((f, i) => {
+    const l = LABELS.find(([re]) => re.test(f));
+    return { name: l ? l[1] : i === 0 ? 'Pay' : 'Note', value: l ? f.replace(l[0], '') : f, inline: true };
+  });
+  if (s.tag) fields.push({ name: 'Tag', value: s.tag, inline: true });
+  if (tags) fields.push({ name: 'Hashtags', value: tags, inline: true });
+  const warn = [...warnings, ...accountWarnings(c)];
+  if (warn.length) fields.push({ name: 'Watch out', value: warn.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
+  return {
+    title: `${s.name} · ${open ? 'open' : 'closed'}`, url: c.url || undefined,
+    description: s.enabled === false ? '⏸️ Clips are off for this campaign' : '▶️ Making clips for this campaign',
+    color: !open ? COLOR.closed : s.enabled === false ? COLOR.off : COLOR.open, fields: fields.slice(0, 25),
+  };
 }
 
 /** Stats text per campaign: posts, views and money earned per account. Pool campaigns show views only (share unknown). */
@@ -53,74 +75,167 @@ export function statsText(name: string, rows: ReturnType<typeof accountStats>): 
   const total = mine.reduce((t, a) => ({ posts: t.posts + a.posts, views: t.views + a.views, earned: t.earned + a.earned }), { posts: 0, views: 0, earned: 0 });
   const pool = mine.some((a) => a.pool);
   return fit([
-    `**${name}** · ${total.posts} posts · ${total.views.toLocaleString('en-US')} views · ${pool ? 'pool share (not known yet)' : `${usd(total.earned)} earned`}`,
-    ...mine.filter((a) => a.posts).map((a) => `• ${a.platform} ${a.name}: ${a.posts} posts, ${a.views.toLocaleString('en-US')} views${a.pool ? '' : `, ${usd(a.earned)}`}`),
-    `_updated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC_`,
+    `**${name}** · ${total.posts} posts · ${num(total.views)} views · ${pool ? 'pool share (not known yet)' : `${usd(total.earned)} earned`}`,
+    ...mine.filter((a) => a.posts).map((a) => `• ${a.platform} ${a.name}: ${a.posts} posts, ${num(a.views)} views${a.pool ? '' : `, ${usd(a.earned)}`}`),
+    stamp(),
   ].join('\n'));
 }
 
-const controls = (s: StreamerConfig) => new ActionRowBuilder<ButtonBuilder>().addComponents(
+/** Totals over every campaign: money from rate campaigns, views, posts, and clips per status. */
+export function totalsText(rows: ReturnType<typeof accountStats>, clipCounts: { status: string; n: number }[], paused: boolean): string {
+  const posted = rows.filter((a) => a.posts);
+  const sum = (f: (a: (typeof rows)[number]) => number) => posted.reduce((t, a) => t + f(a), 0);
+  const per = new Map<string, { posts: number; views: number; earned: number; pool: boolean }>();
+  for (const a of posted) {
+    const p = per.get(a.streamer ?? '?') ?? { posts: 0, views: 0, earned: 0, pool: false };
+    per.set(a.streamer ?? '?', { posts: p.posts + a.posts, views: p.views + a.views, earned: p.earned + a.earned, pool: p.pool || a.pool });
+  }
+  const clipsBy = Object.fromEntries(clipCounts.map((c) => [c.status, c.n]));
+  return fit([
+    `**Clipping Hub** · ${paused ? '⏸️ paused' : '▶️ running'}`,
+    `💰 ${usd(sum((a) => a.earned))} earned${posted.some((a) => a.pool) ? ' (plus pool shares, not known yet)' : ''}`,
+    `👁️ ${num(sum((a) => a.views))} views · 📤 ${sum((a) => a.posts)} posts`,
+    `🎬 ${clipCounts.reduce((t, c) => t + c.n, 0)} clips: ${clipsBy.pending_review ?? 0} to review, ${clipsBy.approved ?? 0} kept, ${clipsBy.posted ?? 0} posted, ${clipsBy.rejected ?? 0} skipped`,
+    ...(per.size ? ['', '**Per campaign**', ...[...per].sort((a, b) => b[1].earned - a[1].earned || b[1].views - a[1].views)
+      .map(([n, p]) => `• ${n}: ${p.posts} posts, ${num(p.views)} views${p.pool ? '' : `, ${usd(p.earned)}`}`)] : []),
+    stamp(),
+  ].join('\n'));
+}
+
+/** Category name: status dot, streamer and what it pays, so the sidebar reads at a glance. */
+export function categoryName(s: StreamerConfig, now = new Date()): string {
+  const c = s.campaign!;
+  const dot = !campaignOpen(c, now) ? '🔴' : s.enabled === false ? '⏸️' : '🟢';
+  return `${dot} ${s.name} · ${c.pool ? `$${num(c.pool)} pool` : `$${c.ratePer1k}/1K`}`.slice(0, 100);
+}
+
+const pauseButton = () => new ButtonBuilder().setCustomId('pause').setStyle(isPaused() ? ButtonStyle.Success : ButtonStyle.Danger).setLabel(isPaused() ? 'Resume everything' : 'Pause everything');
+const row = (...b: ButtonBuilder[]) => new ActionRowBuilder<ButtonBuilder>().addComponents(...b);
+const controls = (s: StreamerConfig) => row(
   new ButtonBuilder().setCustomId(`clips:${s.name}`).setStyle(s.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel(s.enabled === false ? 'Turn clips on' : 'Turn clips off'),
-  new ButtonBuilder().setCustomId('pause').setStyle(isPaused() ? ButtonStyle.Success : ButtonStyle.Danger).setLabel(isPaused() ? 'Resume everything' : 'Pause everything'),
+  pauseButton(),
   new ButtonBuilder().setCustomId('refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh'),
 );
 
-const textCh = async (id?: string) => (id ? (await guild!.channels.fetch(id).catch(() => null)) as TextChannel | null : null);
+const fetchCh = async <T>(id?: string) => (id && guild ? ((await guild.channels.fetch(id).catch(() => null)) as T | null) : null);
+const tagIds = (f: ForumChannel, names: Tag[]) => f.availableTags.filter((t) => names.includes(t.name as Tag)).map((t) => t.id);
 
-/** Upserts a bot message: edits the saved one, or posts a new one when it is gone. */
-async function upsert(ch: TextChannel, id: string | undefined, body: { content: string; components?: ActionRowBuilder<ButtonBuilder>[] }) {
-  const old = id ? await ch.messages.fetch(id).catch(() => null) : null;
-  return (old ? await old.edit(body) : await ch.send(body)).id;
+type Body = { embeds: APIEmbed[]; components?: ActionRowBuilder<ButtonBuilder>[] };
+
+/** Makes the category and forum of a hub, then upserts its pinned post (starter = head, second message = body with buttons). */
+async function syncHub(hub: Hub, catName: string, forumName: string, postName: string, head: APIEmbed, body: Body, tags: boolean, persist: () => void) {
+  const g = guild!;
+  let cat = await fetchCh<{ id: string; name: string; setName(n: string): Promise<unknown> }>(hub.category);
+  if (!cat) cat = await g.channels.create({ name: catName, type: ChannelType.GuildCategory });
+  else if (cat.name !== catName) await cat.setName(catName).catch((e) => log.warn('category rename failed', { error: String(e) })); // Discord allows 2 renames per 10 min
+  hub.category = cat.id;
+  let forum = await fetchCh<ForumChannel>(hub.forum);
+  if (!forum) {
+    forum = await g.channels.create({ name: forumName, type: ChannelType.GuildForum, parent: cat.id, availableTags: tags ? TAGS.map((name) => ({ name })) : [] });
+    hub.post = hub.statsMsg = undefined;
+  }
+  hub.forum = forum.id;
+  for (const k of OLD) { // only channels this bot made for earlier layouts
+    if (hub[k]) await (await fetchCh<{ delete(): Promise<unknown> }>(hub[k]))?.delete().catch(() => null);
+    delete hub[k];
+  }
+  persist(); // save ids before posting, so a failed message never makes a second category
+  let post = hub.post ? await forum.threads.fetch(hub.post).catch(() => null) : null;
+  if (post?.archived) await post.setArchived(false).catch(() => null);
+  if (post) await (await post.fetchStarterMessage().catch(() => null))?.edit({ content: '', embeds: [head] });
+  else {
+    post = await forum.threads.create({ name: postName, message: { embeds: [head] } });
+    hub.post = post.id; hub.statsMsg = undefined;
+    await post.pin().catch((e) => log.warn('pin failed', { error: String(e) }));
+  }
+  const old = hub.statsMsg ? await post.messages.fetch(hub.statsMsg).catch(() => null) : null;
+  hub.statsMsg = (old ? await old.edit({ content: '', ...body }) : await post.send(body)).id;
+  persist();
 }
 
-/** Makes sure every campaign has its category and channels, and refreshes the info, controls and stats messages. */
+/** Makes sure General and every campaign have their category, forum and pinned post, and refreshes them. */
 export async function syncDiscord(db: Db) {
   if (!guild) return;
-  const state = load(), stats = accountStats(db);
+  const state = load(), stats = accountStats(db), persist = () => save(state);
+  state.general ??= {} as Hub;
+  await syncHub(state.general, '📊 General', 'general', 'Totals', { title: 'Totals', description: 'Every campaign together. The card below updates by itself.', color: COLOR.info },
+    { embeds: [{ description: totalsText(stats, status(db).clips, isPaused()), color: isPaused() ? COLOR.off : COLOR.open }], components: [row(pauseButton(), new ButtonBuilder().setCustomId('refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh'))] }, false, persist);
   for (const s of allStreamers().filter((x) => x.campaign)) {
-    const hub = state[s.name] ?? ({} as Hub);
-    let cat = hub.category ? await guild.channels.fetch(hub.category).catch(() => null) : null;
-    if (!cat) cat = await guild.channels.create({ name: s.name, type: ChannelType.GuildCategory });
-    hub.category = cat.id;
-    let forum = hub.information ? (await guild.channels.fetch(hub.information).catch(() => null)) as ForumChannel | null : null;
-    if (!forum) { forum = await guild.channels.create({ name: 'information', type: ChannelType.GuildForum, parent: cat.id }); hub.infoThread = undefined; }
-    hub.information = forum.id;
-    for (const k of TEXT) if (!(await textCh(hub[k]))) hub[k] = (await guild.channels.create({ name: k, type: ChannelType.GuildText, parent: cat.id })).id;
-    state[s.name] = hub;
-    save(state); // save ids before posting, so a failed message never makes a second category
-    const info = infoText(s);
-    const thread = hub.infoThread ? await forum.threads.fetch(hub.infoThread).catch(() => null) : null;
-    if (thread) await (await thread.fetchStarterMessage())?.edit(info);
-    else hub.infoThread = (await forum.threads.create({ name: `${s.name} campaign`, message: { content: info } })).id;
-    hub.controlsMsg = await upsert((await textCh(hub.controls))!, hub.controlsMsg, { content: `**${s.name}** controls`, components: [controls(s)] });
-    hub.statsMsg = await upsert((await textCh(hub.stats))!, hub.statsMsg, { content: statsText(s.name, stats) });
-    save(state);
+    state.hubs[s.name] ??= {} as Hub;
+    await syncHub(state.hubs[s.name], categoryName(s), s.name, 'Overview', infoEmbed(s), { embeds: [{ description: statsText(s.name, stats), color: COLOR.info }], components: [controls(s)] }, true, persist);
   }
 }
 
-const reviewButtons = (id: number) => new ActionRowBuilder<ButtonBuilder>().addComponents(
-  new ButtonBuilder().setCustomId(`keep:${id}`).setStyle(ButtonStyle.Success).setLabel('Keep ✅'),
-  new ButtonBuilder().setCustomId(`skip:${id}`).setStyle(ButtonStyle.Danger).setLabel('Skip ❌'),
-);
+async function setTags(postId: string | undefined, tags: Tag[]) {
+  const post = await fetchCh<ThreadChannel>(postId);
+  const forum = post?.parent as ForumChannel | null;
+  if (post && forum) await post.setAppliedTags(tagIds(forum, tags)).catch((e) => log.warn('tag update failed', { error: String(e) }));
+}
 
-/** Posts a clip in its campaign's review channel. Returns false when Discord is not set up, so the caller falls back to Bark. */
-export async function discordReview(o: { clipId: number; streamer: string; file: string; title: string | null; seconds: number; signals: Record<string, number>; warnings: string[]; autoKept?: boolean }): Promise<boolean> {
-  const ch = guild && await textCh(load()[o.streamer]?.review);
-  if (!ch) return false;
-  const content = fit([
-    `**${o.title ?? 'New clip'}** · ${Math.round(o.seconds)}s${o.autoKept ? ' · auto-kept' : ''}`,
-    ...reasons(o.signals).map((r) => `• ${r}`), ...o.warnings.map((w) => `⚠️ ${w}`),
-    `${reviewUrl()}/#clip-${o.clipId}`,
-  ].join('\n'));
-  const small = existsSync(o.file) && statSync(o.file).size <= MAX_FILE;
-  await ch.send({ content, files: small ? [o.file] : [], components: o.autoKept ? [] : [reviewButtons(o.clipId)] });
+const reviewButtons = (id: number, decided: boolean) => row(...[
+  ...(decided ? [] : [
+    new ButtonBuilder().setCustomId(`keep:${id}`).setStyle(ButtonStyle.Success).setLabel('Keep ✅'),
+    new ButtonBuilder().setCustomId(`skip:${id}`).setStyle(ButtonStyle.Danger).setLabel('Skip ❌'),
+  ]),
+  new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(`${reviewUrl()}/#clip-${id}`).setLabel('Open review page'),
+]);
+
+/** Clip card: title, hook, the caption that will be posted, why it was picked and what to check. */
+export function clipEmbed(o: { title: string; hook: string | null; caption: string; seconds: number; why: string[]; warnings: string[]; autoKept?: boolean }): APIEmbed {
+  const fields = [
+    { name: 'Length', value: `${Math.round(o.seconds)}s`, inline: true },
+    { name: 'Status', value: o.autoKept ? '✅ Auto-kept' : '🟡 Waiting for you', inline: true },
+    { name: 'Caption', value: o.caption.slice(0, 1024), inline: false },
+  ];
+  if (o.why.length) fields.push({ name: 'Why this moment', value: o.why.map((r) => `• ${r}`).join('\n').slice(0, 1024), inline: false });
+  if (o.warnings.length) fields.push({ name: 'Check this', value: o.warnings.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
+  return { title: o.title.slice(0, 256), description: o.hook ? `*${o.hook}*` : undefined, color: o.autoKept ? COLOR.kept : COLOR.new, fields };
+}
+
+/** Small copy of the clip for Discord's 10MB upload cap: 720p, bitrate fitted to the length. The real clip is untouched. */
+async function preview(file: string, seconds: number): Promise<string | null> {
+  if (!existsSync(file)) return null;
+  if (statSync(file).size <= MAX_FILE) return file;
+  const out = join(dirname(file), 'discord.mp4');
+  if (existsSync(out) && statSync(out).size <= MAX_FILE) return out;
+  const kbps = Math.max(300, Math.min(4000, Math.floor((9 * 8 * 1024) / Math.max(seconds, 1)) - 128)); // 9MB budget, 128k audio
+  const nvenc = readHardwareConfig()?.encoder === 'h264_nvenc';
+  await runCmd('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', file, '-vf', 'scale=720:-2',
+    '-c:v', nvenc ? 'h264_nvenc' : 'libx264', '-b:v', `${kbps}k`, '-maxrate', `${kbps}k`, '-bufsize', `${kbps * 2}k`,
+    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', out]);
+  return statSync(out).size <= MAX_FILE ? out : null;
+}
+
+/** Posts a clip as its own forum post in its campaign. Returns false when Discord is not set up, so the caller falls back to Bark. */
+export async function discordReview(o: { clipId: number; streamer: string; file: string; title: string | null; hook: string | null; seconds: number; signals: Record<string, number>; warnings: string[]; autoKept?: boolean }): Promise<boolean> {
+  const state = load();
+  const forum = await fetchCh<ForumChannel>(state.hubs[o.streamer]?.forum);
+  if (!forum) return false;
+  const cfg = allStreamers().find((x) => x.name === o.streamer), clip = loadSettings().clip;
+  const title = o.title ?? `${o.streamer} moment`;
+  const paid = (cfg?.campaign?.disclosure ?? clip.disclosure) && clip.disclosureInText;
+  const caption = postText('tiktok', { title, streamer: o.streamer, tag: cfg?.tag ?? '', disclosure: paid ? clip.disclosureText : null }).title;
+  const video = await preview(o.file, o.seconds).catch((e) => (log.warn('preview failed', { error: String(e) }), null));
+  const post = await forum.threads.create({
+    name: title.slice(0, 95) || `Clip ${o.clipId}`,
+    appliedTags: tagIds(forum, [o.autoKept ? 'kept' : 'new']),
+    message: {
+      embeds: [clipEmbed({ title, hook: o.hook, caption, seconds: o.seconds, why: reasons(o.signals), warnings: o.warnings, autoKept: o.autoKept })],
+      files: video ? [{ attachment: video, name: `clip-${o.clipId}.mp4` }] : [],
+      components: [reviewButtons(o.clipId, !!o.autoKept)],
+    },
+  });
+  state.clips[o.clipId] = post.id;
+  save(state);
   return true;
 }
 
-/** Notes a new post in the campaign's posted channel. */
-export async function discordPosted(streamer: string, platform: string, url: string | null) {
-  const ch = guild && await textCh(load()[streamer]?.posted);
-  await ch?.send(`Posted on **${platform}**: ${url ?? 'link comes once the platform has processed it'}`).catch((e) => log.warn('posted message failed', { error: String(e) }));
+/** Notes a new post under the clip's forum post and tags it posted. */
+export async function discordPosted(clipId: number, platform: string, url: string | null) {
+  const postId = load().clips[clipId];
+  const post = await fetchCh<ThreadChannel>(postId);
+  await post?.send({ embeds: [{ description: `📤 Posted on **${platform}**${url ? `\n${url}` : ' · link comes once the platform has processed it'}`, color: COLOR.posted }] }).catch((e) => log.warn('posted message failed', { error: String(e) }));
+  await setTags(postId, ['posted']);
 }
 
 const statusText = (db: Db) => {
@@ -132,7 +247,13 @@ async function onButton(db: Db, i: ButtonInteraction) {
   const [what, arg] = i.customId.split(':');
   if (what === 'keep' || what === 'skip') {
     const ok = decide(db, Number(arg), what === 'keep');
-    return i.update({ content: `${i.message.content}\n\n${ok ? (what === 'keep' ? '✅ Kept: it will be posted' : '❌ Skipped') : 'Already decided'}`, components: [] });
+    const keep = what === 'keep', card = { ...i.message.embeds[0]?.toJSON() } as APIEmbed;
+    const label = ok ? (keep ? '✅ Kept: it will be posted' : '❌ Skipped') : 'Already decided';
+    card.fields = (card.fields ?? []).map((f) => (f.name === 'Status' ? { ...f, value: label } : f));
+    if (ok) card.color = keep ? COLOR.kept : COLOR.skipped;
+    await i.update({ embeds: [card], components: [reviewButtons(Number(arg), true)] });
+    if (ok) await setTags(i.channelId, [what === 'keep' ? 'kept' : 'skipped']);
+    return syncDiscord(db); // totals change
   }
   if (what === 'clips') {
     const s = allStreamers().find((x) => x.name === arg);
