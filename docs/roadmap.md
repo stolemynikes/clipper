@@ -2,7 +2,7 @@
 
 ## Clips
 - [ ] Gameplay layout as an option: gameplay fullscreen, small cam in a corner, for moments where the action is in the game. Example render approved as direction; still needs the rule for when to pick it (face_track: gameplay motion high, face small) and captions placed clear of the cam.
-- [ ] Length A/B in the Learner: clips are now 10-35s (target 15-35, ~25s typical, short moments may end at 12s). Compare views per length bucket (10-20, 20-30, 30+) like the title-style A/B, then lean `targetSec` to the winner.
+- [ ] Length A/B in the Learner: target is now 12-26s (Nov 24 study: <20s beat the median 54% vs ~33%, but on Twitch clips, not Shorts/TikTok). Compare views of our posts per length bucket (10-20, 20-30, 30+) like the title-style A/B, then lean `targetSec` to the winner.
 - [ ] Cam box: trim overlays glued to the webcam (e.g. the red "Subs Today" bar in moment 87).
 - [ ] Check one fully new clip with all Nov 24 changes together (layout, burst chat, shorter trim, website penalty).
 
@@ -18,6 +18,13 @@
 
 ## Learner (phase 4)
 - [ ] Learn from other creators' viewer clips via the Twitch Clips API (analysis only, never reposted). Names to be picked by the owner (e.g. kaicenat, jynxzi, ishowspeed, xqc).
+
+- [ ] Fun-signal eval, next tests (re-run `eval-study.ts` after each, keep only what raises CV AUC; baseline Nov 24: solo 0.53-0.57, CV linear 0.53):
+  - Broader label: also download low-view viewer clips per streamer (good vs bad instead of top-10 good vs better). Check disk first.
+  - Audio to the LLM judge (gemma4 audio input) instead of transcript only.
+  - Pairwise judge: "which of these two clips is more fun", per streamer.
+  - Interaction model (pairs / shallow tree) again once own posts have ~100+ view counts; at n=119 pairs overfit (0.48).
+  - New model (PANNs, Qwen-VL): only with owner OK (new dependency, disk).
 
 ## Done (Nov 24)
 - No cam on top when no face is found: whole frame on a blurred background.

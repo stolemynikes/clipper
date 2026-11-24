@@ -20,7 +20,7 @@ scoring:
 clip:
   minSec: 10
   maxSec: 60
-  targetSec: [15, 35] # popular Shorts length is 19-35s (median 23s); campaign maxSec still caps it. Editor trims to this length: start at a sentence before the build-up, end after the reaction
+  targetSec: [12, 26] # study 2026-11-24 (119 Twitch top clips): <20s beat the streamer median 54% vs ~33% for longer; Shorts median 23s; campaign maxSec still caps it. Editor trims to this length: start at a sentence before the build-up, end after the reaction
   disclosure: true # default on; campaigns can override
   disclosureText: "#ad"
   disclosureSec: 3
