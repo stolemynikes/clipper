@@ -4,7 +4,7 @@
 import type { Word } from './subtitles.ts';
 
 export interface ChatLine { t: number; user: string; text: string } // t = seconds from clip start
-export interface Overlay extends ChatLine { s: number; e: number } // shown from s to e (clip seconds)
+export interface Overlay extends ChatLine { s: number; e: number; row?: number } // shown from s to e (clip seconds); row = line in a burst stack
 
 const REACT_SEC = 15;
 const SHOW_SEC = 4;
@@ -36,4 +36,19 @@ export function matchChat(words: Word[], chat: ChatLine[], max = 3): Overlay[] {
     picked.push({ ...o, text: o.text.length > 90 ? `${o.text.slice(0, 87)}...` : o.text });
   }
   return picked.sort((a, b) => a.s - b.s);
+}
+
+const BOTS = /^(nightbot|streamelements|streamlabs|moobot|fossabot|wizebot|sery_bot)$/i;
+const BURST_MIN = 6; // messages in the peak window before it counts as chat going wild
+const BURST_ROWS = 5;
+
+/** When chat explodes at the peak: a stack of real messages popping in as they were sent,
+ * all held until the burst ends. Empty when chat is not busy enough. */
+export function burstChat(chat: ChatLine[], from: number, to: number): Overlay[] {
+  const msgs = chat.filter((m) => m.t >= from && m.t < to && !BOTS.test(m.user) && !m.text.startsWith('!') && !/https?:|www\.|\.(com|tv|gg)\b/i.test(m.text));
+  if (msgs.length < BURST_MIN) return [];
+  const step = Math.max(1, Math.floor(msgs.length / BURST_ROWS)); // spread picks over the whole burst
+  const picked = msgs.filter((_, i) => i % step === 0).slice(0, BURST_ROWS);
+  const hold = to + 1.5;
+  return picked.map((m, row) => ({ ...m, s: Math.max(from, m.t), e: hold, row, text: m.text.length > 40 ? `${m.text.slice(0, 37)}...` : m.text }));
 }

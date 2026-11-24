@@ -4,6 +4,7 @@ scoring:
   windowSec: 5
   topN: 10
   leadInSec: [30, 60] # chat reacts after the moment, so start this much before the peak
+  tailSec: 8 # download this much after the peak window; the editor trims to the end of the reaction sentence
   weights:
     chatRate: 1.0
     emoteScore: 0.15 # eval 2026-11-24 (1 VOD, top-20 viewer clips): 0.8 hit 3/20, 0.15 hit 7/20, chat-only 8/20; emote spam drowns chat rate
@@ -19,6 +20,7 @@ scoring:
 clip:
   minSec: 15
   maxSec: 60
+  targetSec: [20, 45] # editor trims to this length: start at a sentence before the build-up, end after the reaction
   disclosure: true # default on; campaigns can override
   disclosureText: "#ad"
   disclosureSec: 3

@@ -8,6 +8,7 @@ export interface ScoringConfig {
   windowSec: number;
   topN: number;
   leadInSec: [number, number];
+  tailSec?: number; // keep this long after the peak window, so the reaction is in the clip
   weights: { chatRate: number; emoteScore: number; viewerClipHits: number; audioPeak: number };
   emotes: Record<string, number>;
 }
@@ -74,7 +75,7 @@ export function pickMoments(input: ScoreInput, cfg: ScoringConfig, limits: ClipL
 
   for (const x of order) {
     if (picked.length >= cfg.topN) break;
-    const end = Math.min(input.durationSec, (x.i + 1) * w);
+    const end = Math.min(input.durationSec, (x.i + 1) * w + (cfg.tailSec ?? 0));
     const start = Math.max(0, end - len);
     if (end - start < limits.minSec) continue;
     const hit = picked.find((p) => start < p.end && end > p.start);

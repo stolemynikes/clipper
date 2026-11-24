@@ -32,3 +32,15 @@ test('max overlays, no overlap in time, sorted by time', () => {
   assert.equal(o.length, 3);
   assert.deepEqual(o.map((x) => x.user), ['alpha', 'charlie', 'delta']);
 });
+
+test('burst: busy peak gives a stacked feed without bots, commands or links; quiet chat gives none', async () => {
+  const { burstChat } = await import('./chat-overlay.ts');
+  const m = (t: number, text: string, user = `u${t}`) => ({ t, text, user });
+  const wild = [m(40, 'NOWAY'), m(40.2, '!clip'), m(40.4, 'LOL', 'Nightbot'), m(40.5, 'go to x.com'), m(41, '???'), m(41.5, 'KEKW'),
+    m(42, 'he did not'), m(42.5, 'OMEGALUL'), m(43, 'W'), m(43.5, 'a'.repeat(60)), m(50, 'late')];
+  const b = burstChat(wild, 40, 47);
+  assert.deepEqual(b.map((x) => x.row), [0, 1, 2, 3, 4]);
+  assert.ok(b.every((x) => x.e === 48.5 && !/clip|Nightbot|x\.com|late/.test(x.text + x.user)));
+  assert.deepEqual(b.map((x) => x.s), [40, 41, 41.5, 42, 42.5]);
+  assert.equal(burstChat(wild.slice(0, 4), 40, 47).length, 0);
+});

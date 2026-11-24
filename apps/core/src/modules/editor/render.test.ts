@@ -33,12 +33,9 @@ test('nocam: whole content on a blurred background, centered', () => {
   assert.match(g, /overlay=0:\(H-h\)\/2,ass=s\.ass:fontsdir=f\[v\]$/);
 });
 
-test('dead air: trims to 1s before the first word only when the gap is over 3s', async () => {
-  const { deadAirLead } = await import('./clip-job.ts');
-  assert.equal(deadAirLead([{ w: 'oh', s: 12.5, e: 12.8 }]), 11.5);
-  assert.equal(deadAirLead([{ w: 'oh', s: 2, e: 2.3 }]), 0);
-  assert.equal(deadAirLead([]), 0);
+test('trim: seek to the start and cut to the length', () => {
   assert.deepEqual(ffmpegArgs('i', 'o', 'g', 'libx264', 11.5).slice(4, 8), ['-ss', '11.50', '-i', 'i']);
+  assert.deepEqual(ffmpegArgs('i', 'o', 'g', 'libx264', 11.5, null, 30).slice(4, 10), ['-ss', '11.50', '-t', '30.00', '-i', 'i']);
 });
 
 test('cam + static screen: whole frame on blur below the cam', () => {

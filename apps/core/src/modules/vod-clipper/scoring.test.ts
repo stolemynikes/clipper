@@ -54,3 +54,9 @@ test("respects topN and clip start never below 0", () => {
   const early = pickMoments({ durationSec: 600, chat: chat(600, [10]) }, cfg, limits);
   assert.equal(early[0].start, 0);
 });
+
+test("tailSec keeps the reaction after the peak, length still capped by maxSec", () => {
+  const m = pickMoments({ durationSec: 600, chat: chat(600, [300]) }, { ...cfg, tailSec: 6 }, limits);
+  assert.equal(m[0].end, 311);
+  assert.equal(m[0].start, 251);
+});

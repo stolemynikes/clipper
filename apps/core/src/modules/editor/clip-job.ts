@@ -10,7 +10,8 @@ import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
-import { type ChatLine, matchChat } from './chat-overlay.ts';
+import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
+import { trimWindow } from './trim.ts';
 import { checkClip, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
@@ -48,9 +49,6 @@ async function detectMusic(src: string): Promise<(Music & { musicSec: [number, n
   }
 }
 
-/** Seconds to cut from the start when nobody talks for over 3s; keeps 1s before the first word. */
-export const deadAirLead = (words: Word[]) => (words[0] && words[0].s > 3 ? words[0].s - 1 : 0);
-
 export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   const moment = db.select().from(moments).where(eq(moments.id, momentId)).get();
   if (!moment) throw new Error(`moment ${momentId} not found`);
@@ -69,16 +67,20 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
   const { peakDb } = t;
-  // Dead air at the start loses viewers in the first second: start 1s before the first word.
-  const lead = deadAirLead(t.words);
-  const words = t.words.map((w) => ({ ...w, s: w.s - lead, e: w.e - lead }));
+  // Keep only build-up + peak + reaction: start on a sentence, end after the reaction sentence.
+  const sc = settings.scoring;
+  const maxSec = cfg.campaign?.maxSec ?? settings.clip.maxSec;
+  const peakRel = (moment.signals?.peakAt ?? moment.endSec - sc.windowSec - (sc.tailSec ?? 0)) - moment.startSec;
+  const { start: lead, end: cut } = trimWindow({ words: t.words, durationSec: moment.endSec - moment.startSec, peakRel, windowSec: sc.windowSec,
+    tailSec: sc.tailSec ?? 0, targetSec: settings.clip.targetSec ?? [settings.clip.minSec, maxSec], minSec: settings.clip.minSec, maxSec });
+  const words = t.words.filter((w) => w.s >= lead && w.s < cut).map((w) => ({ ...w, s: w.s - lead, e: Math.min(w.e, cut) - lead }));
   if ((peakDb ?? 0) < SILENT_DB) {
     rmSync(src, { force: true });
     db.update(moments).set({ status: 'skipped' }).where(eq(moments.id, momentId)).run();
     return log.warn(`moment ${momentId} skipped: silent audio (${peakDb} dB)`);
   }
 
-  const durationSec = moment.endSec - moment.startSec - lead;
+  const durationSec = cut - lead;
   const disclosure = (cfg.campaign?.disclosure ?? settings.clip.disclosure) ? settings.clip.disclosureText : null;
   const transcript = words.map((w) => w.w).join(' ');
   const music = await detectMusic(src);
@@ -98,9 +100,12 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   const layout = await detectLayout(src, cfg.facecam ?? null);
   const chatFile = join(dir, 'chat.json');
-  const chat = existsSync(chatFile)
-    ? matchChat(t.words, JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[]).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: c.e - lead })).filter((c) => c.e > 0.5)
-    : [];
+  const chatLines = existsSync(chatFile) ? JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[] : [];
+  // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.
+  const burst = burstChat(chatLines, peakRel, peakRel + sc.windowSec + 2);
+  const busy = burst.length ? [burst[0].s, burst[0].e] : null;
+  const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...burst]
+    .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   writeFileSync(join(dir, 'subs.ass'), buildAss({
@@ -111,13 +116,13 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
     censor: settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
-    captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400,
+    captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400, burstY: layout.cam ? 1010 : 400,
   }));
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
   const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))));
   await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
-    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words))), { cwd: dir });
+    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec), { cwd: dir });
   rmSync(src, { force: true });
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },

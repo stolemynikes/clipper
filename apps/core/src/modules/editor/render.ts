@@ -48,11 +48,11 @@ export function quietMusic(music: [number, number][], words: { s: number; e: num
 export const duckFilter = (spans: [number, number][], vol = 0.25) =>
   spans.length ? spans.map(([a, b]) => `volume=${vol}:enable='between(t,${a.toFixed(2)},${b.toFixed(2)})'`).join(',') : null;
 
-export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null): string[] {
+export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null): string[] {
   const video = encoder === 'h264_nvenc'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
-  return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), '-i', input, '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
+  return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
     ...(audioFilter ? ['-af', audioFilter] : []),
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }

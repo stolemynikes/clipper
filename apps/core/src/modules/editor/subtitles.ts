@@ -21,6 +21,7 @@ export interface AssOptions {
   censor?: string[]; // word stems to mask in captions (audio is untouched)
   chat?: Overlay[]; // chat messages he reacts to, shown as a card over the content
   chatY?: number; // top of the chat card
+  burstY?: number; // top of the burst stack (rows go down 72px each)
 }
 
 const WHITE = '&H00FFFFFF';
@@ -94,7 +95,8 @@ export function buildAss(o: AssOptions): string {
   // Chat card: Twitch-like, sender in the caption accent color, short fade (micro-animation).
   for (const c of o.chat ?? []) {
     const text = c.text.replace(/[{}\\]/g, '').split(' ').map((w) => (o.censor?.length ? censorWord(w, o.censor) : w)).join(' ');
-    ev(c.s, c.e, 'Chat', `{\\pos(60,${o.chatY ?? 1000})\\fad(150,150)}{\\c${YELLOW}}${c.user.replace(/[{}\\]/g, '')}{\\c${WHITE}}  ${text}`);
+    const cy = c.row != null ? (o.burstY ?? o.chatY ?? 1000) + c.row * 72 : (o.chatY ?? 1000);
+    ev(c.s, c.e, 'Chat', `{\\pos(60,${cy})\\fad(150,150)}{\\c${YELLOW}}${c.user.replace(/[{}\\]/g, '')}{\\c${WHITE}}  ${text}`);
   }
   if (o.tag) ev(0, o.durationSec, 'Tag', `{\\pos(540,1560)}${clean(o.tag).toLowerCase()}`);
   // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
