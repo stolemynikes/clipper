@@ -21,7 +21,7 @@
     "freeGB": 409,
     "mediaType": "HDD"
   },
-  "whisperModelVod": "large-v3",
+  "whisperModelVod": "medium",
   "whisperModelLive": "large-v3-turbo",
   "encoder": "h264_nvenc",
   "maxParallelRenders": 2,

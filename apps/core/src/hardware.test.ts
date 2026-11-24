@@ -10,9 +10,9 @@ const base: Hardware = {
   workDrive: { letter: 'E', freeGB: 411, mediaType: 'HDD' },
 };
 
-test('12GB NVENC GPU gets large-v3, nvenc, 2 renders, HDD warning', () => {
+test('12GB NVENC GPU gets medium (large-v3 drifts), nvenc, 2 renders, HDD warning', () => {
   const c = deriveConfig(base, 'E:\\dev\\clipping-tool\\data');
-  assert.equal(c.whisperModelVod, 'large-v3');
+  assert.equal(c.whisperModelVod, 'medium');
   assert.equal(c.whisperModelLive, 'large-v3-turbo');
   assert.equal(c.encoder, 'h264_nvenc');
   assert.equal(c.maxParallelRenders, 2);

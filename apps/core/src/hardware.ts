@@ -75,7 +75,7 @@ export function deriveConfig(hw: Hardware, workDir = paths.dataDir): HardwareCon
   return {
     checkedAt: new Date().toISOString().slice(0, 10),
     ...hw,
-    whisperModelVod: vramGB >= 10 ? 'large-v3' : 'medium',
+    whisperModelVod: 'medium', // large-v3 (faster-whisper, VAD on) drifted words by seconds and dropped punctuation on real clips; medium is right on both
     whisperModelLive: 'large-v3-turbo', // distil-large-v3 is English-only
     encoder: nvenc ? 'h264_nvenc' : 'libx264',
     // ~4GB VRAM per render+transcribe slot, and one slot per 4 cores for audio/mux work.

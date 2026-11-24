@@ -67,7 +67,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
     '--download-sections', `*${moment.startSec}-${moment.endSec}`, '--merge-output-format', 'mp4', '-o', src, source.url]);
 
-  const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'large-v3', language: null });
+  const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
   const { peakDb } = t;
   // Dead air at the start loses viewers in the first second: start 1s before the first word.
   const lead = deadAirLead(t.words);
@@ -102,9 +102,9 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     ? matchChat(t.words, JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[]).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: c.e - lead })).filter((c) => c.e > 0.5)
     : [];
 
-  const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))) // A/B test, leans to the winner once clear;
+  const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   writeFileSync(join(dir, 'subs.ass'), buildAss({
-    words, durationSec, hook: title?.hook, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
+    words, durationSec, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
     // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
     disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
