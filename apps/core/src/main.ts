@@ -35,5 +35,5 @@ const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure
 await Promise.all([
   runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p) }, opts),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
-  runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p) }, opts),
+  runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);

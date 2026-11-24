@@ -142,6 +142,8 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   }
   db.update(posts).set({ url: r.url, externalId: r.externalId }).where(eq(posts.id, postId)).run();
   if (r.url) enqueue(db, 'post.submit', { postId });
+  // TikTok gives the link only after processing; check early so the campaign submit stays inside its 30-minute window.
+  else for (const min of [3, 10, 20]) enqueue(db, 'post.track', {}, { runAt: new Date(now.getTime() + min * 60_000) });
   db.update(clips).set({ status: 'posted' }).where(eq(clips.id, clipId)).run();
   log.info(`clip ${clipId} posted to ${account.platform} account ${accountId}`);
 }
