@@ -35,7 +35,7 @@ export interface StreamerConfig {
   captionStyle?: CaptionStyle; // bold | pop | clean; overrides settings.clip.captionStyle
   tag: string;
   stage?: 'study' | 'clips'; // study: learn from top clips first, no VODs; clips (or unset): make clips
-  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; disclosureInVideo?: boolean; maxSec?: number; budget?: number; budgetLeft?: number; pool?: number; url?: string; whopBountyId?: string }; // url: campaign page to submit on. whopBountyId: bnty_ id, enables auto-submit via the Whop API. budget: total $ for rate campaigns (from the brief). pool: $ split by views
+  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; disclosureInVideo?: boolean; maxSec?: number; budget?: number; budgetLeft?: number; pool?: number; url?: string; whopBountyId?: string; rulePreset?: string; judgeRules?: string[] }; // rulePreset/judgeRules: layout checks for the judge (config/judge-rules.yaml). url: campaign page to submit on. whopBountyId: bnty_ id, enables auto-submit via the Whop API. budget: total $ for rate campaigns (from the brief). pool: $ split by views
 }
 
 const read = (file: string) => parse(readFileSync(join(paths.configDir, file), 'utf8'));

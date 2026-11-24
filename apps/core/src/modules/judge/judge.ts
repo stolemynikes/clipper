@@ -14,6 +14,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { learnedWeights } from '../learner/weights.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
+import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules, type Rule } from './layout.ts';
 
 const log = logger('judge');
 const OLLAMA = process.env.OLLAMA_HOST ?? 'http://127.0.0.1:11434';
@@ -35,20 +36,30 @@ export async function useGpu(awayMin: number): Promise<boolean> {
   }
 }
 
-export async function ask(model: string, gpu: boolean, prompt: string, images?: string[]): Promise<{ score: number; why: string }> {
+async function askJson(model: string, gpu: boolean, prompt: string, format: object, images?: string[]) {
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST',
     body: JSON.stringify({
       model, stream: false, think: false,
       keep_alive: gpu ? '2m' : 0, // CPU: free the ~8 GB RAM right away
       options: { temperature: 0, num_gpu: gpu ? 999 : 0 },
-      format: { type: 'object', properties: { score: { type: 'integer' }, why: { type: 'string' } }, required: ['score', 'why'] },
+      format,
       messages: [{ role: 'user', content: prompt, ...(images && { images }) }],
     }),
   });
   if (!r.ok) throw new Error(`Ollama ${model}: HTTP ${r.status}`);
-  const j = JSON.parse(((await r.json()) as { message?: { content?: string } }).message?.content ?? '{}');
+  return JSON.parse(((await r.json()) as { message?: { content?: string } }).message?.content ?? '{}');
+}
+
+export async function ask(model: string, gpu: boolean, prompt: string, images?: string[]): Promise<{ score: number; why: string }> {
+  const j = await askJson(model, gpu, prompt, { type: 'object', properties: { score: { type: 'integer' }, why: { type: 'string' } }, required: ['score', 'why'] }, images);
   return { score: Math.max(0, Math.min(10, Number(j.score) || 0)), why: String(j.why ?? '').slice(0, 160) };
+}
+
+const BROKEN = { type: 'object', required: ['broken'], properties: { broken: { type: 'array', items: { type: 'object', required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
+export async function askLayout(model: string, gpu: boolean, rules: Rule[], images: string[]) {
+  const j = await askJson(model, gpu, layoutPrompt(rules), BROKEN, images);
+  return layoutResult((Array.isArray(j.broken) ? j.broken : []).map((b: { id?: unknown; why?: unknown }) => ({ id: String(b.id ?? ''), why: String(b.why ?? '').slice(0, 160) })), rules);
 }
 
 /** Transcripts of this streamer's most-viewed viewer clips (from the study report): what people liked before. */
@@ -71,11 +82,11 @@ a strong facial reaction, action in the game, something surprising on screen. A 
 Ignore captions, chat boxes and title text drawn on top: an editor added those, they are not what happens.
 Return JSON: "score" 0-10, "why" one short sentence.`;
 
-export async function frames(file: string, dur: number): Promise<string[]> {
+export async function frames(file: string, dur: number, width = 360): Promise<string[]> { // layout check: 540+, thin strips vanish at 360
   const out: string[] = [];
   for (const f of [0.2, 0.4, 0.6, 0.8]) {
     const jpg = await runCmd('powershell', ['-NoProfile', '-Command', // binary stdout via base64: runCmd returns text
-      `$p=[IO.Path]::GetTempFileName()+'.jpg'; ffmpeg -v error -y -ss ${(dur * f).toFixed(1)} -i '${file.replace(/'/g, "''")}' -frames:v 1 -vf scale=360:-2 $p; [Convert]::ToBase64String([IO.File]::ReadAllBytes($p)); Remove-Item $p`]);
+      `$p=[IO.Path]::GetTempFileName()+'.jpg'; ffmpeg -v error -y -ss ${(dur * f).toFixed(1)} -i '${file.replace(/'/g, "''")}' -frames:v 1 -vf scale=${width}:-2 $p; [Convert]::ToBase64String([IO.File]::ReadAllBytes($p)); Remove-Item $p`]);
     out.push(jpg.trim());
   }
   return out;
@@ -90,8 +101,9 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
   const s = loadSettings();
   const model = s.titles?.model ?? 'gemma4:12b';
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;
-  const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
+  const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number; layoutPenalty?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
 { laughMax: music?.laughMax, cheerMax: music?.cheerMax };
+  let layoutWarnings: string[] | undefined;
   try {
     const gpu = await useGpu(s.judge?.awayMin ?? 10);
     if (gpu) stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM
@@ -104,6 +116,9 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
     if (existsSync(clip.filePath)) {
       const b = await ask(model, gpu, VISUAL_PROMPT, await frames(clip.filePath, clip.durationSec ?? 20));
       fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
+      const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540));
+      fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;
+      if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
     }
     log.info(`clip ${clipId} judged on ${gpu ? 'GPU' : 'CPU'} in ${Date.now() - t0} ms: ${why.join(' | ')}`);
     Object.assign(fun, { judgeGpu: gpu ? 1 : 0, judgeWhy: why.join(' | ') });
@@ -113,5 +128,10 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
   const signals = { ...(moment.signals ?? {}), ...Object.fromEntries(Object.entries(fun).filter(([, v]) => v !== undefined)) };
   const base = moment.score - funBonus((moment.signals ?? {}) as FunSignals, learnedWeights()); // re-judge: don't add twice
   db.update(moments).set({ signals: signals as Record<string, number>, score: base + funBonus(fun, learnedWeights()) }).where(eq(moments.id, moment.id)).run();
+  if (layoutWarnings) { // replace the old layout warnings on a re-judge; they show on the card and block auto-keep
+    const c = (clip.compliance ?? {}) as { warnings?: string[] };
+    const warnings = [...(c.warnings ?? []).filter((w) => !w.startsWith(LAYOUT_PREFIX)), ...layoutWarnings];
+    db.update(clips).set({ compliance: { ...c, warnings } }).where(eq(clips.id, clipId)).run();
+  }
   if (notify) enqueue(db, 'review.notify', { clipId });
 }

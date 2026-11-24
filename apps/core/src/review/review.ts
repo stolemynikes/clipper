@@ -33,7 +33,7 @@ const clipRows = (db: Db) => db.select({ clip: clips, moment: moments, source: s
 export type ReviewRow = ReturnType<typeof pendingClips>[number];
 export const pendingClips = (db: Db) => clipRows(db).where(eq(clips.status, 'pending_review')).all();
 /** Strength 1-10, relative to the best moment of the same stream (raw scores have no upper bound). */
-export const rating = (score: number, best: number) => (best > 0 ? Math.max(1, Math.min(10, Math.round((score / best) * 10))) : 5);
+export const rating = (score: number, best: number, penalty = 0) => Math.max(1, (best > 0 ? Math.max(1, Math.min(10, Math.round((score / best) * 10))) : 5) - penalty); // penalty: broken layout rules (judge)
 export const bestScores = (db: Db) =>
   new Map(db.select({ id: moments.sourceId, best: max(moments.score) }).from(moments).groupBy(moments.sourceId).all().map((r) => [r.id, r.best ?? 0]));
 export const getClip = (db: Db, id: number) => db.select().from(clips).where(eq(clips.id, id)).get();
@@ -73,7 +73,7 @@ export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
   if (row.clip.status !== 'pending_review') return;
   const warnings = (row.clip.compliance?.warnings ?? []) as string[];
   const review = { clipId, streamer: row.streamer.name, file: row.clip.filePath, title: row.clip.title, hook: row.clip.hook, seconds: row.clip.durationSec ?? 0, signals: (row.moment.signals ?? {}) as Record<string, number>, warnings,
-    rating: rating(row.moment.score, bestScores(db).get(row.moment.sourceId) ?? 0) };
+    rating: rating(row.moment.score, bestScores(db).get(row.moment.sourceId) ?? 0, (row.moment.signals as Record<string, number> | null)?.layoutPenalty ?? 0) };
   if (autoKeep((row.moment.signals ?? {}) as Record<string, number>, warnings, loadSettings().review?.autoKeep) && decide(db, clipId, true)) {
     log.info(`clip ${clipId} auto-kept`);
     // Mark it, so the learner never treats its own decision as the owner's (no circular learning).

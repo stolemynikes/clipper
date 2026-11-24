@@ -1,0 +1,21 @@
+# Layout checklist for the local judge LLM (vision model looks at frames of the rendered clip).
+# Every rule came from owner feedback on a real clip (see docs/layout-rules.md).
+# `base` applies to every clip. A campaign picks a platform preset with `rulePreset` (default content-rewards)
+# and can add its own brief rules as plain sentences with `judgeRules` in streamers.yaml.
+# penalty: points off the 1-10 rating. Hard campaign rules (tag, #ad, music) are enforced in code, not here.
+presets:
+  base:
+    - { id: head-cut, penalty: 3, check: "Top panel (webcam): the streamer's whole head is visible with some room above it. Fail if the forehead, top of the head or chin is cut off." }
+    - { id: overlay-in-cam, penalty: 2, check: "Top panel shows only the webcam image. Fail if a stream overlay, chat strip, alert, logo or a colored border shows inside it." }
+    - { id: face-tiny, penalty: 1, check: "In the top panel the face is at least about 1/5 of the panel width. Fail if the person is tiny and far away." }
+    - { id: game-in-cam, penalty: 3, check: "Top panel shows a person, not game footage or a game HUD." }
+    - { id: action-cut, penalty: 2, check: "Bottom panel: the player character or main action is not cut in half by the panel edge. People at the edge of a game cutscene are fine." }
+    - { id: cam-twice, penalty: 2, check: "Bottom panel contains no part of the webcam image, not even a thin strip at its left or right edge." }
+    - { id: text-unreadable, penalty: 2, check: "If the bottom panel shows a text page (browser, tweet, menu), the whole page is shown, not cut mid-line." }
+    - { id: overlay-in-game, penalty: 2, check: "Bottom panel: no chat list, alert box or overlay from the original stream at its edges (small usernames with badges in a column = fail). Ignore the dark rounded chat box in the bottom-left corner of the video: we add that on purpose." }
+    - { id: empty-game, penalty: 2, check: "Bottom panel shows a game or screen with something in it. Fail if that panel is mostly an empty dark or flat-colored area (ignoring captions and the chat box)." }
+    # Not checked here (code does it): cam and game joined and centered (stackTop), tag/#ad burned in, music.
+    - { id: chat-covers, penalty: 2, check: "Only if a Twitch chat box is visible: it sits bottom-left and does not overlap the captions." }
+    - { id: caption-on-face, penalty: 1, check: "Captions (big bold words) do not cover a face." }
+  content-rewards:
+    - { id: tag-place, penalty: 1, check: "The @streamer tag and #AD sit in the bottom-right corner, small, and are not covered by anything." }

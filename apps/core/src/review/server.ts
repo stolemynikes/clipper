@@ -40,7 +40,7 @@ export function reasons(s: Record<string, number>): string[] {
 
 function card({ clip, moment, source, streamer }: ReviewRow, best: number) {
   const why = reasons((moment.signals ?? {}) as Record<string, number>);
-  const r = rating(moment.score, best);
+  const r = rating(moment.score, best, (moment.signals as Record<string, number> | null)?.layoutPenalty ?? 0);
   return `<article id="clip-${clip.id}">
   <video src="/clip/${clip.id}.mp4" controls playsinline preload="metadata"></video>
   <div class="meta">
