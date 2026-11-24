@@ -137,12 +137,12 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     style: cfg.captionStyle ?? settings.clip.captionStyle,
     censor,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
-    captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400, burstY: layout.cam ? 1240 : 400,
+    captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400, burstY: layout.cam ? 1600 : 400,
   }));
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
   const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 24, y: layout.cam ? 1240 : 400 } : undefined);
+    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? 1564 : 400 } : undefined);
   await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
     duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
     twitchChat?.file ?? null), { cwd: dir });
