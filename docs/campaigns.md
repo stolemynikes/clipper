@@ -6,7 +6,11 @@ Check the campaign page before adding a streamer to `config/streamers.yaml`: bud
 ## Shared Content Rewards rules
 - Free to join; most pay-per-view campaigns need no application.
 - Pay per 1,000 approved views, or a share of a pool. 10% creator fee. Payout: 7 days earning + 3-day hold.
-- Submit the link from a verified account within 30 minutes of posting.
+- Submit the link from a verified account, connected in Content Rewards (TikTok, Instagram, YouTube, X). Views are read from the post itself.
+- "Within 30 minutes of posting" comes from a third-party guide; not found in the official terms.
+- Instagram must be a Business/Creator (professional) account. Creators must be 18+.
+- No follower minimum for open campaigns. Application campaigns screen creators.
+- Briefs may set accepted platforms and audience rules (e.g. at least 40% of views from US/UK/CA/AU, with analytics attached). CPM may differ per country. Misstating the audience breaches the terms.
 - Bot score on every video, then a human approves. Bought views = permanent ban.
 - Disclosure at the start of every clip. No Instagram Collab unless the brief allows it.
 - Only footage the brief names. Clipper must clear music and third-party content.

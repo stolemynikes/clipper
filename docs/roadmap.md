@@ -11,6 +11,7 @@
 - [ ] Flag weak campaigns ("high bar, likely little pay"), e.g. a pool with a 500K-view bar.
 - [ ] Scout earlier than phase 4: campaigns are monthly ("[November]") or event-based (GTA 6 launch, Streamer Awards) and budgets run out in days. Check new campaigns daily, notify the owner with a draft `streamers.yaml` entry, and keep facecam/tag config ready for streamers who return each month. Check Content Rewards' terms on automated reading first; else a notice with the link only.
 - [ ] Add streamers the owner picks from `docs/campaigns.md` to `config/streamers.yaml`.
+- [ ] Posting rules per campaign: accepted platforms (e.g. no X for IShowSpeed), audience/country share (e.g. 40% US/UK/CA/AU), account type. Publisher posts only to accepted platforms; Compliance warns on audience rules (Tracker can't check country share yet).
 
 ## Dashboard (phase 4)
 - [ ] Campaigns tab: running campaigns per program, rate or pool, rules in plain words, end date, budget left; per campaign clips, views, estimated pay; warnings for a nearly empty pool, a campaign ending soon, a clip not submitted. Submit button opens the Whop link (no API).
