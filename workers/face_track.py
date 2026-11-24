@@ -189,7 +189,8 @@ def analyze(path: str, model: str, hint: dict | None = None, start: float = 0, e
     found = detect_faces(frames, model)
     # Known webcam box: look there first. Realistic game faces (GTA 6) elsewhere are big and would win as "fullcam".
     in_hint = [f for f in found if inside(f[1], hint)]
-    face = (stable_face(in_hint, len(frames), raw) if in_hint else None) or stable_face(found, len(frames), raw)
+    # No motion filter in the hint: a streamer sitting still in his webcam is not an ornament.
+    face = (stable_face(in_hint, len(frames)) if in_hint else None) or stable_face(found, len(frames), raw)
     motion = motion_map(pairs)
 
     if face is None:

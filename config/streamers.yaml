@@ -7,7 +7,7 @@ streamers:
   - name: clix
     platform: twitch
     channel: clix
-    facecam: { x: 0.0, y: 0.27, w: 0.255, h: 0.21 } # inside the webcam border, above the logo (1080p frames, Nov 2026 layout)
+    facecam: { x: 0.0, y: 0.0, w: 0.26, h: 0.48 } # covers both cams: top-left in GTA, left above the logo in Fortnite (Nov 2026); edge snap finds the real border
     tag: "@Clix"
     campaign:
       platform: content_rewards

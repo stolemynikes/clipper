@@ -39,8 +39,9 @@ Transcript of the clip:
 Return JSON with:
 - "moment": one plain sentence: what really happens in this clip, only facts from the transcript.
 - "title": 30-50 characters, in the language of the transcript. ${STYLE[style]} Use stakes, conflict, a specific number or name from the transcript, or a reaction ("He did NOT expect this", "Why chat turned on Lacy"). Put the strongest words first.
+  Like the most-viewed clipper Shorts: name ${streamer} in the first 3 words and name the other people from the transcript ("Clix EXPOSED for faking...", "Silky Shows Up 2 Days Late..."); drama words (EXPOSED, argue, couldn't believe) only when true.
   The title must be true for the "moment" sentence. Never promise anything that is not in the transcript: YouTube removes titles that mislead about the video.
-  No hashtags, no emojis, no quotes, not the word "streamer".
+  No hashtags, no quotes, not the word "streamer". End with exactly one emoji from: 😭 💀 😂 🥀.
 - "hook": max 6 words shown on screen in the first second, same language, a teaser that makes people stay (not the same words as the title). Vary the wording: avoid "actually".`;
 }
 
