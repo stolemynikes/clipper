@@ -17,6 +17,10 @@ from mediapipe.tasks.python.core.base_options import BaseOptions
 MODEL = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "yamnet.tflite")
 RATE = 16000
 MUSIC_MIN = 0.2  # YAMNet "Music" score per frame
+# Human reactions, for the "is it fun" signals (laughRatio, cheerRatio = share of frames with one of these).
+HUMAN_MIN = 0.1
+LAUGH = {"Laughter", "Giggle", "Snicker", "Belly laugh", "Chuckle, chortle", "Baby laughter"}
+CHEER = {"Cheering", "Screaming", "Shout", "Yell", "Children shouting", "Applause"}
 VOCAL = {"Singing", "Rapping", "Song", "Choir", "Chant", "Pop music", "Hip hop music", "Vocal music"}
 
 
@@ -46,13 +50,15 @@ def summarize(fr: list[tuple[float, dict]], step: float = 0.975) -> dict:
         else:
             spans.append([round(t, 2), round(t + step, 2)])
     n = max(len(fr), 1)
-    return {"musicRatio": round(len(music) / n, 3), "vocalRatio": round(len(vocal) / n, 3), "musicSec": spans}
+    share = lambda names: round(sum(any(c.get(k, 0) >= HUMAN_MIN for k in names) for _, c in fr) / n, 3)
+    return {"musicRatio": round(len(music) / n, 3), "vocalRatio": round(len(vocal) / n, 3), "musicSec": spans,
+            "laughRatio": share(LAUGH), "cheerRatio": share(CHEER)}
 
 
 def main() -> None:
     args = json.loads(sys.argv[1])
     audio = load_audio(args["input"])
-    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": []}, sys.stdout)
+    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": [], "laughRatio": 0, "cheerRatio": 0}, sys.stdout)
 
 
 if __name__ == "__main__":

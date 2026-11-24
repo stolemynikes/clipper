@@ -17,6 +17,7 @@ export interface Settings {
   watcher: { enabled?: boolean; pollMinutes: number; maxVodAgeDays: number };
   study?: { extra?: string[] };
   review?: { autoKeep?: AutoKeep };
+  judge?: { awayMin: number };
 }
 
 export interface AutoKeep { enabled: boolean; minViewerClips: number; minChatRate: number }

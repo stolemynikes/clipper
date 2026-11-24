@@ -73,6 +73,8 @@ export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
   const warnings = (row.clip.compliance?.warnings ?? []) as string[];
   if (autoKeep((row.moment.signals ?? {}) as Record<string, number>, warnings, loadSettings().review?.autoKeep) && decide(db, clipId, true)) {
     log.info(`clip ${clipId} auto-kept`);
+    // Mark it, so the learner never treats its own decision as the owner's (no circular learning).
+    db.update(moments).set({ signals: { ...(row.moment.signals ?? {}), autoKept: 1 } }).where(eq(moments.id, row.moment.id)).run();
     return bark(`Auto-kept · ${row.streamer.name}`, 'Viewers clipped it and chat reacted. Tap to watch.', { url: `${reviewUrl()}/#clip-${clipId}`, level: 'passive' });
   }
   await bark(`New clip · ${row.streamer.name}`, `${Math.round(row.clip.durationSec ?? 0)} seconds. Tap to watch and choose Keep or Skip.`,
