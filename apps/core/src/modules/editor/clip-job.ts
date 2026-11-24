@@ -106,6 +106,8 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   writeFileSync(join(dir, 'subs.ass'), buildAss({
     words, durationSec, hook: title?.hook, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
+    // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
+    censor: settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
     captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400,
   }));

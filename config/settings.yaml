@@ -23,7 +23,7 @@ clip:
   disclosureText: "#ad"
   disclosureSec: 3
   captionStyle: bold # bold | pop | clean; streamers.yaml can override per streamer
-  censor: # caption masking per platform; applied when the publisher renders per-platform variants (phase 2)
+  censor: # caption masking (audio untouched); applied to every clip while any listed platform is on
     platforms: [tiktok]
     words: [fuck, shit, bitch, cunt, nigg, fag, retard]
 
