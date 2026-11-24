@@ -186,7 +186,10 @@ def analyze(path: str, model: str, hint: dict | None = None, start: float = 0, e
     frames = [a for a, _ in pairs]
     still = len(pairs) == 1 and pairs[0][0] is pairs[0][1]  # test image: no motion to check
     raw = None if still else sum(cv2.absdiff(cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)).astype(np.float32) for a, b in pairs) / len(pairs)
-    face = stable_face(detect_faces(frames, model), len(frames), raw)
+    found = detect_faces(frames, model)
+    # Known webcam box: look there first. Realistic game faces (GTA 6) elsewhere are big and would win as "fullcam".
+    in_hint = [f for f in found if inside(f[1], hint)]
+    face = (stable_face(in_hint, len(frames), raw) if in_hint else None) or stable_face(found, len(frames), raw)
     motion = motion_map(pairs)
 
     if face is None:
