@@ -99,10 +99,10 @@ export function buildAss(o: AssOptions): string {
     const cy = c.row != null ? (o.burstY ?? o.chatY ?? 1000) + c.row * 72 : (o.chatY ?? 1000);
     ev(c.s, c.e, 'Chat', `{\\pos(60,${cy})\\fad(150,150)}{\\c${YELLOW}}${c.user.replace(/[{}\\]/g, '')}{\\c${WHITE}}  ${text}`);
   }
-  if (o.tag) ev(0, o.durationSec, 'Tag', `{\\pos(540,1560)}${clean(o.tag).toLowerCase()}`);
+  if (o.tag) ev(0, o.durationSec, 'Tag', `{\\an6\\pos(930,1545)}${clean(o.tag).toLowerCase()}`);
   // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
   if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)}${hookText(o.hook)}`);
-  if (o.disclosure) ev(0, o.disclosureSec ?? 3, 'Disclosure', `{\\an5\\pos(540,1495)}${clean(o.disclosure)}`);
+  if (o.disclosure) ev(0, o.disclosureSec ?? 3, 'Disclosure', `{\\an6\\pos(930,1485)}${clean(o.disclosure)}`);
 
   return `[Script Info]
 ScriptType: v4.00+
