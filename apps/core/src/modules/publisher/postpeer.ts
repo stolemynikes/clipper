@@ -1,4 +1,4 @@
-// Posting to TikTok and Instagram through PostPeer (https://docs.postpeer.dev): its own audited apps post public,
+// Posting to TikTok and Instagram through PostPeer (https://www.postpeer.dev/docs): its own audited apps post public,
 // unlimited connected accounts. Flow: upload the file to PostPeer storage, create the post, poll, delete the file.
 import { readFileSync, statSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -77,4 +77,14 @@ export async function postpeerPublish(o: { platform: PpPlatform; accountName: st
   } finally {
     if (!keepFile) await pp('/media', { method: 'DELETE', body: { url: up.data.publicUrl } }).catch((e) => log.warn(`could not delete PostPeer file: ${(e as Error).message}`));
   }
+}
+
+/** PostPeer charges 1 credit per analytics call, so a post is measured only at 1, 3 and 7 days old. */
+export const statsDue = (ageDays: number, measured: number) => [1, 3, 7].filter((d) => ageDays >= d).length > measured;
+
+export async function postpeerStats(postId: string) {
+  const { post } = await pp<{ post: { platforms: { platformPostUrl?: string; metrics?: { views?: number; likes?: number } }[] } }>(
+    `/analytics/?postId=${encodeURIComponent(postId)}`);
+  const p = post.platforms[0];
+  return { views: p?.metrics?.views ?? 0, likes: p?.metrics?.likes ?? null, url: p?.platformPostUrl };
 }

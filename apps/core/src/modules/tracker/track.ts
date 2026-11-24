@@ -1,12 +1,13 @@
 // Views and likes per post, from the official APIs with the account's own token. Feeds earnings on the Accounts page.
 import { enqueue } from '../../queue/queue.ts';
-import { and, eq, gte, isNotNull } from 'drizzle-orm';
+import { and, count, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.ts';
 import { accounts, posts, stats } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
 import type { Platform } from '../../review/setup.ts';
 import { accessToken } from '../publisher/oauth.ts';
 import { tiktokApi } from '../publisher/publish.ts';
+import { hasPostpeer, postpeerStats, statsDue } from '../publisher/postpeer.ts';
 
 const log = logger('tracker');
 const TRACK_DAYS = 30;
@@ -48,11 +49,24 @@ async function tiktok(db: Db, token: string, rows: Row[]) {
 /** One pass over posts from the last 30 days. One failing account does not stop the others. */
 export async function trackOnce(db: Db, now = new Date()) {
   const since = new Date(now.getTime() - TRACK_DAYS * 86_400_000);
-  const rows = db.select({ id: posts.id, externalId: posts.externalId, url: posts.url, accountId: posts.accountId, platform: accounts.platform })
+  const rows = db.select({ id: posts.id, externalId: posts.externalId, url: posts.url, postedAt: posts.postedAt, accountId: posts.accountId, platform: accounts.platform })
     .from(posts).innerJoin(accounts, eq(accounts.id, posts.accountId))
-    .where(and(isNotNull(posts.externalId), gte(posts.postedAt, since))).all() as (Row & { accountId: number; platform: Platform })[];
+    .where(and(isNotNull(posts.externalId), gte(posts.postedAt, since))).all() as (Row & { postedAt: Date | null; accountId: number; platform: Platform })[];
+  const save = (p: Row, c: Count) => {
+    db.insert(stats).values({ postId: p.id, views: c.views, likes: c.likes, measuredAt: now }).run();
+    if (c.url && c.url !== p.url) {
+      db.update(posts).set({ url: c.url }).where(eq(posts.id, p.id)).run();
+      if (!p.url) enqueue(db, 'post.submit', { postId: p.id }); // link known only now
+    }
+  };
+  if (hasPostpeer()) {
+    for (const p of rows.filter((x) => x.externalId.startsWith('pp:'))) {
+      const [{ n }] = db.select({ n: count() }).from(stats).where(eq(stats.postId, p.id)).all();
+      if (!p.postedAt || !statsDue((now.getTime() - p.postedAt.getTime()) / 86_400_000, n)) continue;
+      try { save(p, await postpeerStats(p.externalId.slice(3))); } catch (e) { log.warn(`stats for post ${p.id} failed: ${(e as Error).message}`); }
+    }
+  }
   const byAccount = new Map<number, typeof rows>();
-  // shortcut: PostPeer posts (pp:) have no views source yet; add one (PostPeer analytics or TikTok Display API) when views count.
   for (const r of rows.filter((x) => !x.externalId.startsWith('pp:'))) byAccount.set(r.accountId, [...(byAccount.get(r.accountId) ?? []), r]);
   for (const [accountId, list] of byAccount) {
     try {
@@ -60,12 +74,7 @@ export async function trackOnce(db: Db, now = new Date()) {
       const counts = list[0].platform === 'youtube' ? await youtube(token, list) : await tiktok(db, token, list);
       for (const p of list) {
         const c = counts.get(p.externalId);
-        if (!c) continue;
-        db.insert(stats).values({ postId: p.id, views: c.views, likes: c.likes, measuredAt: now }).run();
-        if (c.url && c.url !== p.url) {
-          db.update(posts).set({ url: c.url }).where(eq(posts.id, p.id)).run();
-          if (!p.url) enqueue(db, 'post.submit', { postId: p.id }); // TikTok link known only now
-        }
+        if (c) save(p, c);
       }
     } catch (e) {
       log.warn(`stats for account ${accountId} failed: ${(e as Error).message}`);

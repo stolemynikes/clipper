@@ -62,3 +62,12 @@ test('postBody: public TikTok with paid disclosure, Instagram reel', () => {
   const i = postBody({ platform: 'instagram', integrationId: 'c', content: 'hi', url: 'u', paid: false, key: 'k' });
   assert.deepEqual(i.mediaItems, [{ type: 'video', url: 'u' }]);
 });
+
+test('PostPeer stats only at 1, 3 and 7 days', async () => {
+  const { statsDue } = await import('./postpeer.ts');
+  assert.equal(statsDue(0.5, 0), false);
+  assert.equal(statsDue(1.2, 0), true);
+  assert.equal(statsDue(2, 1), false);
+  assert.equal(statsDue(8, 2), true);
+  assert.equal(statsDue(30, 3), false);
+});
