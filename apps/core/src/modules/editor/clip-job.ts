@@ -13,6 +13,7 @@ import { sourceContext } from '../vod-clipper/analyze.ts';
 import { type ChatLine, matchChat } from './chat-overlay.ts';
 import { ffmpegArgs, filterGraph, type Layout, type Rect } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
+import { transcribe } from './whisper.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
@@ -51,9 +52,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
     '--download-sections', `*${moment.startSec}-${moment.endSec}`, '--merge-output-format', 'mp4', '-o', src, source.url]);
 
-  const out = await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'transcribe.py'),
-    JSON.stringify({ input: src, model: hw?.whisperModelVod ?? 'large-v3', language: null })]);
-  const t = JSON.parse(out) as { words: Word[]; peakDb?: number };
+  const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'large-v3', language: null });
   const { peakDb } = t;
   // Dead air at the start loses viewers in the first second: start 1s before the first word.
   const lead = deadAirLead(t.words);

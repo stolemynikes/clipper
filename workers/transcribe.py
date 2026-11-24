@@ -2,6 +2,8 @@
 
 Usage: python transcribe.py '{"input": "clip.mp4", "model": "large-v3", "language": null}'
 Prints JSON: {"language": "nl", "words": [{"w": "hoi", "s": 0.12, "e": 0.4}, ...]}
+Serve mode: python transcribe.py --serve reads one JSON request per stdin line and answers one JSON line each,
+keeping models loaded (large-v3 takes ~100s to load from the HDD, transcribing a clip ~6s).
 """
 import json
 import os
@@ -30,9 +32,14 @@ def load_audio(path: str) -> np.ndarray:
     return np.frombuffer(pcm, np.float32)
 
 
+_models: dict = {}
+
+
 def transcribe(audio: np.ndarray, model_name: str, language, device: str, compute: str) -> dict:
-    model = WhisperModel(model_name, device=device, compute_type=compute)
-    segments, info = model.transcribe(audio, language=language, word_timestamps=True, vad_filter=True)
+    key = (model_name, device)
+    if key not in _models:
+        _models[key] = WhisperModel(model_name, device=device, compute_type=compute)
+    segments, info = _models[key].transcribe(audio, language=language, word_timestamps=True, vad_filter=True)
     words = [  # segments is lazy: CUDA errors surface here, inside the caller's try
         {"w": w.word.strip(), "s": round(w.start, 3), "e": round(w.end, 3)}
         for seg in segments
@@ -42,8 +49,7 @@ def transcribe(audio: np.ndarray, model_name: str, language, device: str, comput
     return {"language": info.language, "words": words}
 
 
-def main() -> None:
-    args = json.loads(sys.argv[1])
+def handle(args: dict) -> dict:
     audio = load_audio(args["input"])
     name, lang = args.get("model", "large-v3"), args.get("language")
     try:
@@ -53,7 +59,21 @@ def main() -> None:
         result = transcribe(audio, name, lang, "cpu", "int8")
     peak = float(np.abs(audio).max()) if audio.size else 0.0
     result["peakDb"] = round(20 * np.log10(peak), 1) if peak > 0 else -120.0  # silent clip (mic off) check
-    json.dump(result, sys.stdout, ensure_ascii=False)
+    return result
+
+
+def main() -> None:
+    if sys.argv[1] != "--serve":
+        json.dump(handle(json.loads(sys.argv[1])), sys.stdout)  # ASCII-escaped: safe under any console codepage
+        return
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        try:
+            out = handle(json.loads(line))
+        except Exception as e:  # one bad clip must not kill the server
+            out = {"error": f"{type(e).__name__}: {e}"}
+        print(json.dumps(out), flush=True)
 
 
 if __name__ == "__main__":
