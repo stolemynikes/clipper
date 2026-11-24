@@ -1,4 +1,5 @@
 // Views and likes per post, from the official APIs with the account's own token. Feeds earnings on the Accounts page.
+import { enqueue } from '../../queue/queue.ts';
 import { and, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.ts';
 import { accounts, posts, stats } from '../../db/schema.ts';
@@ -61,7 +62,10 @@ export async function trackOnce(db: Db, now = new Date()) {
         const c = counts.get(p.externalId);
         if (!c) continue;
         db.insert(stats).values({ postId: p.id, views: c.views, likes: c.likes, measuredAt: now }).run();
-        if (c.url && c.url !== p.url) db.update(posts).set({ url: c.url }).where(eq(posts.id, p.id)).run();
+        if (c.url && c.url !== p.url) {
+          db.update(posts).set({ url: c.url }).where(eq(posts.id, p.id)).run();
+          if (!p.url) enqueue(db, 'post.submit', { postId: p.id }); // TikTok link known only now
+        }
       }
     } catch (e) {
       log.warn(`stats for account ${accountId} failed: ${(e as Error).message}`);

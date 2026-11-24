@@ -141,6 +141,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
     throw e;
   }
   db.update(posts).set({ url: r.url, externalId: r.externalId }).where(eq(posts.id, postId)).run();
+  if (r.url) enqueue(db, 'post.submit', { postId });
   db.update(clips).set({ status: 'posted' }).where(eq(clips.id, clipId)).run();
   log.info(`clip ${clipId} posted to ${account.platform} account ${accountId}`);
 }

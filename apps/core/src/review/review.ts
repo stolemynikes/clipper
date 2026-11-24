@@ -16,10 +16,10 @@ export const setPaused = (on: boolean) => (on ? writeFileSync(pauseFile, new Dat
 export const reviewUrl = () => process.env.REVIEW_URL || `http://localhost:${process.env.REVIEW_PORT || 8787}`;
 
 /** Push via Bark (iOS). group "clipper" keeps these apart from other apps on the same key. */
-export async function bark(title: string, body: string, o: { url?: string; level?: 'active' | 'timeSensitive' | 'passive' } = {}) {
+export async function bark(title: string, body: string, o: { url?: string; copy?: string; level?: 'active' | 'timeSensitive' | 'passive' } = {}) {
   const { BARK_URL, BARK_KEY } = process.env;
   if (!BARK_URL || !BARK_KEY) throw new Error('BARK_URL or BARK_KEY missing in .env');
-  const q = new URLSearchParams({ group: 'clipper', sound: 'glass', level: o.level ?? 'active', ...(o.url && { url: o.url }) });
+  const q = new URLSearchParams({ group: 'clipper', sound: 'glass', level: o.level ?? 'active', ...(o.url && { url: o.url }), ...(o.copy && { copy: o.copy, autoCopy: '1' }) });
   const res = await fetch(`${BARK_URL}/${BARK_KEY}/${encodeURIComponent(title)}/${encodeURIComponent(body)}?${q}`);
   if (!res.ok) throw new Error(`bark push failed: HTTP ${res.status}`); // never include the URL: it holds the key
 }
