@@ -56,3 +56,7 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
       - BenDaDonnn x Puffco GTA 6: $1/1K, min $2. Puffco is a vape brand: your call. https://contentrewards.com/c/campaigns/bb66f9eb-b90e-4dd0-8cee-9f3cd566c9a0
       - Kai Cenat GTA 6: $10K pool, 3.1K clippers. https://contentrewards.com/c/campaigns/1d2bcb00-c904-415f-aa82-f95b96baad86
       - Rest of the 100+ list at https://contentrewards.com/c/discover/clipping (skip gambling, e.g. 1WIN, VAVADA).
+- [ ] Whop account (2026-11-24): needed for payouts on Content Rewards and Vyro. One account for both (CR terms: 1 account per creator).
+      Then create a Whop app in the developer dashboard; put client id and secret in `.env` as `WHOP_CLIENT_ID=` / `WHOP_CLIENT_SECRET=` (never in chat).
+      Claude tests whether CR campaigns show up as Whop bounties (`GET /bounties`). If yes, submits go automatic via `POST /bounty_submissions`.
+- [ ] Discord: private server + bot token from the Developer Portal in `.env` as `DISCORD_BOT_TOKEN=`; invite the bot to the server. Review moves there, Bark stays as backup.
