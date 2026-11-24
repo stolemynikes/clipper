@@ -20,7 +20,16 @@ Things only the owner can do. Checked against the official docs on 2026-11-24.
 - [ ] Let the Ollama app start at login (Start menu > Ollama, it adds itself to startup). Set the user environment variable `OLLAMA_MODELS=E:\dev\cache\ollama` first, or it downloads the models again to C:.
   Without Ollama, clips still work, but get a plain fallback title.
 
-## Buffer (first choice for TikTok and Instagram posting, checked 2026-11-24)
+## PostPeer (first choice for TikTok and Instagram posting, checked 2026-11-24)
+Free: 20 credits (1 credit = 1 post), unlimited connected accounts, no card. TikTok posts are public by default (`PUBLIC_TO_EVERYONE`, DIRECT_POST) through PostPeer's own TikTok app.
+- [ ] Create a free account at https://www.postpeer.dev.
+- [ ] Connect 1 TikTok account and 1 Instagram account (Instagram must be business or creator).
+- [ ] Create an API key. Put it in `.env` as `POSTPEER_API_KEY=` (never in chat). Tell Claude.
+- Claude then posts 1 test clip and checks that it is really public. If yes: stay on PostPeer.
+  When the free credits run out, compare paid plans: PostPeer Starter ($23.10/mo billed yearly, 2,000 posts) vs Post for Me ($10/mo, 1,000 posts, unlimited accounts, https://www.postforme.dev/pricing).
+- Do not create extra free accounts at one service to get more free posts: bundle.social's terms ban it, and others may close the account for it.
+
+## Buffer (backup, checked 2026-11-24)
 Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram business/creator and YouTube Shorts, max 10 queued posts per channel.
 - [ ] Create a free account at https://buffer.com.
 - [ ] Connect the TikTok account as a **business** account and Instagram as **business or creator** (personal Instagram only gets reminders, no auto-post).
