@@ -8,6 +8,7 @@ Automatische clipping-tool voor streams en video's (Twitch, Kick, YouTube). De t
 
 ## Werkafspraken voor Claude
 
+- **Autonoom doorwerken:** niet na elk stuk stoppen en wachten. Kies zelf het volgende nuttige onderdeel (roadmap, campagnes), bouw het, controleer het op echte output en verbeter het als het tekortschiet. Geef tussendoor updates met screenshots (frames uit clips, pagina-renders) en korte uitleg. Harde regels, beveiliging, nieuwe dependencies en onomkeerbare acties vragen nog steeds eerst toestemming.
 - **Vraag eerst** bij architectuurkeuzes, nieuwe dependencies en alles wat lastig terug te draaien is. Kleine implementatiekeuzes mag je zelf maken.
 - Werk **per fase** (zie onder). Een fase is pas af als de acceptatiecriteria gehaald zijn.
 - Houd modules los van elkaar: ze praten **alleen via de job-wachtrij en de database**. Dan kunnen lichte modules later naar een VPS verhuizen zonder herbouw.
