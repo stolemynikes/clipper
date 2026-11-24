@@ -11,6 +11,7 @@ export interface Settings {
   limits: { maxPostsPerAccountPerDay: number };
   platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
   publish?: { tiktokPublic?: boolean };
+  titles?: { model: string };
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };
   watcher: { pollMinutes: number; maxVodAgeDays: number };

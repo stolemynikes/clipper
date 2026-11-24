@@ -44,6 +44,7 @@ function card({ clip, moment, source, streamer }: ReviewRow, best: number) {
   <div class="meta">
     <div class="head"><p class="title"><strong>${esc(streamer.name)}</strong> · ${Math.round(clip.durationSec ?? 0)} seconds</p>
     <div class="score ${r >= 8 ? 'hi' : r >= 5 ? 'mid' : 'lo'}" aria-label="Strength ${r} out of 10"><b>${r}</b>/10<span>${r >= 8 ? 'Strong' : r >= 5 ? 'Good' : 'Weak'}</span></div></div>
+    ${clip.title ? `<p class="sub">Title: <strong>${esc(clip.title)}</strong>${clip.hook ? ` · On screen: ${esc(clip.hook)}` : ''}</p>` : ''}
     <p class="sub">Why this clip: ${why.map(esc).join(' · ')}</p>
     ${((clip.compliance?.warnings ?? []) as string[]).map((w) => `<p class="note">Note: ${esc(w)}</p>`).join('')}
     <p class="sub"><a href="${esc(source.url)}?t=${Math.floor(moment.startSec)}s" target="_blank" rel="noopener">Watch in the full stream</a></p>

@@ -16,6 +16,10 @@ Things only the owner can do. Checked against the official docs on 2026-11-24.
   Only apply if the tool is offered to other clippers (a real website, privacy policy and terms visible on it, a demo video of the full flow).
 - Until then (unaudited): at most 5 users per 24 h, the posting account must be private, and posts are SELF_ONLY.
 
+## Ollama (titles)
+- [ ] Let the Ollama app start at login (Start menu > Ollama, it adds itself to startup). Set the user environment variable `OLLAMA_MODELS=E:\dev\cache\ollama` first, or it downloads the models again to C:.
+  Without Ollama, clips still work, but get a plain fallback title.
+
 ## Zernio (TikTok and Instagram posting through their audited app)
 - [ ] Create a free account at https://zernio.com (first 2 social accounts free, no card).
 - [ ] Dashboard > API keys > Create API key. Put it in `.env` as `ZERNIO_API_KEY=` (never in chat).

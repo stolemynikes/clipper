@@ -115,6 +115,6 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music } }).returning().get();
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
-  enqueue(db, 'review.notify', { clipId: clip.id });
+  enqueue(db, 'clip.title', { clipId: clip.id }); // the title job sends the review push
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);
 }

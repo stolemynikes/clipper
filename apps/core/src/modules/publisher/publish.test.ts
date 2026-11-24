@@ -37,3 +37,10 @@ test('handle check only sends valid names to YouTube', async () => {
   assert.ok(validHandle('clix.clips.hq') && validHandle('dailyclixclips'));
   assert.ok(!validHandle('ab') && !validHandle('.dot') && !validHandle('a/b') && !validHandle('x'.repeat(31)) && !validHandle('a&key=x'));
 });
+
+test('model title is cleaned: one line, no tags, capped; empty throws', async () => {
+  const { cleanTitle } = await import('./titles.ts');
+  assert.deepEqual(cleanTitle({ title: '"He did NOT\nexpect <this>" #fyp', hook: 'wait for it' }), { title: 'He did NOT expect this fyp', hook: 'wait for it' });
+  assert.ok(cleanTitle({ title: 'word '.repeat(30), hook: '' }).title.length <= 71);
+  assert.throws(() => cleanTitle({ title: '  ', hook: 'x' }));
+});

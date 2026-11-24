@@ -11,6 +11,7 @@ import { watchOnce } from './modules/watcher/watcher.ts';
 import { runWorker } from './queue/worker.ts';
 import { alertFailure, isPaused, notifyReview } from './review/review.ts';
 import { startReviewServer } from './review/server.ts';
+import { titleClip } from './modules/publisher/titles.ts';
 
 const log = logger('main');
 const { drift } = checkHardware();
@@ -31,7 +32,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abo
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
 await Promise.all([
-  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p) }, opts),
+  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p) }, opts),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p) }, opts),
 ]);
