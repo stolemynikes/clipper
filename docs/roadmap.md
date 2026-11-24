@@ -10,6 +10,11 @@
 - [ ] Store per-creator campaign facts in the Campaign table: pool or $/1K, max per clip, view bar for a share, min views per clip, budget left, end date, allowed footage, posting platforms. Research in `docs/campaigns.md`.
 - [x] Flag weak campaigns (Nov 24: Accounts page "Campaigns" section: facts, warnings for a high bar, low rate, ending soon; link to the campaign page).
 - [ ] Scout earlier than phase 4: campaigns are monthly ("[November]") or event-based (GTA 6 launch, Streamer Awards) and budgets run out in days. Check new campaigns daily, notify the owner with a draft `streamers.yaml` entry, and keep facecam/tag config ready for streamers who return each month. Check Content Rewards' terms on automated reading first; else a notice with the link only.
+- [ ] More payout sources (owner OK Nov 24, after CR runs), in this order:
+  1. Get Content Rewards working first (join campaigns, briefs, first posts).
+  2. Read the terms of Vyro and Clipping.net (highest rate, ~$3/1K): streamer campaigns, no gambling, automation allowed, fee, disclosure, how to submit and verify views, and whether one post may join several programs (CR 7.11: one campaign per post). If OK: add as a campaign `platform` with its own fee in `campaign-notes.ts`.
+  3. Facebook Reels publisher (official Meta Graph API, Page) only once clips are running: highest native CPM (~$2-4/1K).
+  4. Native payouts follow from channel size: YouTube YPP (1K subs + 10M Shorts views/90 days; watch the reused-content policy). TikTok CRP needs videos over 1 min, so it clashes with our 12-26s target.
 - [ ] Add streamers the owner picks from `docs/campaigns.md` to `config/streamers.yaml`.
 - [x] Posting rules per campaign (Nov 24: `rules.platforms` gates the Publisher, `rules.audience` warns in review): accepted platforms (e.g. no X for IShowSpeed), audience/country share (e.g. 40% US/UK/CA/AU), account type. Publisher posts only to accepted platforms; Compliance warns on audience rules (Tracker can't check country share yet).
 
