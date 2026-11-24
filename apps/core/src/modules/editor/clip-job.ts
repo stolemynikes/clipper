@@ -12,7 +12,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
 import { trimWindow } from './trim.ts';
-import { renderTwitchChat, vodIdOf } from './twitch-chat.ts';
+import { CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts';
 import { checkClip, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
@@ -121,7 +121,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     try {
       if (b - a < 2) throw new Error('burst outside trimmed clip');
       await renderTwitchChat({ vodId, from: moment.startSec + a, to: moment.startSec + b, dir, banWords: censor });
-      twitchChat = { file: 'twitch-chat.mov', at: a - lead, dur: b - a };
+      twitchChat = { file: 'twitch-chat.mov', at: Math.max(0, a - lead - CHAT_LAG), dur: b - a };
     } catch (e) {
       log.warn(`twitch chat render failed, using caption chat: ${(e as Error).message}`);
     }
@@ -142,7 +142,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
   const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 30, y: layout.cam ? 1000 : 400 } : undefined);
+    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 24, y: layout.cam ? 1150 : 400 } : undefined);
   await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
     duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
     twitchChat?.file ?? null), { cwd: dir });

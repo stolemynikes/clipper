@@ -54,4 +54,5 @@ test('clip card: hook in italics, caption shown, warnings only when present', ()
   assert.equal(e.description, '*Wait for it*');
   assert.deepEqual(e.fields?.map((f) => f.name), ['Length', 'Status', 'Caption', 'Why this moment']);
   assert.equal(e.fields?.[0].value, '23s');
+  assert.equal(clipEmbed({ rating: 9, title: 't', hook: null, caption: 'c', seconds: 5, why: [], warnings: [] }).fields?.[0].value, '**9**/10 · Strong');
 });

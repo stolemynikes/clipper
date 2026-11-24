@@ -49,15 +49,29 @@ export function quietMusic(music: [number, number][], words: { s: number; e: num
   return out;
 }
 
-/** ffmpeg -af value that lowers volume inside the given spans (null when nothing to duck). */
-export const duckFilter = (spans: [number, number][], vol = 0.25) =>
-  spans.length ? spans.map(([a, b]) => `volume=${vol}:enable='between(t,${a.toFixed(2)},${b.toFixed(2)})'`).join(',') : null;
+/** ffmpeg -af value that lowers volume inside the given spans (null when nothing to duck).
+ * Gaps under 1.5s are bridged and spans under 2s skipped, with 0.5s ramps: no audible pumping. -6dB keeps game sound audible. */
+export function duckFilter(spans: [number, number][], vol = 0.5, ramp = 0.5): string | null {
+  const merged: [number, number][] = [];
+  for (const [a, b] of spans) {
+    const last = merged.at(-1);
+    if (last && a - last[1] < 1.5) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  const keep = merged.filter(([a, b]) => b - a >= 2);
+  return keep.length
+    ? keep.map(([a, b]) => `volume='1-${1 - vol}*clip(min((t-${a.toFixed(2)})/${ramp},(${b.toFixed(2)}-t)/${ramp}),0,1)':eval=frame`).join(',')
+    : null;
+}
+
+/** Same loudness on every clip (TikTok/Shorts play around -14 LUFS); LRA 7 tames shouting and explosions. */
+export const LOUDNORM = 'loudnorm=I=-14:LRA=7:TP=-1.5,aresample=48000';
 
 export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null): string[] {
   const video = encoder === 'h264_nvenc'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
   return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, ...(overlayInput ? ['-i', overlayInput] : []), '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
-    ...(audioFilter ? ['-af', audioFilter] : []),
+    '-af', audioFilter ? `${audioFilter},${LOUDNORM}` : LOUDNORM,
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }

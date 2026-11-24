@@ -181,8 +181,9 @@ const reviewButtons = (id: number, decided: boolean) => row(...[
 ]);
 
 /** Clip card: title, hook, the caption that will be posted, why it was picked and what to check. */
-export function clipEmbed(o: { title: string; hook: string | null; caption: string; seconds: number; why: string[]; warnings: string[]; autoKept?: boolean }): APIEmbed {
+export function clipEmbed(o: { rating?: number; title: string; hook: string | null; caption: string; seconds: number; why: string[]; warnings: string[]; autoKept?: boolean }): APIEmbed {
   const fields = [
+    ...(o.rating ? [{ name: 'Rating', value: `**${o.rating}**/10 · ${o.rating >= 8 ? 'Strong' : o.rating >= 5 ? 'Good' : 'Weak'}`, inline: true }] : []),
     { name: 'Length', value: `${Math.round(o.seconds)}s`, inline: true },
     { name: 'Status', value: o.autoKept ? '✅ Auto-kept' : '🟡 Waiting for you', inline: true },
     { name: 'Caption', value: o.caption.slice(0, 1024), inline: false },
@@ -207,7 +208,7 @@ async function preview(file: string, seconds: number): Promise<string | null> {
 }
 
 /** Posts a clip as its own forum post in its campaign. Returns false when Discord is not set up, so the caller falls back to Bark. */
-export async function discordReview(o: { clipId: number; streamer: string; file: string; title: string | null; hook: string | null; seconds: number; signals: Record<string, number>; warnings: string[]; autoKept?: boolean }): Promise<boolean> {
+export async function discordReview(o: { clipId: number; streamer: string; file: string; title: string | null; hook: string | null; seconds: number; signals: Record<string, number>; warnings: string[]; autoKept?: boolean; rating?: number }): Promise<boolean> {
   const state = load();
   const forum = await fetchCh<ForumChannel>(state.hubs[o.streamer]?.forum);
   if (!forum) return false;
@@ -220,7 +221,7 @@ export async function discordReview(o: { clipId: number; streamer: string; file:
     name: title.slice(0, 95) || `Clip ${o.clipId}`,
     appliedTags: tagIds(forum, [o.autoKept ? 'kept' : 'new']),
     message: {
-      embeds: [clipEmbed({ title, hook: o.hook, caption, seconds: o.seconds, why: reasons(o.signals), warnings: o.warnings, autoKept: o.autoKept })],
+      embeds: [clipEmbed({ rating: o.rating, title, hook: o.hook, caption, seconds: o.seconds, why: reasons(o.signals), warnings: o.warnings, autoKept: o.autoKept })],
       files: video ? [{ attachment: video, name: `clip-${o.clipId}.mp4` }] : [],
       components: [reviewButtons(o.clipId, !!o.autoKept)],
     },

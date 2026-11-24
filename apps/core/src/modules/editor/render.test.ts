@@ -50,8 +50,10 @@ test('music ducking: only where nobody talks', () => {
   assert.deepEqual(quietMusic([[0, 12]], words), [[0, 1.7], [4.3, 9.7], [11.3, 12]]);
   assert.deepEqual(quietMusic([[2.5, 3.5]], words), []);
   assert.equal(duckFilter([]), null);
-  assert.equal(duckFilter([[0, 1.7]]), "volume=0.25:enable='between(t,0.00,1.70)'");
-  assert.ok(ffmpegArgs('a', 'b', 'g', 'libx264', 0, 'volume=0.25').join(' ').includes('-af volume=0.25'));
+  assert.equal(duckFilter([[0, 1.7]]), null); // too short to duck: avoids pumping
+  assert.equal(duckFilter([[0, 1.7], [2.5, 4]]), "volume='1-0.5*clip(min((t-0.00)/0.5,(4.00-t)/0.5),0,1)':eval=frame"); // gap bridged
+  assert.ok(ffmpegArgs('a', 'b', 'g', 'libx264', 0, 'volume=0.5').join(' ').includes('-af volume=0.5,loudnorm=I=-14'));
+  assert.ok(ffmpegArgs('a', 'b', 'g', 'libx264').join(' ').includes('-af loudnorm=I=-14'));
 });
 
 test('twitch chat layer: second input, faded and delayed, under the captions', () => {
