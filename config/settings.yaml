@@ -52,6 +52,10 @@ queue:
   maxAttempts: 3
 
 watcher:
-  enabled: false # off while testing: no new VODs are queued (owner, 2026-11-24)
+  enabled: true # owner 2026-11-24: everything automatic
   pollMinutes: 15
   maxVodAgeDays: 3 # ignore older VODs when a streamer is first added
+
+# npm run study: extra Twitch channels to learn from (analysis only, never clipped or posted: no campaign).
+study:
+  extra: [kaicenat, jynxzi, caseoh_, xqc, plaqueboymax, stableronaldo, lacy, zackrawrr, fanum, tarik]

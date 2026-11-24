@@ -15,6 +15,7 @@ export interface Settings {
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };
   watcher: { enabled?: boolean; pollMinutes: number; maxVodAgeDays: number };
+  study?: { extra?: string[] };
 }
 
 export interface StreamerConfig {

@@ -3,7 +3,7 @@
 // transcribed, so we see what moments, lengths and openings people watch. Report: data/study/<name>.md
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { activeStreamers } from './config.ts';
+import { activeStreamers, loadSettings } from './config.ts';
 import { paths } from './env.ts';
 import { readHardwareConfig } from './hardware.ts';
 import { runCmd } from './proc.ts';
@@ -17,13 +17,17 @@ const DAY = 86_400_000;
 const model = readHardwareConfig()?.whisperModelVod ?? 'medium';
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
 
-const list = activeStreamers().filter((s) => s.platform === 'twitch' && s.campaign)
+const camp = activeStreamers().filter((s) => s.platform === 'twitch' && s.campaign)
   .sort((a, b) => profitScore(b.campaign!) - profitScore(a.campaign!));
-console.log(list.map((s) => `${s.name}: ~$${profitScore(s.campaign!).toFixed(1)} per 1K views`).join('\n'));
+// Campaign streamers first (most profitable first), then extra channels we only learn from.
+const list: { name: string; channel: string; campaign?: (typeof camp)[number]['campaign'] }[] = [...camp,
+  ...(loadSettings().study?.extra ?? []).filter((c) => !camp.some((s) => s.channel === c)).map((c) => ({ name: c, channel: c }))];
+const pay = (s: (typeof list)[number]) => (s.campaign ? `~$${profitScore(s.campaign).toFixed(1)} per 1K views (rough)` : 'no campaign, study only');
+console.log(list.map((s) => `${s.name}: ${pay(s)}`).join('\n'));
 
 try {
   for (const s of list) {
-    const from = s.campaign!.rules?.sourceFrom ? new Date(String(s.campaign!.rules.sourceFrom)) : new Date(0);
+    const from = s.campaign?.rules?.sourceFrom ? new Date(String(s.campaign.rules.sourceFrom)) : new Date(0);
     const since = new Date(Math.max(from.getTime(), Date.now() - 30 * DAY)); // campaign source window, at most 30 days back
     const clips = (await getTopClips(await getUserId(s.channel), since, TOP)).slice(0, TOP);
     const dir = join(paths.dataDir, 'study', s.name);
@@ -43,7 +47,7 @@ try {
       console.log(`${s.name}: ${c.view_count} views ${c.duration}s "${c.title}"`);
     }
     const head = `# ${s.name}: top ${clips.length} viewer clips since ${since.toISOString().slice(0, 10)}\n\n` +
-      `Campaign: ~$${profitScore(s.campaign!).toFixed(1)} per 1K views (rough).\n` +
+      `Campaign: ${pay(s)}.\n` +
       `Median length ${median(stats.map((x) => x.dur)).toFixed(0)}s, median ${median(stats.map((x) => x.wps)).toFixed(1)} words/s, ` +
       `median views ${median(clips.map((c) => c.view_count)).toLocaleString('en-US')}.\n\n`;
     let shorts = '\n## Shorts by other clippers\n\nSkipped: no YOUTUBE_API_KEY in .env.\n';
