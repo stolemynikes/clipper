@@ -76,6 +76,7 @@ export const posts = sqliteTable('posts', {
   accountId: integer('account_id').notNull().references(() => accounts.id),
   platform: text('platform', { enum: ['tiktok', 'youtube', 'instagram'] }).notNull(),
   url: text('url'),
+  externalId: text('external_id'), // YouTube video id; TikTok 'publish:<id>' until the post id is known
   postedAt: integer('posted_at', { mode: 'timestamp_ms' }),
   submitted: integer('submitted', { mode: 'boolean' }).notNull().default(false),
 });

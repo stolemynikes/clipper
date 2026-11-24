@@ -9,6 +9,8 @@ export interface Settings {
   scoring: ScoringConfig;
   clip: { minSec: number; maxSec: number; disclosure: boolean; disclosureText: string; disclosureSec: number; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
   limits: { maxPostsPerAccountPerDay: number };
+  platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
+  publish?: { tiktokPublic?: boolean };
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };
   watcher: { pollMinutes: number; maxVodAgeDays: number };

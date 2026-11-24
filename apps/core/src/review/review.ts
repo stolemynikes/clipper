@@ -7,6 +7,7 @@ import { clips, jobs, moments, sources, streamers } from '../db/schema.ts';
 import { paths } from '../env.ts';
 import { logger, redact } from '../log.ts';
 import type { Job } from '../queue/queue.ts';
+import { queuePublish } from '../modules/publisher/publish.ts';
 
 const log = logger('review');
 const pauseFile = join(paths.dataDir, 'paused');
@@ -53,6 +54,7 @@ export function decide(db: Db, id: number, approved: boolean): boolean {
     copyFileSync(clip.filePath, join(dir, `clip-${clip.id}-${basename(clip.filePath)}`));
   }
   db.update(clips).set({ status: approved ? 'approved' : 'rejected' }).where(eq(clips.id, id)).run();
+  if (approved) queuePublish(db, id);
   return true;
 }
 

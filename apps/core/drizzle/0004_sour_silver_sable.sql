@@ -1,0 +1,1 @@
+ALTER TABLE `posts` ADD `external_id` text;

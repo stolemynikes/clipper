@@ -11,10 +11,10 @@ import { logger } from '../log.ts';
 import { CSS, esc } from './style.ts';
 
 const log = logger('setup');
-type Platform = 'youtube' | 'tiktok';
+export type Platform = 'youtube' | 'tiktok';
 const port = () => Number(process.env.REVIEW_PORT || 8787);
 
-const APPS: Record<Platform, {
+export const APPS: Record<Platform, {
   label: string; fields: [key: string, label: string, secret: boolean][]; idParam: string; idKey: string; secretKey: string;
   auth: string; token: string; scope: string; extra: Record<string, string>; redirect: () => string | undefined; steps: string[];
 }> = {
@@ -56,7 +56,7 @@ export function setEnv(text: string, key: string, value: string): string {
   if (re.test(text)) return text.replace(re, () => `${key}=${value}`);
   return `${text}${text && !text.endsWith('\n') ? '\n' : ''}${key}=${value}\n`;
 }
-function saveEnv(key: string, value: string) {
+export function saveEnv(key: string, value: string) {
   writeFileSync(paths.envFile, setEnv(existsSync(paths.envFile) ? readFileSync(paths.envFile, 'utf8') : '', key, value));
   process.env[key] = value;
 }
@@ -127,7 +127,7 @@ code{background:var(--bg);padding:1px 6px;border-radius:6px;font-size:14px}
 label{display:block;font-size:14px;color:var(--muted);margin:8px 0}input,select{display:block;width:100%;margin-top:4px;min-height:48px;padding:0 12px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px}
 input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:12px;font-weight:600;text-decoration:none}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips .idea{display:flex;align-items:center;gap:2px}.chips a{min-height:44px;display:flex;align-items:center;padding:0 8px;font-size:14px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
 <header><h1>Accounts</h1><a href="/">Back to review</a>
@@ -138,7 +138,7 @@ form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-
 <label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option></select></label>
 <label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}" data-name="${esc(s.name)}">${esc(s.name)}</option>`).join('')}<option value="" data-name="">None</option></select></label>
 <label>Name (only for you)<input name="name" required maxlength="60"></label>
-<p class="sub">Username ideas for the new account (tap to copy). Pick one that says it is a clip page, not the streamer.</p>
+<p class="sub">Username ideas (tap to copy). Tap Check first: if the page says the account does not exist, the name is free. Pick one that says it is a clip page, not the streamer.</p>
 <div class="chips" id="ideas"></div>
 <button class="ok">Add</button></form></article></section>
 <section><h2>Platform apps</h2><p class="sub">Needed once per platform, before you can connect accounts.</p>${(['tiktok', 'youtube'] as const).map(app).join('\n')}</section></main>
@@ -159,10 +159,18 @@ function ideas() {
   const f = document.getElementById('add'), o = f.streamerId.selectedOptions[0], n = (o && o.dataset.name || 'stream').toLowerCase().replace(/[^a-z0-9]/g, '');
   const plat = f.platform.value === 'youtube' ? 'YouTube' : 'TikTok';
   if (!f.name.dataset.touched) f.name.value = (o && o.dataset.name ? o.dataset.name.charAt(0).toUpperCase() + o.dataset.name.slice(1) + ' clips ' : 'Clips ') + plat;
-  const list = [n + '.clips', n + 'clipsdaily', 'bestof' + n + 'clips', n + '_moments_clips'];
-  document.getElementById('ideas').replaceChildren(...list.map((t) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + t;
+  // Less common combos first: short ones like "<name>clips" are usually taken already.
+  const list = [n + '.clips.hq', n + 'clipzone', n + '.moments.tv', 'daily' + n + 'clips', n + 'clips.vault', n + '_highlights_hq'];
+  const prof = f.platform.value === 'youtube' ? 'https://www.youtube.com/@' : 'https://www.tiktok.com/@';
+  document.getElementById('ideas').replaceChildren(...list.map((t) => {
+    const w = document.createElement('span'); w.className = 'idea';
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + t;
     // clipboard API only exists on https/localhost: over the Tailscale IP the toast shows the name instead.
-    b.onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied ' + t), () => toast(t)); return b; }));
+    b.onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied ' + t), () => toast(t));
+    // No official API says if a handle is free, and scraping is not allowed: the user opens the profile page and looks.
+    const a = document.createElement('a'); a.href = prof + t; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Check';
+    a.setAttribute('aria-label', 'Check if @' + t + ' is free');
+    w.append(b, a); return w; }));
 }
 document.addEventListener('DOMContentLoaded', () => { const f = document.getElementById('add'); f.name.oninput = () => { f.name.dataset.touched = '1'; }; ideas(); });
 async function addAcc(e) { e.preventDefault(); done(await send('/setup/account', Object.fromEntries(new FormData(e.target))).catch(() => null), 'Account added.'); return false; }

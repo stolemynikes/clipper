@@ -35,6 +35,9 @@ platforms:
   youtube: false
   instagram: false
 
+publish:
+  tiktokPublic: false # true once TikTok approved the app; until then posts are private (only you see them)
+
 retention:
   keepSourceDays: 2 # delete source VODs this long after clips are done
 
