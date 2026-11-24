@@ -12,6 +12,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
 import { trimWindow } from './trim.ts';
+import { renderTwitchChat, vodIdOf } from './twitch-chat.ts';
 import { checkClip, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
@@ -104,7 +105,22 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.
   const burst = burstChat(chatLines, peakRel, peakRel + sc.windowSec + 2);
   const busy = burst.length ? [burst[0].s, burst[0].e] : null;
-  const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...burst]
+  // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
+  const censor = settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined;
+  // Twitch VOD: the burst is the real Twitch chat (colors, badges, emotes) on a transparent layer; ASS rows only as fallback.
+  let twitchChat: { file: string; at: number; dur: number } | null = null;
+  const vodId = vodIdOf(source.url);
+  if (busy && vodId) {
+    const [a, b] = [Math.max(busy[0], lead), Math.min(busy[1], cut)];
+    try {
+      if (b - a < 2) throw new Error('burst outside trimmed clip');
+      await renderTwitchChat({ vodId, from: moment.startSec + a, to: moment.startSec + b, dir, banWords: censor });
+      twitchChat = { file: 'twitch-chat.mov', at: a - lead, dur: b - a };
+    } catch (e) {
+      log.warn(`twitch chat render failed, using caption chat: ${(e as Error).message}`);
+    }
+  }
+  const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...(twitchChat ? [] : burst)]
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
@@ -113,17 +129,18 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
     disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
-    // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
-    censor: settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined,
+    censor,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
     captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400, burstY: layout.cam ? 1010 : 400,
   }));
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
-  const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))));
+  const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
+    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 30, y: layout.cam ? 1000 : 400 } : undefined);
   await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
-    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec), { cwd: dir });
-  rmSync(src, { force: true });
+    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
+    twitchChat?.file ?? null), { cwd: dir });
+  for (const f of [src, join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },
     title: title?.title, hook: title?.hook, titleStyle: title?.style }).returning().get();

@@ -53,3 +53,11 @@ test('music ducking: only where nobody talks', () => {
   assert.equal(duckFilter([[0, 1.7]]), "volume=0.25:enable='between(t,0.00,1.70)'");
   assert.ok(ffmpegArgs('a', 'b', 'g', 'libx264', 0, 'volume=0.25').join(' ').includes('-af volume=0.25'));
 });
+
+test('twitch chat layer: second input, faded and delayed, under the captions', () => {
+  const g = filterGraph({ cam: { x: 0, y: 0, w: 0.2, h: 0.2 } }, 's.ass', 'f', { at: 12.5, dur: 9, x: 30, y: 1000 });
+  assert.match(g, /vstack\[pre\];\[1:v\]fade=in:st=0:d=0\.2:alpha=1,fade=out:st=8\.70:d=0\.3:alpha=1,setpts=PTS\+12\.50\/TB\[ch\];\[pre\]\[ch\]overlay=30:1000:eof_action=pass,ass=s\.ass:fontsdir=f\[v\]$/);
+  const a = ffmpegArgs('in.mp4', 'out.mp4', g, 'libx264', 5, null, 30, 'chat.mov');
+  assert.deepEqual(a.slice(a.indexOf('-i'), a.indexOf('-filter_complex')), ['-i', 'in.mp4', '-i', 'chat.mov']);
+  assert.ok(a.indexOf('-ss') < a.indexOf('-i')); // seek applies to the clip source only
+});

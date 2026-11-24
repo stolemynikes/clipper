@@ -8,14 +8,19 @@ const fill = (w: number, h: number) => `scale=${w}:${h}:force_original_aspect_ra
 
 /** cam: cam on top (1080x768), content below (1080x1152; fit full: whole frame on blur). nocam: content whole, centered on a blurred
  * copy of itself (a 9:16 crop cuts off screens and menus). fullcam: content fills 9:16. */
-export function filterGraph(layout: Layout, assFile: string, fontsDir: string): string {
+/** chat: input 1 (transparent Twitch chat render) laid over the video from `at` for `dur` seconds, under the captions. */
+export function filterGraph(layout: Layout, assFile: string, fontsDir: string, chat?: { at: number; dur: number; x: number; y: number }): string {
   const subs = `ass=${assFile}:fontsdir=${fontsDir}`;
+  const end = chat
+    ? `[pre];[1:v]fade=in:st=0:d=0.2:alpha=1,fade=out:st=${Math.max(0, chat.dur - 0.3).toFixed(2)}:d=0.3:alpha=1,setpts=PTS+${chat.at.toFixed(2)}/TB[ch];`
+      + `[pre][ch]overlay=${chat.x}:${chat.y}:eof_action=pass,${subs}[v]`
+    : `,${subs}[v]`;
   const { cam, content } = layout;
   if (!cam && layout.scene === 'nocam' && content) {
     return `[0:v]split=2[a][b];[a]${fill(1080, 1920)},boxblur=30:2,eq=brightness=-0.2[bg];`
-      + `[b]${crop(content)},scale=1080:-2,setsar=1[fg];[bg][fg]overlay=0:(H-h)/2,${subs}[v]`;
+      + `[b]${crop(content)},scale=1080:-2,setsar=1[fg];[bg][fg]overlay=0:(H-h)/2${end}`;
   }
-  if (!cam) return `[0:v]${content ? crop(content) : 'crop=ih*9/16:ih'},${fill(1080, 1920)},${subs}[v]`;
+  if (!cam) return `[0:v]${content ? crop(content) : 'crop=ih*9/16:ih'},${fill(1080, 1920)}${end}`;
   return [
     `[0:v]split=2[a][b]`,
     `[a]${crop(cam)},${fill(1080, 768)}[top]`,
@@ -24,7 +29,7 @@ export function filterGraph(layout: Layout, assFile: string, fontsDir: string): 
       ? [`[b]split=2[c][d]`, `[c]${fill(1080, 1152)},boxblur=30:2,eq=brightness=-0.2[bb]`,
         `[d]${crop(content)},scale=1080:-2,setsar=1[bf]`, `[bb][bf]overlay=0:(H-h)/2[bot]`]
       : [`[b]${content ? crop(content) : 'crop=ih*1080/1152:ih'},${fill(1080, 1152)}[bot]`]),
-    `[top][bot]vstack,${subs}[v]`,
+    `[top][bot]vstack${end}`,
   ].join(';');
 }
 
@@ -48,11 +53,11 @@ export function quietMusic(music: [number, number][], words: { s: number; e: num
 export const duckFilter = (spans: [number, number][], vol = 0.25) =>
   spans.length ? spans.map(([a, b]) => `volume=${vol}:enable='between(t,${a.toFixed(2)},${b.toFixed(2)})'`).join(',') : null;
 
-export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null): string[] {
+export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null): string[] {
   const video = encoder === 'h264_nvenc'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
-  return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
+  return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, ...(overlayInput ? ['-i', overlayInput] : []), '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
     ...(audioFilter ? ['-af', audioFilter] : []),
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }
