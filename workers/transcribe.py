@@ -40,13 +40,22 @@ def transcribe(audio: np.ndarray, model_name: str, language, device: str, comput
     if key not in _models:
         _models[key] = WhisperModel(model_name, device=device, compute_type=compute)
     segments, info = _models[key].transcribe(audio, language=language, word_timestamps=True, vad_filter=True)
-    words = [  # segments is lazy: CUDA errors surface here, inside the caller's try
-        {"w": w.word.strip(), "s": round(w.start, 3), "e": round(w.end, 3)}
-        for seg in segments
-        for w in (seg.words or [])
-        if w.word.strip()
-    ]
-    return {"language": info.language, "words": words}
+    # segments is lazy: CUDA errors surface here, inside the caller's try
+    return {"language": info.language, "words": join_words((w.word, w.start, w.end) for seg in segments for w in (seg.words or []))}
+
+
+def join_words(raw):
+    """Whisper words start with a space; one without is a split-off piece ("AT" + "&T"), so glue it to the previous word."""
+    words = []
+    for text, start, end in raw:
+        if not text.strip():
+            continue
+        if words and not text.startswith(" ") and text.strip()[0] in "&'-.%":
+            words[-1]["w"] += text.strip()
+            words[-1]["e"] = round(end, 3)
+        else:
+            words.append({"w": text.strip(), "s": round(start, 3), "e": round(end, 3)})
+    return words
 
 
 def handle(args: dict) -> dict:
