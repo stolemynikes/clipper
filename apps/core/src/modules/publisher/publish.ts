@@ -9,6 +9,7 @@ import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import type { AccountPlatform, Platform } from '../../review/setup.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
+import { discordPosted } from '../../discord/bot.ts';
 import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
 
@@ -171,5 +172,6 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   // TikTok gives the link only after processing; check early so the campaign submit stays inside its 30-minute window.
   else for (const min of [3, 10, 20]) enqueue(db, 'post.track', {}, { runAt: new Date(now.getTime() + min * 60_000) });
   db.update(clips).set({ status: 'posted' }).where(eq(clips.id, clipId)).run();
+  await discordPosted(cfg.name, account.platform, r.url);
   log.info(`clip ${clipId} posted to ${account.platform} account ${accountId}`);
 }

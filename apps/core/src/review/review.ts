@@ -9,6 +9,7 @@ import { loadSettings, type AutoKeep } from '../config.ts';
 import { logger, redact } from '../log.ts';
 import type { Job } from '../queue/queue.ts';
 import { queuePublish } from '../modules/publisher/publish.ts';
+import { discordReview } from '../discord/bot.ts';
 
 const log = logger('review');
 const pauseFile = join(paths.dataDir, 'paused');
@@ -71,12 +72,15 @@ export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
   if (!row) throw new Error(`clip ${clipId} not found`);
   if (row.clip.status !== 'pending_review') return;
   const warnings = (row.clip.compliance?.warnings ?? []) as string[];
+  const review = { clipId, streamer: row.streamer.name, file: row.clip.filePath, title: row.clip.title, seconds: row.clip.durationSec ?? 0, signals: (row.moment.signals ?? {}) as Record<string, number>, warnings };
   if (autoKeep((row.moment.signals ?? {}) as Record<string, number>, warnings, loadSettings().review?.autoKeep) && decide(db, clipId, true)) {
     log.info(`clip ${clipId} auto-kept`);
     // Mark it, so the learner never treats its own decision as the owner's (no circular learning).
     db.update(moments).set({ signals: { ...(row.moment.signals ?? {}), autoKept: 1 } }).where(eq(moments.id, row.moment.id)).run();
+    if (await discordReview({ ...review, autoKept: true })) return;
     return bark(`Auto-kept · ${row.streamer.name}`, 'Viewers clipped it and chat reacted. Tap to watch.', { url: `${reviewUrl()}/#clip-${clipId}`, level: 'passive' });
   }
+  if (await discordReview(review)) return; // Discord is the main review place; Bark is the fallback
   await bark(`New clip · ${row.streamer.name}`, `${Math.round(row.clip.durationSec ?? 0)} seconds. Tap to watch and choose Keep or Skip.`,
     { url: `${reviewUrl()}/#clip-${clipId}` });
 }

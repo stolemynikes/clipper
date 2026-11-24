@@ -17,6 +17,7 @@ import { startReviewServer } from './review/server.ts';
 import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
 import { scoutOnce } from './modules/scout/scout.ts';
+import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
 const log = logger('main');
 const { drift } = checkHardware();
@@ -24,12 +25,13 @@ for (const d of drift) log.warn(`hardware drift: ${d}`);
 
 const db = openDb();
 const server = startReviewServer(db);
+startDiscord(db).catch((e) => log.error('Discord failed to start', { error: String(e) }));
 const ac = new AbortController();
 
 const watch = () => { if (!isPaused() && loadSettings().watcher.enabled !== false) watchOnce(db).catch((e) => log.error('watcher failed', { error: String(e) })); };
 watch();
 const timer = setInterval(watch, loadSettings().watcher.pollMinutes * 60_000);
-const track = () => trackOnce(db).catch((e) => log.error('tracker failed', { error: String(e) }));
+const track = () => trackOnce(db).then(() => syncDiscord(db)).catch((e) => log.error('tracker failed', { error: String(e) })); // stats tabs follow the new views
 const trackTimer = setInterval(track, 60 * 60_000); // hourly: views move slowly, API quotas are small
 const learn = () => {
   if (!learnDue()) return;
@@ -44,7 +46,7 @@ const learnTimer = setInterval(learn, 24 * 60 * 60_000); // checks daily, runs w
 const scout = () => { if (!isPaused() && loadSettings().scout?.enabled !== false) scoutOnce(db).catch((e) => log.error('scout failed', { error: String(e) })); };
 const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most 3 new campaigns per run
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); server.close(); });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); server.close(); stopDiscord(); });
 
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.

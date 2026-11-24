@@ -64,7 +64,11 @@ Free plan: 3 channels, API included, auto-publish to TikTok business, Instagram 
 - [ ] Whop account (2026-11-24): needed for payouts on Content Rewards and Vyro. One account for both (CR terms: 1 account per creator).
       Then create a Whop app in the developer dashboard; put client id and secret in `.env` as `WHOP_CLIENT_ID=` / `WHOP_CLIENT_SECRET=` (never in chat).
       Claude tests whether CR campaigns show up as Whop bounties (`GET /bounties`). If yes, submits go automatic via `POST /bounty_submissions`.
-- [ ] Discord: private server + bot token from the Developer Portal in `.env` as `DISCORD_BOT_TOKEN=`; invite the bot to the server. Review moves there, Bark stays as backup.
+- [ ] Discord control hub (code is ready; it starts by itself once both keys are in `.env`):
+  1. discord.com/developers/applications > New Application > Bot > Reset Token. Put it in `.env` as `DISCORD_BOT_TOKEN=` (never paste it in chat).
+  2. Discord > Settings > Advanced > Developer Mode on. Right-click "Clipping Hub" > Copy Server ID > `.env` as `DISCORD_GUILD_ID=`.
+  3. Invite the bot: `https://discord.com/oauth2/authorize?client_id=<APPLICATION_ID>&scope=bot+applications.commands&permissions=326417632272` (Application ID is on the General Information page).
+  4. Tell Claude: the worker restarts and makes one category per campaign (information, review, posted, controls, stats). The old "Campaign name" category can be deleted.
 
 ## Whop auto-submit (done: login works, token saved)
 - For each Content Rewards campaign, find its Whop bounty id (starts with `bnty_`), e.g. in the campaign's Whop page URL or its share link, and send it to Claude. It goes in `streamers.yaml` as `campaign.whopBountyId`; links are then submitted automatically. Without it you keep the one-tap push.
