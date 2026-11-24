@@ -44,6 +44,7 @@ function card({ clip, moment, source, streamer }: ReviewRow, best: number) {
     <div class="head"><p class="title"><strong>${esc(streamer.name)}</strong> · ${Math.round(clip.durationSec ?? 0)} seconds</p>
     <div class="score ${r >= 8 ? 'hi' : r >= 5 ? 'mid' : 'lo'}" aria-label="Strength ${r} out of 10"><b>${r}</b>/10<span>${r >= 8 ? 'Strong' : r >= 5 ? 'Good' : 'Weak'}</span></div></div>
     <p class="sub">Why this clip: ${why.map(esc).join(' · ')}</p>
+    ${((clip.compliance?.warnings ?? []) as string[]).map((w) => `<p class="note">Note: ${esc(w)}</p>`).join('')}
     <p class="sub"><a href="${esc(source.url)}?t=${Math.floor(moment.startSec)}s" target="_blank" rel="noopener">Watch in the full stream</a></p>
   </div>
   <div class="actions">
@@ -85,6 +86,7 @@ video{display:block;width:100%;aspect-ratio:9/16;max-height:70vh;background:#000
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin:4px 0 0}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;text-align:center}
 .tile b{display:block;font-size:24px}.tile span{color:var(--muted);font-size:13px}
+.note{margin:4px 0 0;color:var(--accent);font-size:14px}
 .warn{width:100%;margin:0;color:var(--no);font-size:14px}
 #toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,16px);opacity:0;background:var(--text);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:600;transition:opacity .2s,transform .2s;pointer-events:none}
 #toast.show{opacity:1;transform:translate(-50%,0)}

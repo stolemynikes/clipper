@@ -11,7 +11,8 @@ import { runCmd } from '../../proc.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { type ChatLine, matchChat } from './chat-overlay.ts';
-import { ffmpegArgs, filterGraph, type Layout, type Rect } from './render.ts';
+import { checkClip, type Music } from '../compliance/compliance.ts';
+import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { transcribe } from './whisper.ts';
 
@@ -30,6 +31,16 @@ async function detectLayout(src: string, fallback: Rect | null): Promise<Layout>
   } catch (e) {
     log.warn(`face_track failed, using config facecam: ${(e as Error).message}`);
     return { cam: fallback };
+  }
+}
+
+/** Background music share + spans (YAMNet). null when the check fails: compliance then warns. */
+async function detectMusic(src: string): Promise<(Music & { musicSec: [number, number][] }) | null> {
+  try {
+    return JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'music_detect.py'), JSON.stringify({ input: src })]));
+  } catch (e) {
+    log.warn(`music_detect failed: ${(e as Error).message}`);
+    return null;
   }
 }
 
@@ -63,14 +74,27 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     return log.warn(`moment ${momentId} skipped: silent audio (${peakDb} dB)`);
   }
 
+  const durationSec = moment.endSec - moment.startSec - lead;
+  const disclosure = (cfg.campaign?.disclosure ?? settings.clip.disclosure) ? settings.clip.disclosureText : null;
+  const music = await detectMusic(src);
+  const compliance = checkClip({
+    campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
+    disclosureRequired: cfg.campaign?.disclosure ?? settings.clip.disclosure, disclosure, music,
+    transcript: words.map((w) => w.w).join(' '),
+    sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
+  });
+  if (!compliance.ok) {
+    rmSync(src, { force: true });
+    db.update(moments).set({ status: 'skipped' }).where(eq(moments.id, momentId)).run();
+    return log.warn(`moment ${momentId} blocked: ${compliance.blocks.join('; ')}`);
+  }
+
   const layout = await detectLayout(src, cfg.facecam ?? null);
   const chatFile = join(dir, 'chat.json');
   const chat = existsSync(chatFile)
     ? matchChat(t.words, JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[]).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: c.e - lead })).filter((c) => c.e > 0.5)
     : [];
 
-  const durationSec = moment.endSec - moment.startSec - lead;
-  const disclosure = (cfg.campaign?.disclosure ?? settings.clip.disclosure) ? settings.clip.disclosureText : null;
   writeFileSync(join(dir, 'subs.ass'), buildAss({
     words, durationSec, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
@@ -80,10 +104,11 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
   const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))));
-  await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead), { cwd: dir });
+  await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
+    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words))), { cwd: dir });
   rmSync(src, { force: true });
 
-  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec }).returning().get();
+  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, compliance: { ...compliance, music } }).returning().get();
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
   enqueue(db, 'review.notify', { clipId: clip.id });
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);

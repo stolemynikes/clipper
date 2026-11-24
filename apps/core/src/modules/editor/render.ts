@@ -29,10 +29,30 @@ export function filterGraph(layout: Layout, assFile: string, fontsDir: string): 
 }
 
 /** Bitrate capped so a 60s clip stays under Telegram's 50MB bot upload limit. */
-export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0): string[] {
+/** Music spans with nobody talking (0.3s margin around words): those parts get turned down. */
+export function quietMusic(music: [number, number][], words: { s: number; e: number }[], pad = 0.3): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [a0, b] of music) {
+    let a = a0;
+    for (const w of words) {
+      if (w.e + pad <= a || w.s - pad >= b) continue;
+      if (w.s - pad > a + 0.5) out.push([a, w.s - pad]);
+      a = Math.max(a, w.e + pad);
+    }
+    if (b - a > 0.5) out.push([a, b]);
+  }
+  return out;
+}
+
+/** ffmpeg -af value that lowers volume inside the given spans (null when nothing to duck). */
+export const duckFilter = (spans: [number, number][], vol = 0.25) =>
+  spans.length ? spans.map(([a, b]) => `volume=${vol}:enable='between(t,${a.toFixed(2)},${b.toFixed(2)})'`).join(',') : null;
+
+export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null): string[] {
   const video = encoder === 'h264_nvenc'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
   return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), '-i', input, '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
+    ...(audioFilter ? ['-af', audioFilter] : []),
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }

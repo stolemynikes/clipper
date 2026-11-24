@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ffmpegArgs, filterGraph } from './render.ts';
+import { duckFilter, ffmpegArgs, filterGraph, quietMusic } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -46,4 +46,13 @@ test('cam + static screen: whole frame on blur below the cam', () => {
   assert.match(g, /\[c\]scale=1080:1152.*boxblur/);
   assert.match(g, /\[d\]crop=iw\*1:ih\*1:iw\*0:ih\*0,scale=1080:-2/);
   assert.match(g, /\[top\]\[bot\]vstack/);
+});
+
+test('music ducking: only where nobody talks', () => {
+  const words = [{ s: 2, e: 3 }, { s: 3.2, e: 4 }, { s: 10, e: 11 }];
+  assert.deepEqual(quietMusic([[0, 12]], words), [[0, 1.7], [4.3, 9.7], [11.3, 12]]);
+  assert.deepEqual(quietMusic([[2.5, 3.5]], words), []);
+  assert.equal(duckFilter([]), null);
+  assert.equal(duckFilter([[0, 1.7]]), "volume=0.25:enable='between(t,0.00,1.70)'");
+  assert.ok(ffmpegArgs('a', 'b', 'g', 'libx264', 0, 'volume=0.25').join(' ').includes('-af volume=0.25'));
 });
