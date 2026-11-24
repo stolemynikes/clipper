@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { paths } from '../../env.ts';
 import { runCmd } from '../../proc.ts';
 
-export const CHAT_BOX = { w: 640, h: 560 };
+export const CHAT_BOX = { w: 640, h: 420 }; // cam layout: y 1000-1420, clear of the streamer tag at y 1560
 const BOTS = 'nightbot,streamelements,streamlabs,moobot,fossabot,wizebot,sery_bot';
 
 export const vodIdOf = (url: string) => url.match(/twitch\.tv\/videos\/(\d+)/)?.[1] ?? null;

@@ -39,16 +39,28 @@ export function matchChat(words: Word[], chat: ChatLine[], max = 3): Overlay[] {
 }
 
 const BOTS = /^(nightbot|streamelements|streamlabs|moobot|fossabot|wizebot|sery_bot)$/i;
-const BURST_MIN = 6; // messages in the peak window before it counts as chat going wild
+const BURST_MIN = 6; // messages in the burst window before it counts as chat going wild
 const BURST_ROWS = 5;
+const BURST_WIN = 7; // seconds
+const BURST_X = 2; // burst rate must be this many times the moment's average: chat that is busy all along is not a burst
 
-/** When chat explodes at the peak: a stack of real messages popping in as they were sent,
- * all held until the burst ends. Empty when chat is not busy enough. */
+/** When chat explodes inside the kept clip [from, to]: a stack of real messages from the busiest BURST_WIN seconds,
+ * popping in as they were sent and held until the burst ends. Empty when chat never goes wild, so most clips get none. */
 export function burstChat(chat: ChatLine[], from: number, to: number): Overlay[] {
-  const msgs = chat.filter((m) => m.t >= from && m.t < to && !BOTS.test(m.user) && !m.text.startsWith('!') && !/https?:|www\.|\.(com|tv|gg)\b/i.test(m.text));
+  const real = chat.filter((m) => !BOTS.test(m.user) && !m.text.startsWith('!') && !/https?:|www\.|\.(com|tv|gg)\b/i.test(m.text));
+  const inClip = real.filter((m) => m.t >= from && m.t < to);
+  let msgs: ChatLine[] = [], at = from;
+  for (const m of inClip) {
+    const a = Math.min(m.t, Math.max(from, to - BURST_WIN));
+    const w = inClip.filter((x) => x.t >= a && x.t < a + BURST_WIN);
+    if (w.length > msgs.length) [msgs, at] = [w, a];
+  }
   if (msgs.length < BURST_MIN) return [];
+  const ts = chat.map((m) => m.t);
+  const avg = real.length / Math.max(1, Math.max(...ts) - Math.min(...ts));
+  if (msgs.length / BURST_WIN < BURST_X * avg) return [];
   const step = Math.max(1, Math.floor(msgs.length / BURST_ROWS)); // spread picks over the whole burst
   const picked = msgs.filter((_, i) => i % step === 0).slice(0, BURST_ROWS);
-  const hold = to + 1.5;
-  return picked.map((m, row) => ({ ...m, s: Math.max(from, m.t), e: hold, row, text: m.text.length > 40 ? `${m.text.slice(0, 37)}...` : m.text }));
+  const hold = Math.min(to, at + BURST_WIN) + 1.5;
+  return picked.map((m, row) => ({ ...m, s: m.t, e: hold, row, text: m.text.length > 40 ? `${m.text.slice(0, 37)}...` : m.text }));
 }

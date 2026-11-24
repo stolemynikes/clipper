@@ -104,7 +104,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   const chatFile = join(dir, 'chat.json');
   const chatLines = existsSync(chatFile) ? JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[] : [];
   // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.
-  const burst = burstChat(chatLines, peakRel, peakRel + sc.windowSec + 2);
+  const burst = burstChat(chatLines, lead, cut); // chat going wild anywhere in the kept part; most clips get none
   const busy = burst.length ? [burst[0].s, burst[0].e] : null;
   // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
   const censor = settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined;
