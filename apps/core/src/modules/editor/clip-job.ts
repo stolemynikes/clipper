@@ -17,6 +17,7 @@ import { accountStats } from '../../review/setup.ts';
 import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
+import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
 
 const log = logger('editor');
@@ -101,7 +102,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     ? matchChat(t.words, JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[]).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: c.e - lead })).filter((c) => c.e > 0.5)
     : [];
 
-  const title = await makeTitle(transcript, cfg.name);
+  const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))) // A/B test, leans to the winner once clear;
   writeFileSync(join(dir, 'subs.ass'), buildAss({
     words, durationSec, hook: title?.hook, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
     style: cfg.captionStyle ?? settings.clip.captionStyle,

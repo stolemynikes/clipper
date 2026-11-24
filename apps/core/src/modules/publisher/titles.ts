@@ -6,6 +6,7 @@ import { clips, moments } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
+import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 
 const log = logger('titles');
@@ -63,10 +64,9 @@ export async function generateTitle(transcript: string, streamer: string, model:
 }
 
 /** Title + hook for a transcript, or null (then publish uses fallbackTitle). Runs before the final encode so the hook is burned in. */
-export async function makeTitle(transcript: string | null, streamer: string): Promise<(TitleOut & { style: TitleStyle }) | null> {
+export async function makeTitle(transcript: string | null, streamer: string, style: TitleStyle): Promise<(TitleOut & { style: TitleStyle }) | null> {
   if (!transcript || transcript.split(' ').length < 8) return null;
   stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM; Whisper restarts on the next render
-  const style: TitleStyle = Math.random() < 0.5 ? 'mild' : 'bold'; // A/B test; the Learner compares views per style
   try {
     return { ...(await generateTitle(transcript, streamer, loadSettings().titles?.model ?? 'gemma4:12b', style)), style };
   } catch (e) {
@@ -81,7 +81,7 @@ export async function titleClip(db: Db, { clipId }: { clipId: number }, notify =
   if (!clip) return;
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
-  const t = await makeTitle(clip.transcript, cfg.name);
+  const t = await makeTitle(clip.transcript, cfg.name, pickStyle(styleStats(db)));
   if (t) db.update(clips).set({ title: t.title, hook: t.hook, titleStyle: t.style }).where(eq(clips.id, clipId)).run();
   if (notify) enqueue(db, 'review.notify', { clipId });
 }

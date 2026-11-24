@@ -1,5 +1,6 @@
 // Accounts page: platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
 // Secrets go straight into .env and are never rendered back or logged. The page only says "saved".
+import { styleStats, styleWinner } from '../modules/learner/title-style.ts';
 import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -94,6 +95,14 @@ const pending = new Map<string, { accountId: number; platform: Platform; at: num
 const fmt = (n: number) => n.toLocaleString('en-US');
 const money = (n: number) => `$${n.toFixed(2)}`;
 
+/** Plain-words result of the title A/B test, empty until there is a winner. */
+function titleTest(db: Db) {
+  const st = styleStats(db), w = styleWinner(st);
+  if (!w) return '';
+  const [a, b] = w === 'bold' ? [st[1], st[0]] : [st[0], st[1]];
+  return `<p class="sub">Title test: ${w === 'bold' ? 'bold, curious' : 'calm'} titles get ${Math.round((a.median / Math.max(b.median, 1) - 1) * 100)}% more views. New clips now use them more often.</p>`;
+}
+
 function page(db: Db, msg: string | null) {
   const list = accountStats(db);
   const camps = db.select().from(streamers).all().filter((s) => (s.config as { campaign?: unknown } | null)?.campaign);
@@ -141,7 +150,7 @@ form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
 <header><h1>Accounts</h1><a href="/">Back to review</a>
-<div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div></header>
+<div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div>${titleTest(db)}</header>
 <main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
 <section><h2>Your accounts</h2>${list.map(acc).join('\n') || '<p class="empty">No accounts yet. Add one below.</p>'}
 <article class="pad"><h2>Add an account</h2><form id="add" onsubmit="return addAcc(event)" onchange="ideas()">
