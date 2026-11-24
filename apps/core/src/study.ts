@@ -37,7 +37,8 @@ try {
     for (const c of clips) {
       const file = join(dir, `${c.id}.mp4`);
       if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=720]/b', '-o', file, c.url ?? `https://clips.twitch.tv/${c.id}`]);
-      const t = await transcribe({ input: file, model, language: null });
+      // One bad clip (e.g. no audio) must not stop the whole study.
+      const t = await transcribe({ input: file, model, language: null }).catch(() => ({ words: [] as { w: string; s: number }[] }));
       const text = t.words.map((w) => w.w).join(' ').replace(/\s+/g, ' ').trim();
       const hook = t.words.filter((w) => w.s < 3).map((w) => w.w).join(' ').trim();
       const wps = t.words.length / Math.max(c.duration, 1);
