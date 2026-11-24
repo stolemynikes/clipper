@@ -1,7 +1,15 @@
 // ffmpeg 9:16 render: facecam on top (1080x768), gameplay below (1080x1152), captions burned in.
 export interface Rect { x: number; y: number; w: number; h: number } // fractions of the source frame
 
-export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' } // from workers/face_track.py
+export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack' } // from workers/face_track.py
+
+/** fit stack: cam (768) + whole game side scaled to 1080 wide, as one block centered on blur. Returns the block's top y (0 otherwise). */
+export function stackTop(layout: Layout): number {
+  if (layout.fit !== 'stack' || !layout.content) return 0;
+  // shortcut: assumes a 16:9 source (Twitch, YouTube); read the real size if other sources come in.
+  const gh = 2 * Math.round(540 * layout.content.h * 9 / (layout.content.w * 16));
+  return Math.max(0, Math.round((1920 - 768 - gh) / 2));
+}
 
 const crop = (r: Rect) => `crop=iw*${r.w}:ih*${r.h}:iw*${r.x}:ih*${r.y}`;
 const fill = (w: number, h: number) => `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1`;
@@ -22,6 +30,11 @@ export function filterGraph(layout: Layout, assFile: string, fontsDir: string, c
       + `[b]${crop(content)},scale=1080:-2,setsar=1[fg];[bg][fg]overlay=0:(H-h)/2${end}`;
   }
   if (!cam) return `[0:v]${content ? crop(content) : 'crop=ih*9/16:ih'},${fill(1080, 1920)}${end}`;
+  if (layout.fit === 'stack' && content) {
+    // Cam and game stay joined; the spare height is split above and below (owner, Nov 2026).
+    return `[0:v]split=3[a][b][c];[a]${crop(cam)},${fill(1080, 768)}[top];[b]${fill(1080, 1920)},boxblur=30:2,eq=brightness=-0.2[bg];`
+      + `[c]${crop(content)},scale=1080:-2,setsar=1[g];[top][g]vstack[st];[bg][st]overlay=0:(H-h)/2${end}`;
+  }
   return [
     `[0:v]split=2[a][b]`,
     `[a]${crop(cam)},${fill(1080, 768)}[top]`,

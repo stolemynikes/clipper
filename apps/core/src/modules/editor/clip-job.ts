@@ -12,11 +12,11 @@ import { enqueue } from '../../queue/queue.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
 import { trimWindow } from './trim.ts';
-import { CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts';
+import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts';
 import { checkClip, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect } from './render.ts';
+import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -134,6 +134,8 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...(twitchChat ? [] : burst)]
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
+  const dy = stackTop(layout);
+  const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   writeFileSync(join(dir, 'subs.ass'), buildAss({
     words, durationSec, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
@@ -142,12 +144,13 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     style: cfg.captionStyle ?? settings.clip.captionStyle,
     censor,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
-    captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400, burstY: layout.cam ? 1600 : 400,
+    // stack: everything moves down with the centered block; chat sits on the game's bottom edge.
+    captionY: layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
   }));
 
   // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
   const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? 1564 : 400 } : undefined);
+    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
   await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
     duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
     twitchChat?.file ?? null), { cwd: dir });

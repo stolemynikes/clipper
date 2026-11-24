@@ -228,6 +228,12 @@ def analyze(path: str, model: str, hint: dict | list | None = None, start: float
     motion[y0:y0 + int(box["h"] * H) + 4, x0:x0 + int(box["w"] * W) + 4] = 0  # the cam is shown on top already
     share = (motion > motion.max() * 0.1).mean()
     if share > GAMEPLAY_SHARE:
+        # Wide side next to the webcam border: show all of it under the cam as one centered block (a 1152 crop felt zoomed in).
+        left, right = box["x"], 1 - box["x"] - box["w"]
+        m = 0.008  # skip the cam border: a thin strip of webcam showed at the game edge (clip 69)
+        side = rect(box["x"] + box["w"] + m, 0, right - m, 1) if right >= left else rect(0, 0, left - m, 1)
+        if side["w"] * W * 1152 >= H * 1080:  # scaled to 1080 wide it fits the 1152 panel
+            return {"scene": "cam", "cam": cam, "content": side, "fit": "stack"}
         # Gameplay moves everywhere, so the motion peak is noise; character and crosshair sit in the center.
         cw = H * 1080 / 1152 / W
         x = 0.5 - cw / 2

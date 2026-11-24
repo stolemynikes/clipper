@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { duckFilter, ffmpegArgs, filterGraph, quietMusic } from './render.ts';
+import { duckFilter, ffmpegArgs, filterGraph, quietMusic, stackTop } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -43,6 +43,13 @@ test('cam + static screen: whole frame on blur below the cam', () => {
   assert.match(g, /\[c\]scale=1080:1152.*boxblur/);
   assert.match(g, /\[d\]crop=iw\*1:ih\*1:iw\*0:ih\*0,scale=1080:-2/);
   assert.match(g, /\[top\]\[bot\]vstack/);
+});
+
+test('stack: cam + whole game side as one block centered on blur', () => {
+  const l = { scene: 'cam' as const, cam: { x: 0, y: 0, w: 0.2, h: 0.2 }, content: { x: 0.258, y: 0, w: 0.742, h: 1 }, fit: 'stack' as const };
+  assert.match(filterGraph(l, 's.ass', 'f'), /\[top\]\[g\]vstack\[st\];\[bg\]\[st\]overlay=0:\(H-h\)\/2,ass=s\.ass/);
+  assert.equal(stackTop(l), 167); // game 1080x818: (1920-768-818)/2
+  assert.equal(stackTop({ cam: l.cam, content: l.content }), 0);
 });
 
 test('music ducking: only where nobody talks', () => {

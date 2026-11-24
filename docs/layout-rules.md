@@ -11,7 +11,8 @@ a clip that breaks one gets a lower rating plus the reason in review. Add a rule
 
 ## Game panel (bottom)
 5. The action or character is in view, not cut at the edge.
-6. No duplicate of the webcam inside the game panel.
+6. No duplicate of the webcam inside the game panel, not even a thin strip at the edge. (clip 69, stack layout)
+6b. Cam and game form one joined block, centered; the spare blurred space is split evenly above and below.
 7. Text pages (browser, tweet, menu) are readable: whole page shown, not cropped mid-line.
 
 ## Overlays
