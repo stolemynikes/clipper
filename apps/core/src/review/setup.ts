@@ -12,7 +12,9 @@ import { logger } from '../log.ts';
 import { CSS, esc } from './style.ts';
 
 const log = logger('setup');
-export type Platform = 'youtube' | 'tiktok';
+export type Platform = 'youtube' | 'tiktok'; // platforms with our own OAuth app
+export type AccountPlatform = Platform | 'instagram'; // Instagram only via PostPeer
+export const LABEL: Record<AccountPlatform, string> = { youtube: 'YouTube Shorts', tiktok: 'TikTok', instagram: 'Instagram Reels' };
 const port = () => Number(process.env.REVIEW_PORT || 8787);
 
 export const APPS: Record<Platform, {
@@ -75,8 +77,8 @@ export function accountStats(db: Db) {
     select a.id, a.platform, a.name, s.name streamer, s.config,
       (select views from stats st where st.post_id = p.id order by measured_at desc limit 1) views, p.id post
     from accounts a left join streamers s on s.id = a.streamer_id left join posts p on p.account_id = a.id order by a.id`).all() as
-    { id: number; platform: Platform; name: string; streamer: string | null; config: string | null; views: number | null; post: number | null }[];
-  const out = new Map<number, { id: number; platform: Platform; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number }>();
+    { id: number; platform: AccountPlatform; name: string; streamer: string | null; config: string | null; views: number | null; post: number | null }[];
+  const out = new Map<number, { id: number; platform: AccountPlatform; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number }>();
   for (const r of rows) {
     const c = (r.config ? (JSON.parse(r.config) as { campaign?: CampaignCfg }).campaign : undefined) ?? {};
     const a = out.get(r.id) ?? { id: r.id, platform: r.platform, name: r.name, streamer: r.streamer, pool: !c.ratePer1k, posts: 0, views: 0, earned: 0 };
@@ -106,9 +108,13 @@ function page(db: Db, msg: string | null) {
   };
   const acc = (r: (typeof list)[number]) => {
     const linked = Boolean(process.env[tokenKey(r.id)]);
-    if (r.platform !== 'youtube' && hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill on">Via PostPeer</span></div>
-<p class="sub">${APPS[r.platform].label} · ${r.streamer ? `campaign: ${esc(r.streamer)}` : 'no campaign'} · connect or change it on postpeer.dev</p>
+    if (r.platform === 'instagram' && !hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill">Needs PostPeer</span></div>
+<p class="sub">${LABEL[r.platform]} posts go through PostPeer. Add its key to .env first.</p>
 <div class="actions"><button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div></article>`;
+    if (r.platform !== 'youtube' && hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill on">Via PostPeer</span></div>
+<p class="sub">${LABEL[r.platform]} · ${r.streamer ? `campaign: ${esc(r.streamer)}` : 'no campaign'} · connect or change it on postpeer.dev</p>
+<div class="actions"><button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div></article>`;
+    if (r.platform === 'instagram') return ''; // unreachable: handled above; narrows the type
     // YouTube's redirect is loopback: the whole login must run in a browser on the PC itself.
     const connect = r.platform === 'youtube' ? `http://127.0.0.1:${port()}/connect/${r.id}` : `/connect/${r.id}`;
     return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill ${linked ? 'on' : ''}">${linked ? 'Connected' : 'Not connected'}</span></div>
@@ -139,7 +145,7 @@ form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-
 <main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
 <section><h2>Your accounts</h2>${list.map(acc).join('\n') || '<p class="empty">No accounts yet. Add one below.</p>'}
 <article class="pad"><h2>Add an account</h2><form id="add" onsubmit="return addAcc(event)" onchange="ideas()">
-<label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option></select></label>
+<label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option><option value="instagram">Instagram Reels (via PostPeer)</option></select></label>
 <label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}" data-name="${esc(s.name)}">${esc(s.name)}</option>`).join('')}<option value="" data-name="">None</option></select></label>
 <label>Name (only for you)<input name="name" required maxlength="60"></label>
 <p class="sub">Username ideas (tap to copy). YouTube names are checked for you. For TikTok, tap Check: if the page says the account does not exist, the name is free. Pick one that says it is a clip page, not the streamer.</p>
@@ -161,11 +167,11 @@ async function saveApp(e, p) {
 // Fan/clip page names: platforms ban accounts that pose as the streamer, so every idea says "clips".
 function ideas() {
   const f = document.getElementById('add'), o = f.streamerId.selectedOptions[0], n = (o && o.dataset.name || 'stream').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const plat = f.platform.value === 'youtube' ? 'YouTube' : 'TikTok';
+  const plat = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram' }[f.platform.value];
   if (!f.name.dataset.touched) f.name.value = (o && o.dataset.name ? o.dataset.name.charAt(0).toUpperCase() + o.dataset.name.slice(1) + ' clips ' : 'Clips ') + plat;
   // Less common combos first: short ones like "<name>clips" are usually taken already.
   const list = [n + '.clips.hq', n + 'clipzone', n + '.moments.tv', 'daily' + n + 'clips', n + 'clips.vault', n + '_highlights_hq'];
-  const prof = f.platform.value === 'youtube' ? 'https://www.youtube.com/@' : 'https://www.tiktok.com/@';
+  const prof = { youtube: 'https://www.youtube.com/@', tiktok: 'https://www.tiktok.com/@', instagram: 'https://www.instagram.com/' }[f.platform.value];
   document.getElementById('ideas').replaceChildren(...list.map((t) => {
     const w = document.createElement('span'); w.className = 'idea';
     const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + t;
@@ -269,7 +275,7 @@ export async function setupRoute(db: Db, req: IncomingMessage, res: ServerRespon
   if (p === '/setup/account') {
     const b = await body(req);
     const name = typeof b.name === 'string' ? b.name.trim().slice(0, 60) : '';
-    if (!isPlatform(b.platform) || !name) return (text(res, 400, 'Pick a platform and give it a name.'), true);
+    if (!(isPlatform(b.platform) || b.platform === 'instagram') || !name) return (text(res, 400, 'Pick a platform and give it a name.'), true);
     const sid = b.streamerId ? Number(b.streamerId) : null;
     if (sid !== null && !db.select().from(streamers).where(eq(streamers.id, sid)).get()) return (text(res, 400, 'Unknown campaign.'), true);
     db.insert(accounts).values({ platform: b.platform, name, streamerId: sid }).run();

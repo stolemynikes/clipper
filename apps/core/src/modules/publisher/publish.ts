@@ -7,7 +7,7 @@ import type { Db } from '../../db/client.ts';
 import { accounts, clips, moments, posts } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
-import type { Platform } from '../../review/setup.ts';
+import type { AccountPlatform, Platform } from '../../review/setup.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
@@ -24,8 +24,8 @@ export function fallbackTitle(transcript: string | null, streamer: string): stri
 }
 
 /** Per-platform text: YouTube has a 100-char title plus description, TikTok one caption. */
-export function postText(platform: Platform, o: { title: string; streamer: string; tag: string; disclosure: string | null }) {
-  const tags = [o.disclosure, o.tag, `#${o.streamer.replace(/\W/g, '')}`, platform === 'youtube' ? '#shorts' : '#fyp'].filter(Boolean).join(' ');
+export function postText(platform: AccountPlatform, o: { title: string; streamer: string; tag: string; disclosure: string | null }) {
+  const tags = [o.disclosure, o.tag, `#${o.streamer.replace(/\W/g, '')}`, platform === 'youtube' ? '#shorts' : platform === 'instagram' ? '#reels' : '#fyp'].filter(Boolean).join(' ');
   return platform === 'youtube'
     ? { title: o.title.slice(0, 100), description: tags }
     : { title: `${o.title} ${tags}`.slice(0, 2200), description: '' };
@@ -125,7 +125,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
-  const text = postText(account.platform as Platform, {
+  const text = postText(account.platform as AccountPlatform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid ? settings.clip.disclosureText : null });
   const pp = viaPostpeer(account.platform);
   if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
