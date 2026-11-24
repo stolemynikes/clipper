@@ -49,9 +49,12 @@ try {
     let shorts = '\n## Shorts by other clippers\n\nSkipped: no YOUTUBE_API_KEY in .env.\n';
     if (hasYoutubeKey()) {
       const out: string[] = [];
-      for (const v of await topShorts(s.name, since, TOP)) {
+      // Bare names ("silky") match unrelated Shorts; keep titles that name the streamer and add stream context to the query.
+      const name = new RegExp(`\\b${s.name}\\b`, 'i');
+      for (const v of (await topShorts(`${s.name} twitch`, since, TOP)).filter((x) => name.test(x.title))) {
         const file = join(dir, `yt-${v.id}.mp4`), sheet = join(dir, `yt-${v.id}.jpg`);
-        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b', '-o', file, v.url]);
+        try {
+        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '-o', file, v.url]);
         // 4 frames side by side (one per 6s): shows cam size, caption style, hook text, layout
         if (!existsSync(sheet)) await runCmd('ffmpeg', ['-v', 'error', '-y', '-i', file, '-vf',
           "select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,6)',scale=270:-2,tile=4x1", '-frames:v', '1', sheet]);
@@ -59,6 +62,9 @@ try {
         const hook = t.words.filter((w) => w.s < 3).map((w) => w.w).join(' ').trim();
         out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n- First 3s: "${hook || '(no speech)'}"\n- Frames: ${sheet}\n`);
         console.log(`${s.name}: short ${v.views} views "${v.title}"`);
+        } catch (e) {
+          out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n- Skipped: ${(e as Error).message.slice(0, 200)}\n`);
+        }
       }
       shorts = '\n## Shorts by other clippers (YouTube, most viewed)\n\n' + out.join('\n');
     }
