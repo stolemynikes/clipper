@@ -10,10 +10,10 @@ const talk = (from: number, to: number) => {
 };
 const base = { durationSec: 60, peakRel: 47, windowSec: 5, tailSec: 8, targetSec: [20, 45] as [number, number], minSec: 15, maxSec: 60 };
 
-test('ends after the reaction, starts on a sentence about 20s before the peak', () => {
+test('ends after the reaction, starts on a sentence about 12s before the peak', () => {
   const r = trimWindow({ ...base, words: talk(0, 60) });
   assert.ok(r.end > 47 + 5 && r.end <= 60);
-  assert.equal(r.start, 24.7); // sentence at 25s, closest to 47-20=27 within [end-45, end-20]
+  assert.equal(r.start, 34.7); // sentence at 35s, closest to 47-12=35 within [end-45, end-20]
   const len = r.end - r.start;
   assert.ok(len >= 20 && len <= 45, `len ${len}`);
 });
@@ -39,5 +39,5 @@ test('long silence at the start is cut, keeping minSec', () => {
 });
 
 test('no words: plain window around the peak', () => {
-  assert.deepEqual(trimWindow({ ...base, words: [] }), { start: 27, end: 60 });
+  assert.deepEqual(trimWindow({ ...base, words: [] }), { start: 35, end: 60 });
 });

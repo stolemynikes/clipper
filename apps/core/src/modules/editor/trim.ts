@@ -13,7 +13,7 @@ export interface TrimInput {
   maxSec: number;
 }
 
-const LEAD_SEC = 20; // ideal build-up before the peak
+const LEAD_SEC = 12; // ideal build-up before the peak: 12 + window + tail ~ 25s, the popular Shorts length (median 23s)
 const RUN_ON_SEC = 4; // finish the sentence after the tail, but not longer than this
 const GAP = 0.6;
 const ends = (w: Word) => /[.!?]["')]*$/.test(w.w);
