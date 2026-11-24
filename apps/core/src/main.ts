@@ -16,6 +16,7 @@ import { learnDue, learnOnce } from './modules/learner/weights.ts';
 import { startReviewServer } from './review/server.ts';
 import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
+import { scoutOnce } from './modules/scout/scout.ts';
 
 const log = logger('main');
 const { drift } = checkHardware();
@@ -40,8 +41,10 @@ const learn = () => {
 };
 learn();
 const learnTimer = setInterval(learn, 24 * 60 * 60_000); // checks daily, runs weekly
+const scout = () => { if (!isPaused() && loadSettings().scout?.enabled !== false) scoutOnce(db).catch((e) => log.error('scout failed', { error: String(e) })); };
+const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most 3 new campaigns per run
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); server.close(); });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); server.close(); });
 
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.

@@ -3,3 +3,4 @@ mediapipe
 numpy
 nvidia-cublas-cu12
 nvidia-cudnn-cu12==9.*
+playwright==1.65.2 # workers/cr_browser.py: drives the owner's CR Chrome over CDP (no bundled browser needed)

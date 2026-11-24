@@ -17,17 +17,17 @@ streamers:
       pool: 5000 # $ split by views
       endsAt: 2026-11-30
       rules:
-        hashtags: ["#Clix"] # caption must mention Clix and use #Clix
+        hashtags: [ "#Clix" ] # caption must mention Clix and use #Clix
         minViews: 500000
         noLogos: true
         noNegative: true
         sourceFrom: 2026-01-01
-        platforms: [tiktok, instagram, youtube] # only these get posts (views elsewhere do not count)
+        platforms: [ tiktok, instagram, youtube ] # only these get posts (views elsewhere do not count)
         # audience: "40% of views from US/UK/CA/AU" # optional: shown as a review warning, not checked yet
 
-  # Content Rewards "$7,500 Silky Pool Campaign", read on 2026-11-24.
-  # Brief: https://reachclipping.com/Silky
-  # Campaign page: https://contentrewards.com/c/campaigns/37f68297-664c-4820-a020-9bbb4a703bf9
+        # Content Rewards "$7,500 Silky Pool Campaign", read on 2026-11-24.
+        # Brief: https://reachclipping.com/Silky
+        # Campaign page: https://contentrewards.com/c/campaigns/37f68297-664c-4820-a020-9bbb4a703bf9
   - name: silky
     platform: twitch
     channel: silky
@@ -41,12 +41,12 @@ streamers:
       pool: 7500
       endsAt: 2026-11-30 # not on the pages ("when the pool ends"); assumed month end like Clix, check the campaign page
       rules:
-        hashtags: ["#Silky"] # caption must also mention Silky by name
+        hashtags: [ "#Silky" ] # caption must also mention Silky by name
         minViews: 250000
         noLogos: true
         noNegative: true
         sourceFrom: 2026-11-19 # only his GTA marathon, from Nov 19; Silky must be the main focus
-        platforms: [tiktok, instagram, youtube, x]
+        platforms: [ tiktok, instagram, youtube, x ]
         audience: "At least 50% from US, CA, AU, UK, NZ"
 
   # Content Rewards "Kai Cenat - $10,000 GTA 6 Pool Campaign" (Clipped & Shipped), joined 2026-11-24.
@@ -66,11 +66,11 @@ streamers:
       endsAt: 2026-11-30 # not on the page ("when the pool ends"); assumed month end like Clix
       rules:
         minViews: 750000 # total views to share the pool
-        hashtags: ["#KaiCenat"]
+        hashtags: [ "#KaiCenat" ]
         minClipViews: 1000 # a clip counts only from 1K views
         noNegative: true # assumed, not in the brief
         sourceFrom: 2026-11-19 # GTA 6 marathon only; start date assumed, Kai must be the main focus
-        platforms: [tiktok, instagram, youtube, x]
+        platforms: [ tiktok, instagram, youtube, x ]
 
   # Content Rewards "$12,500 LACY GTA VI Marathon Pool Campaign" (Reach), joined 2026-11-24.
   # Brief: caption must include #Lacy. Creator requirement: "LACY/STREAMER CLIPPERS".
@@ -89,9 +89,75 @@ streamers:
       endsAt: 2026-11-30 # assumed month end like Clix
       rules:
         minViews: 750000
-        hashtags: ["#Lacy"]
+        hashtags: [ "#Lacy" ]
         minClipViews: 500
         noLogos: true
         noNegative: true
         sourceFrom: 2026-11-19 # GTA VI marathon only; start date assumed
-        platforms: [tiktok, instagram, youtube, x]
+        platforms: [ tiktok, instagram, youtube, x ]
+  - name: jasontheween
+    platform: twitch
+    channel: jasontheween
+    tag: "@jasontheween"
+    stage: study
+    enabled: true
+    campaign:
+      platform: content_rewards
+      url: https://contentrewards.com/c/campaigns/0b178e3c-fbd3-4294-8ded-394e3da9c62f
+      ratePer1k: 0
+      maxPerClip: 0
+      endsAt: 2026-12-24
+      rules:
+        platforms:
+          - tiktok
+          - instagram
+          - youtube
+        hashtags:
+          - "#JasonTheWeen"
+        minViews: 500
+        accountNote: Your caption/text overlay must mention JasonTheWeen's name.
+        endsAtAssumed: true
+      disclosure: true
+      pool: 9000
+  - name: laurenhamdenn
+    platform: twitch
+    channel: laurenhamdenn
+    tag: "@laurenhamdenn"
+    stage: study
+    enabled: true
+    campaign:
+      platform: content_rewards
+      url: https://contentrewards.com/c/campaigns/dd617572-f0f7-4754-8df5-4c0deb81763a
+      ratePer1k: 1.5
+      maxPerClip: 250
+      endsAt: 2026-12-24
+      rules:
+        platforms:
+          - instagram
+        hashtags: []
+        accountNote: Content to post on a dedicated account.
+        endsAtAssumed: true
+      disclosure: true
+      budgetLeft: 4185.12
+  - name: darealboeshi
+    platform: twitch
+    channel: darealboeshi
+    tag: "@darealboeshi"
+    stage: study
+    enabled: true
+    campaign:
+      platform: content_rewards
+      url: https://contentrewards.com/c/campaigns/5c01ecdb-a148-4489-ba26-5aadbbb5bf69
+      ratePer1k: 1
+      maxPerClip: 300
+      endsAt: 2026-12-24
+      rules:
+        platforms:
+          - tiktok
+          - instagram
+          - youtube
+        hashtags: []
+        accountNote: account may only post GTA 6 content
+        endsAtAssumed: true
+      disclosure: true
+      budgetLeft: 1617.88

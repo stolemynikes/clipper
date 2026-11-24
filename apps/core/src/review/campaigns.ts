@@ -139,8 +139,8 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
 
 // streamers.yaml through parseDocument, so the owner's comments stay.
 const loadDoc = () => parseDocument(readFileSync(file(), 'utf8'));
-const allStreamers = (): StreamerConfig[] => (loadDoc().toJS()?.streamers ?? []) as StreamerConfig[];
-function update(name: string, patch: Partial<StreamerConfig> | StreamerConfig, create = false) {
+export const allStreamers = (): StreamerConfig[] => (loadDoc().toJS()?.streamers ?? []) as StreamerConfig[];
+export function update(name: string, patch: Partial<StreamerConfig> | StreamerConfig, create = false) {
   const doc = loadDoc(), i = allStreamers().findIndex((s) => s.name === name);
   if (i < 0 && !create) throw new Error('Campaign not found');
   if (i < 0) (doc.get('streamers') as { add: (n: unknown) => void }).add(doc.createNode(patch));

@@ -18,6 +18,7 @@ export interface Settings {
   study?: { extra?: string[] };
   review?: { autoKeep?: AutoKeep };
   judge?: { awayMin: number };
+  scout?: { enabled?: boolean };
 }
 
 export interface AutoKeep { enabled: boolean; minViewerClips: number; minChatRate: number }
