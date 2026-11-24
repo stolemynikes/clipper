@@ -55,5 +55,8 @@ export function checkClip(i: ComplianceInput): Compliance {
     else if (i.music.musicRatio >= MUSIC_WARN) warnings.push('Some background music (turned down where nobody talks)');
   } else warnings.push('Music check did not run');
 
+  // Audience rules (e.g. "40% of views from US/UK/CA/AU") can't be measured yet: remind the reviewer.
+  const audience = i.campaign?.rules?.audience;
+  if (typeof audience === 'string' && audience) warnings.push(`Campaign wants this audience: ${audience}`);
   return { ok: blocks.length === 0, blocks, warnings };
 }

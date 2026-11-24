@@ -57,3 +57,9 @@ test('budget used up and duplicates block', () => {
   assert.equal(check({ budget: { used: 50, total: 0 } }).ok, true); // pool campaign: no budget set
   assert.match(check({ duplicateOf: 12 }).blocks[0], /clip 12/);
 });
+
+test('audience rule shows as a warning, not a block', () => {
+  const r = check({ campaign: { endsAt: '2026-11-30', rules: { audience: '40% of views from US/UK/CA/AU' } } });
+  assert.equal(r.ok, true);
+  assert.match(r.warnings[0], /40% of views/);
+});

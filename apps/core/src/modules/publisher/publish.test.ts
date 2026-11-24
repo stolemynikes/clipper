@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fallbackTitle, nextDay, postText } from './publish.ts';
+import { campaignAllows, fallbackTitle, nextDay, postText } from './publish.ts';
 import { chunk } from '../tracker/track.ts';
 
 test('fallback title: first sentence, capped, no angle brackets', () => {
@@ -70,4 +70,11 @@ test('PostPeer stats only at 1, 3 and 7 days', async () => {
   assert.equal(statsDue(2, 1), false);
   assert.equal(statsDue(8, 2), true);
   assert.equal(statsDue(30, 3), false);
+});
+
+test('campaign platforms: only listed platforms get posts', () => {
+  assert.equal(campaignAllows({ platforms: ['TikTok', 'youtube'] }, 'tiktok'), true);
+  assert.equal(campaignAllows({ platforms: ['tiktok', 'youtube'] }, 'instagram'), false);
+  assert.equal(campaignAllows({}, 'instagram'), true);
+  assert.equal(campaignAllows(undefined, 'youtube'), true);
 });

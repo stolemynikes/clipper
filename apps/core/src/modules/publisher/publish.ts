@@ -39,6 +39,12 @@ export function nextDay(now: Date): Date {
   return d;
 }
 
+/** Campaign brief lists the platforms whose views count (e.g. no X): post nowhere else. No list = all platforms. */
+export function campaignAllows(rules: Record<string, unknown> | undefined, platform: string): boolean {
+  const list = rules?.platforms;
+  return !Array.isArray(list) || list.map(String).map((p) => p.toLowerCase()).includes(platform);
+}
+
 const viaPostpeer = (platform: string) => platform !== 'youtube' && hasPostpeer();
 
 /** Called on approve: one publish job per connected account of the clip's campaign. */
@@ -46,11 +52,11 @@ export function queuePublish(db: Db, clipId: number) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
   const moment = clip && db.select().from(moments).where(eq(moments.id, clip.momentId)).get();
   if (!moment) return;
-  const { source } = sourceContext(db, moment.sourceId);
+  const { source, cfg } = sourceContext(db, moment.sourceId);
   if (!source.streamerId) return;
   const on = loadSettings().platforms;
   for (const a of db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()) {
-    if (on[a.platform] && (viaPostpeer(a.platform) || hasToken(a.id))) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
+    if (on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && (viaPostpeer(a.platform) || hasToken(a.id))) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
   }
 }
 
@@ -124,6 +130,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
 
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
+  if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as AccountPlatform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid ? settings.clip.disclosureText : null });

@@ -21,4 +21,5 @@ streamers:
         noLogos: true
         noNegative: true
         sourceFrom: 2026-01-01
-        platforms: [tiktok, instagram, youtube]
+        platforms: [tiktok, instagram, youtube] # only these get posts (views elsewhere do not count)
+        # audience: "40% of views from US/UK/CA/AU" # optional: shown as a review warning, not checked yet
