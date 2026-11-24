@@ -9,6 +9,7 @@
 ## Campaigns
 - [ ] Store per-creator campaign facts in the Campaign table: pool or $/1K, max per clip, view bar for a share, min views per clip, budget left, end date, allowed footage, posting platforms. Research in `docs/campaigns.md`.
 - [ ] Flag weak campaigns ("high bar, likely little pay"), e.g. a pool with a 500K-view bar.
+- [ ] Scout earlier than phase 4: campaigns are monthly ("[November]") or event-based (GTA 6 launch, Streamer Awards) and budgets run out in days. Check new campaigns daily, notify the owner with a draft `streamers.yaml` entry, and keep facecam/tag config ready for streamers who return each month. Check Content Rewards' terms on automated reading first; else a notice with the link only.
 - [ ] Add streamers the owner picks from `docs/campaigns.md` to `config/streamers.yaml`.
 
 ## Dashboard (phase 4)
