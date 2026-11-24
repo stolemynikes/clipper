@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { campaignAllows, fallbackTitle, nextDay, postText } from './publish.ts';
+import { campaignAllows, fallbackTitle, nextDay, pickAccounts, politicsBlocked, postText } from './publish.ts';
 import { chunk } from '../tracker/track.ts';
 
 test('fallback title: first sentence, capped, no angle brackets', () => {
@@ -77,4 +77,18 @@ test('campaign platforms: only listed platforms get posts', () => {
   assert.equal(campaignAllows({ platforms: ['tiktok', 'youtube'] }, 'instagram'), false);
   assert.equal(campaignAllows({}, 'instagram'), true);
   assert.equal(campaignAllows(undefined, 'youtube'), true);
+});
+
+test('pickAccounts: one account per platform per clip, rotates', () => {
+  const list = [{ id: 1, platform: 'tiktok' }, { id: 2, platform: 'tiktok' }, { id: 3, platform: 'youtube' }];
+  assert.deepEqual(pickAccounts(list, 4).map((a) => a.id), [1, 3]);
+  assert.deepEqual(pickAccounts(list, 5).map((a) => a.id), [2, 3]);
+  assert.deepEqual(pickAccounts([], 1), []);
+});
+
+test('politics blocked on TikTok and X only', () => {
+  assert.equal(politicsBlocked('tiktok', 'he talks about Trump again'), true);
+  assert.equal(politicsBlocked('x', 'the election is rigged'), true);
+  assert.equal(politicsBlocked('youtube', 'he talks about Trump again'), false);
+  assert.equal(politicsBlocked('tiktok', 'he trumped the boss fight'), false);
 });

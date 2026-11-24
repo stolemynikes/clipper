@@ -47,6 +47,17 @@ export function campaignAllows(rules: Record<string, unknown> | undefined, platf
 
 const viaPostpeer = (platform: string) => platform !== 'youtube' && hasPostpeer();
 
+/** Content Rewards rejects "reused content": one clip goes to ONE account per platform. Rotates by clip so accounts share the work. */
+export function pickAccounts<T extends { id: number; platform: string }>(list: T[], clipId: number): T[] {
+  const by = new Map<string, T[]>();
+  for (const a of [...list].sort((x, y) => x.id - y.id)) by.set(a.platform, [...(by.get(a.platform) ?? []), a]);
+  return [...by.values()].map((l) => l[clipId % l.length]);
+}
+
+// Terms 12.11: no political content on TikTok or X. shortcut: word list, upgrade to an LLM check if it misses or over-blocks.
+const POLITICS = /\b(trump|biden|kamala|harris|obama|election|democrats?|republicans?|maga|congress|senate|vote for|president(ial)?)\b/i;
+export const politicsBlocked = (platform: string, text: string) => (platform === 'tiktok' || platform === 'x') && POLITICS.test(text);
+
 /** Called on approve: one publish job per connected account of the clip's campaign. */
 export function queuePublish(db: Db, clipId: number) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
@@ -55,9 +66,9 @@ export function queuePublish(db: Db, clipId: number) {
   const { source, cfg } = sourceContext(db, moment.sourceId);
   if (!source.streamerId) return;
   const on = loadSettings().platforms;
-  for (const a of db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()) {
-    if (on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && (viaPostpeer(a.platform) || hasToken(a.id))) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
-  }
+  const ready = db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()
+    .filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && (viaPostpeer(a.platform) || hasToken(a.id)));
+  for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
 }
 
 async function youtube(token: string, file: string, t: { title: string; description: string }, paid: boolean, placement = true): Promise<{ externalId: string; url: string }> {
@@ -127,10 +138,17 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
     enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: nextDay(now) });
     return log.info(`account ${accountId} hit its daily limit, clip ${clipId} moved to tomorrow`);
   }
+  // Terms 7.14: too many unapproved submissions pause the account; CR reviews pending ones after 7 days (7.2).
+  const week = db.select().from(posts).where(and(eq(posts.accountId, accountId), gte(posts.postedAt, new Date(now.getTime() - 7 * 86_400_000)))).all().length;
+  if (week >= (settings.limits.maxPostsPerAccountPerWeek ?? 10)) {
+    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: nextDay(now) });
+    return log.info(`account ${accountId} hit its weekly limit, clip ${clipId} moved to tomorrow`);
+  }
 
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
   if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
+  if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as AccountPlatform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null }); // owner: no #ad text anywhere, paid-promotion toggle only

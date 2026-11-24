@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { activeStreamers, loadSettings, type StreamerConfig } from '../../config.ts';
+import { activeStreamers, clipStreamers, loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { sources, streamers } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
@@ -41,7 +41,7 @@ export async function addVodUrl(db: Db, url: string): Promise<boolean> {
 /** One pass over all active Twitch streamers: queue new, finished VODs. */
 export async function watchOnce(db: Db, now = Date.now()) {
   const { watcher } = loadSettings();
-  for (const cfg of activeStreamers().filter((s) => s.platform === 'twitch')) {
+  for (const cfg of clipStreamers().filter((s) => s.platform === 'twitch')) {
     try {
       const userId = await getUserId(cfg.channel);
       const streamerId = ensureStreamer(db, cfg, userId).id;

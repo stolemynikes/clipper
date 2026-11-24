@@ -33,6 +33,8 @@ clip:
 
 limits:
   maxPostsPerAccountPerDay: 3
+  # Content Rewards pauses submissions when too many are still unapproved (Terms 7.14); posts pending over 7 days get reviewed (7.2).
+  maxPostsPerAccountPerWeek: 10
 
 platforms:
   tiktok: false
