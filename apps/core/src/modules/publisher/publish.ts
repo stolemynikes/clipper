@@ -133,7 +133,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as AccountPlatform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid ? settings.clip.disclosureText : null });
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null }); // owner: no #ad text anywhere, paid-promotion toggle only
   const pp = viaPostpeer(account.platform);
   if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
   const token = pp ? '' : await accessToken(accountId, account.platform as Platform);

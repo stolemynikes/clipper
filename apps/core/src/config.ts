@@ -7,7 +7,7 @@ import type { ScoringConfig } from './modules/vod-clipper/scoring.ts';
 
 export interface Settings {
   scoring: ScoringConfig;
-  clip: { minSec: number; maxSec: number; targetSec?: [number, number]; disclosure: boolean; disclosureText: string; disclosureSec: number; disclosureInVideo?: boolean; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
+  clip: { minSec: number; maxSec: number; targetSec?: [number, number]; disclosure: boolean; disclosureText: string; disclosureSec: number; disclosureInVideo?: boolean; disclosureInText?: boolean; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
   limits: { maxPostsPerAccountPerDay: number };
   platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
   publish?: { tiktokPublic?: boolean };

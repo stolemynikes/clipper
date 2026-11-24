@@ -24,7 +24,8 @@ clip:
   disclosure: true # default on; campaigns can override
   disclosureText: "#ad"
   disclosureSec: 3
-  disclosureInVideo: false # #ad stays in the post text and paid-promotion toggle; a campaign can set disclosureInVideo: true
+  disclosureInVideo: false # a campaign can set disclosureInVideo: true if its brief demands it
+  disclosureInText: false # owner 2026-11-24: no #ad in captions or video; disclosure = platform paid-promotion toggle
   captionStyle: bold # bold | pop | clean; streamers.yaml can override per streamer
   censor: # caption masking (audio untouched); applied to every clip while any listed platform is on
     platforms: [tiktok]
