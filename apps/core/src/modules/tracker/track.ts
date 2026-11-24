@@ -51,7 +51,8 @@ export async function trackOnce(db: Db, now = new Date()) {
     .from(posts).innerJoin(accounts, eq(accounts.id, posts.accountId))
     .where(and(isNotNull(posts.externalId), gte(posts.postedAt, since))).all() as (Row & { accountId: number; platform: Platform })[];
   const byAccount = new Map<number, typeof rows>();
-  for (const r of rows) byAccount.set(r.accountId, [...(byAccount.get(r.accountId) ?? []), r]);
+  // shortcut: PostPeer posts (pp:) have no views source yet; add one (PostPeer analytics or TikTok Display API) when views count.
+  for (const r of rows.filter((x) => !x.externalId.startsWith('pp:'))) byAccount.set(r.accountId, [...(byAccount.get(r.accountId) ?? []), r]);
   for (const [accountId, list] of byAccount) {
     try {
       const token = await accessToken(accountId, list[0].platform);

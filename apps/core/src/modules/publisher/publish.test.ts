@@ -44,3 +44,21 @@ test('model title is cleaned: one line, no tags, capped; empty throws', async ()
   assert.ok(cleanTitle({ title: 'word '.repeat(30), hook: '' }).title.length <= 71);
   assert.throws(() => cleanTitle({ title: '  ', hook: 'x' }));
 });
+
+import { pickIntegration, postBody } from './postpeer.ts';
+
+test('pickIntegration matches name, else the only account on that platform', () => {
+  const list = [{ id: 'a', platform: 'tiktok', displayName: '@ClipsNL' }, { id: 'b', platform: 'tiktok', displayName: 'other' }, { id: 'c', platform: 'instagram', displayName: 'x' }];
+  assert.equal(pickIntegration(list, 'tiktok', 'clipsnl')?.id, 'a');
+  assert.equal(pickIntegration(list, 'tiktok', 'nobody'), undefined); // two tiktok accounts: never guess
+  assert.equal(pickIntegration(list, 'instagram', 'nobody')?.id, 'c');
+});
+
+test('postBody: public TikTok with paid disclosure, Instagram reel', () => {
+  const t = postBody({ platform: 'tiktok', integrationId: 'a', content: 'hi', url: 'u', paid: true, key: 'k' });
+  assert.equal(t.platforms[0].platformSpecificData.privacyLevel, 'PUBLIC_TO_EVERYONE');
+  assert.equal((t.platforms[0].platformSpecificData as { brandContentToggle: boolean }).brandContentToggle, true);
+  assert.equal(t.idempotencyKey, 'k');
+  const i = postBody({ platform: 'instagram', integrationId: 'c', content: 'hi', url: 'u', paid: false, key: 'k' });
+  assert.deepEqual(i.mediaItems, [{ type: 'video', url: 'u' }]);
+});

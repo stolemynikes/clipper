@@ -1,5 +1,5 @@
 // Posts approved clips to every connected account of the clip's campaign. Official APIs only:
-// YouTube Data API (resumable upload) and TikTok Content Posting API (FILE_UPLOAD, one chunk).
+// YouTube Data API (resumable upload); TikTok and Instagram via PostPeer when POSTPEER_API_KEY is set, else TikTok Content Posting API.
 import { readFileSync, statSync } from 'node:fs';
 import { and, eq, gte } from 'drizzle-orm';
 import { loadSettings } from '../../config.ts';
@@ -10,6 +10,7 @@ import { enqueue } from '../../queue/queue.ts';
 import type { Platform } from '../../review/setup.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { accessToken, hasToken } from './oauth.ts';
+import { hasPostpeer, postpeerPublish } from './postpeer.ts';
 
 const log = logger('publisher');
 const TIKTOK_MAX_ONE_CHUNK = 64 * 1024 * 1024;
@@ -38,6 +39,8 @@ export function nextDay(now: Date): Date {
   return d;
 }
 
+const viaPostpeer = (platform: string) => platform !== 'youtube' && hasPostpeer();
+
 /** Called on approve: one publish job per connected account of the clip's campaign. */
 export function queuePublish(db: Db, clipId: number) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
@@ -47,7 +50,7 @@ export function queuePublish(db: Db, clipId: number) {
   if (!source.streamerId) return;
   const on = loadSettings().platforms;
   for (const a of db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()) {
-    if (on[a.platform] && hasToken(a.id)) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
+    if (on[a.platform] && (viaPostpeer(a.platform) || hasToken(a.id))) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
   }
 }
 
@@ -124,13 +127,15 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as Platform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid ? settings.clip.disclosureText : null });
-  if (account.platform !== 'youtube' && account.platform !== 'tiktok') return log.warn(`${account.platform} posting is not built yet (no official API in use)`);
-  const token = await accessToken(accountId, account.platform as Platform);
+  const pp = viaPostpeer(account.platform);
+  if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
+  const token = pp ? '' : await accessToken(accountId, account.platform as Platform);
   // Reserve the post row before uploading: if the process dies mid-upload, the retry sees the row and does not post twice.
   const postId = db.insert(posts).values({ clipId, accountId, platform: account.platform, postedAt: now }).returning({ id: posts.id }).get().id;
   let r: { externalId: string; url: string | null };
   try {
-    r = account.platform === 'youtube' ? await youtube(token, clip.filePath, text, paid) : await tiktok(token, clip.filePath, text, paid);
+    r = pp ? await postpeerPublish({ platform: account.platform as 'tiktok' | 'instagram', accountName: account.name, file: clip.filePath, content: text.title, paid, key: `clip-${clipId}-account-${accountId}` })
+      : account.platform === 'youtube' ? await youtube(token, clip.filePath, text, paid) : await tiktok(token, clip.filePath, text, paid);
   } catch (e) {
     db.delete(posts).where(eq(posts.id, postId)).run(); // clean failure: nothing went up, so the retry may post again
     throw e;

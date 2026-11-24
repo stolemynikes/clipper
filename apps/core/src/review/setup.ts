@@ -1,5 +1,6 @@
 // Accounts page: platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
 // Secrets go straight into .env and are never rendered back or logged. The page only says "saved".
+import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -105,6 +106,9 @@ function page(db: Db, msg: string | null) {
   };
   const acc = (r: (typeof list)[number]) => {
     const linked = Boolean(process.env[tokenKey(r.id)]);
+    if (r.platform !== 'youtube' && hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill on">Via PostPeer</span></div>
+<p class="sub">${APPS[r.platform].label} · ${r.streamer ? `campaign: ${esc(r.streamer)}` : 'no campaign'} · connect or change it on postpeer.dev</p>
+<div class="actions"><button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div></article>`;
     // YouTube's redirect is loopback: the whole login must run in a browser on the PC itself.
     const connect = r.platform === 'youtube' ? `http://127.0.0.1:${port()}/connect/${r.id}` : `/connect/${r.id}`;
     return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill ${linked ? 'on' : ''}">${linked ? 'Connected' : 'Not connected'}</span></div>

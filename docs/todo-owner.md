@@ -25,7 +25,7 @@ Free: 20 credits (1 credit = 1 post), unlimited connected accounts, no card. Tik
 - [ ] Create a free account at https://www.postpeer.dev.
 - [ ] Connect 1 TikTok account and 1 Instagram account (Instagram must be business or creator).
 - [ ] Create an API key. Put it in `.env` as `POSTPEER_API_KEY=` (never in chat). Tell Claude.
-- Claude then posts 1 test clip and checks that it is really public. If yes: stay on PostPeer.
+- Add the same account names on the Accounts page (TikTok; Instagram follows). Claude then turns on `platforms.tiktok` in settings.yaml, posts 1 test clip and checks that it is really public. If yes: stay on PostPeer.
   When the free credits run out, compare paid plans: PostPeer Starter ($23.10/mo billed yearly, 2,000 posts) vs Post for Me ($10/mo, 1,000 posts, unlimited accounts, https://www.postforme.dev/pricing).
 - Do not create extra free accounts at one service to get more free posts: bundle.social's terms ban it, and others may close the account for it.
 
