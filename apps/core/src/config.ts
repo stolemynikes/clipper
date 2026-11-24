@@ -7,7 +7,7 @@ import type { ScoringConfig } from './modules/vod-clipper/scoring.ts';
 
 export interface Settings {
   scoring: ScoringConfig;
-  clip: { minSec: number; maxSec: number; disclosure: boolean; disclosureText: string; disclosureSec: number; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
+  clip: { minSec: number; maxSec: number; disclosure: boolean; disclosureText: string; disclosureSec: number; disclosureInVideo?: boolean; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
   limits: { maxPostsPerAccountPerDay: number };
   platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
   publish?: { tiktokPublic?: boolean };
@@ -25,7 +25,7 @@ export interface StreamerConfig {
   facecam?: { x: number; y: number; w: number; h: number } | null; // fractions of the source frame
   captionStyle?: CaptionStyle; // bold | pop | clean; overrides settings.clip.captionStyle
   tag: string;
-  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; maxSec?: number; budget?: number; url?: string }; // url: campaign page to submit on. budget: total $ for rate campaigns (from the brief)
+  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; disclosureInVideo?: boolean; maxSec?: number; budget?: number; url?: string }; // url: campaign page to submit on. budget: total $ for rate campaigns (from the brief)
 }
 
 const read = (file: string) => parse(readFileSync(join(paths.configDir, file), 'utf8'));

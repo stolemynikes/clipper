@@ -104,7 +104,9 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
 
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))) // A/B test, leans to the winner once clear;
   writeFileSync(join(dir, 'subs.ass'), buildAss({
-    words, durationSec, hook: title?.hook, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
+    words, durationSec, hook: title?.hook, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
+    // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
+    disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
     // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
     censor: settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined,
