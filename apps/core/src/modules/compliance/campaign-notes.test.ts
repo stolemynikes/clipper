@@ -27,15 +27,16 @@ test('profit score: bigger pool and lower bar rank first', () => {
   const base = { platform: 'content_rewards', ratePer1k: 0, maxPerClip: 0, endsAt: '2026-11-30' };
   const clix = profitScore({ ...base, pool: 5000, rules: { minViews: 500000 } });
   const silky = profitScore({ ...base, pool: 7500, rules: { minViews: 250000 } });
-  assert.equal(clix, 10);
-  assert.equal(silky, 30);
-  assert.equal(profitScore({ ...base, ratePer1k: 1.5 }), 1.5);
-  assert.equal(profitScore({ ...base, pool: 1000 }), 10); // no bar: assumed 100K
+  assert.equal(clix, 9); // after the 10% fee
+  assert.equal(silky, 27);
+  assert.equal(profitScore({ ...base, ratePer1k: 1.5 }), 1.35);
+  assert.equal(profitScore({ ...base, platform: 'other', ratePer1k: 1.5 }), 1.5); // no fee outside Content Rewards
+  assert.equal(profitScore({ ...base, pool: 1000 }), 9); // no bar: assumed 100K
 });
 
 test('views to pay: lowest bar first, min payout and views bar respected', () => {
   const base = { platform: 'content_rewards', ratePer1k: 0, maxPerClip: 0, endsAt: '2026-11-30' };
-  assert.equal(viewsToPay({ ...base, ratePer1k: 2 }), 5000);
+  assert.equal(viewsToPay({ ...base, ratePer1k: 2 }), 5556); // $10 net = $11.11 gross
   assert.equal(viewsToPay({ ...base, ratePer1k: 2, rules: { minPayout: 20 } }), 10000);
   assert.equal(viewsToPay({ ...base, ratePer1k: 2, rules: { minViews: 50000 } }), 50000);
   assert.equal(viewsToPay({ ...base, pool: 7500, rules: { minViews: 250000 } }), 250000);

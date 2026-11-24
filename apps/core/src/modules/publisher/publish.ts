@@ -83,8 +83,9 @@ async function youtube(token: string, file: string, t: { title: string; descript
     }),
   });
   const loc = init.headers.get('location');
-  // If YouTube rejects the paid-promotion field, upload without it: the #ad in the description still discloses.
-  if (init.status === 400 && placement) {
+  // If YouTube rejects the paid-promotion field, upload without it only for unpaid clips: paid ones would go out
+  // undisclosed (no #ad text by default), so they fail and the owner gets told.
+  if (init.status === 400 && placement && !paid) {
     log.warn(`YouTube refused paidProductPlacementDetails, retrying without it: ${(await init.text()).slice(0, 200)}`);
     return youtube(token, file, t, paid, false);
   }
