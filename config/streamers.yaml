@@ -14,6 +14,7 @@ streamers:
       url: https://contentrewards.com/c/campaigns/17ff5e37-a774-4a75-a1a4-d47dba98a60e # where the owner submits links
       ratePer1k: 0 # pool campaign: $5,000 split by views, paid when the pool ends
       maxPerClip: 0
+      pool: 5000 # $ split by views
       endsAt: 2026-11-30
       rules:
         hashtags: ["#Clix"] # caption must mention Clix and use #Clix

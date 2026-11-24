@@ -1,5 +1,7 @@
 // Accounts page: platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
 // Secrets go straight into .env and are never rendered back or logged. The page only says "saved".
+import { activeStreamers } from '../config.ts';
+import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
 import { styleStats, styleWinner } from '../modules/learner/title-style.ts';
 import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
@@ -103,6 +105,19 @@ function titleTest(db: Db) {
   return `<p class="sub">Title test: ${w === 'bold' ? 'bold, curious' : 'calm'} titles get ${Math.round((a.median / Math.max(b.median, 1) - 1) * 100)}% more views. New clips now use them more often.</p>`;
 }
 
+/** Running campaigns with facts and warnings in plain words. */
+function campaignsHtml() {
+  const list = activeStreamers();
+  if (!list.length) return '<p class="empty">No running campaigns. Clips are only made for streamers with one.</p>';
+  return list.map((s) => {
+    const { facts, warnings } = campaignNotes(s.campaign!);
+    return `<article class="pad"><div class="head"><h2>${esc(s.name)}</h2><span class="pill ${warnings.length ? 'warn' : 'on'}">${warnings.length ? 'Check' : 'Good'}</span></div>
+<ul class="facts">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+${warnings.map((w) => `<p class="warn" role="note">${esc(w)}</p>`).join('')}
+${s.campaign!.url ? `<div class="actions"><a class="btn ok" href="${esc(s.campaign!.url)}" target="_blank" rel="noopener">Open campaign page</a></div>` : ''}</article>`;
+  }).join('\n');
+}
+
 function page(db: Db, msg: string | null) {
   const list = accountStats(db);
   const camps = db.select().from(streamers).all().filter((s) => (s.config as { campaign?: unknown } | null)?.campaign);
@@ -147,11 +162,13 @@ label{display:block;font-size:14px;color:var(--muted);margin:8px 0}input,select{
 input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:12px;font-weight:600;text-decoration:none}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips .idea{display:flex;align-items:center;gap:2px}.chips .taken{opacity:.45}.chips .taken button{text-decoration:line-through}.chips a.free{color:#4ade80;font-weight:600}.chips a{min-height:44px;display:flex;align-items:center;padding:0 8px;font-size:14px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
+.pill.warn{border-color:#f59e0b;color:#f59e0b}.facts{margin:8px 0 0;padding-left:20px}.facts li{margin:0 0 4px}p.warn{margin:8px 0 0;padding:8px 12px;border-left:3px solid #f59e0b;background:var(--bg);border-radius:8px}
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
 <header><h1>Accounts</h1><a href="/">Back to review</a>
 <div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div>${titleTest(db)}</header>
 <main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
+<section><h2>Campaigns</h2>${campaignsHtml()}</section>
 <section><h2>Your accounts</h2>${list.map(acc).join('\n') || '<p class="empty">No accounts yet. Add one below.</p>'}
 <article class="pad"><h2>Add an account</h2><form id="add" onsubmit="return addAcc(event)" onchange="ideas()">
 <label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option><option value="instagram">Instagram Reels (via PostPeer)</option></select></label>
