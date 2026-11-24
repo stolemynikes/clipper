@@ -16,6 +16,7 @@ import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
 import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
+import { makeTitle } from '../publisher/titles.ts';
 import { transcribe } from './whisper.ts';
 
 const log = logger('editor');
@@ -100,8 +101,9 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     ? matchChat(t.words, JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[]).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: c.e - lead })).filter((c) => c.e > 0.5)
     : [];
 
+  const title = await makeTitle(transcript, cfg.name);
   writeFileSync(join(dir, 'subs.ass'), buildAss({
-    words, durationSec, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
+    words, durationSec, hook: title?.hook, tag: cfg.tag, disclosure, disclosureSec: settings.clip.disclosureSec, chat,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
     captionY: layout.cam ? undefined : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 : 400,
@@ -113,8 +115,9 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words))), { cwd: dir });
   rmSync(src, { force: true });
 
-  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music } }).returning().get();
+  const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },
+    title: title?.title, hook: title?.hook, titleStyle: title?.style }).returning().get();
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
-  enqueue(db, 'clip.title', { clipId: clip.id }); // the title job sends the review push
+  enqueue(db, 'review.notify', { clipId: clip.id });
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);
 }

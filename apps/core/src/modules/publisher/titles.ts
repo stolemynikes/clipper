@@ -62,22 +62,26 @@ export async function generateTitle(transcript: string, streamer: string, model:
   return out;
 }
 
-/** Job after render: title + hook, then the review push. A failed title never blocks review (publish uses fallbackTitle). */
-// shortcut: the hook is stored but not burned into the video (title runs after render), burn it in when hooks are A/B-tested.
+/** Title + hook for a transcript, or null (then publish uses fallbackTitle). Runs before the final encode so the hook is burned in. */
+export async function makeTitle(transcript: string | null, streamer: string): Promise<(TitleOut & { style: TitleStyle }) | null> {
+  if (!transcript || transcript.split(' ').length < 8) return null;
+  stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM; Whisper restarts on the next render
+  const style: TitleStyle = Math.random() < 0.5 ? 'mild' : 'bold'; // A/B test; the Learner compares views per style
+  try {
+    return { ...(await generateTitle(transcript, streamer, loadSettings().titles?.model ?? 'gemma4:12b', style)), style };
+  } catch (e) {
+    log.warn(`no title, using the fallback: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+/** Re-title job (older clips). New clips get their title inside the render job. */
 export async function titleClip(db: Db, { clipId }: { clipId: number }, notify = true) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
   if (!clip) return;
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
-  if (clip.transcript && clip.transcript.split(' ').length >= 8) {
-    stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM; Whisper restarts on the next render
-    try {
-      const style: TitleStyle = Math.random() < 0.5 ? 'mild' : 'bold'; // A/B test; the Learner compares views per style
-      const t = await generateTitle(clip.transcript, cfg.name, loadSettings().titles?.model ?? 'gemma4:12b', style);
-      db.update(clips).set({ title: t.title, hook: t.hook, titleStyle: style }).where(eq(clips.id, clipId)).run();
-    } catch (e) {
-      log.warn(`no title for clip ${clipId}, using the fallback: ${(e as Error).message}`);
-    }
-  }
+  const t = await makeTitle(clip.transcript, cfg.name);
+  if (t) db.update(clips).set({ title: t.title, hook: t.hook, titleStyle: t.style }).where(eq(clips.id, clipId)).run();
   if (notify) enqueue(db, 'review.notify', { clipId });
 }

@@ -13,6 +13,8 @@ export interface AssOptions {
   tag: string;
   disclosure?: string | null; // e.g. "#ad", shown for disclosureSec at the start
   disclosureSec?: number;
+  hook?: string | null;
+  hookY?: number; // teaser shown big in the first seconds, keeps people from swiping
   captionY?: number; // vertical center of captions in the 1080x1920 frame
   wordsPerChunk?: number; // default from the style
   style?: CaptionStyle;
@@ -33,6 +35,7 @@ export const STYLES = {
   pop: { font: 'Archivo Black', size: 78, active: '&H0080DE4A', outline: 8, shadow: 2, box: false, per: 2, pop: true }, // #4ADE80
   clean: { font: 'Anton', size: 96, active: YELLOW, outline: 12, shadow: 0, box: true, per: 3, pop: false },
 } as const;
+const HOOK_SEC = 2.5;
 const POP = '\\fscx100\\fscy100\\t(0,70,\\fscx118\\fscy118)\\t(70,160,\\fscx108\\fscy108)';
 
 /** Groups words into caption lines: at most `per` words, and a new line after punctuation or a pause,
@@ -94,6 +97,8 @@ export function buildAss(o: AssOptions): string {
     ev(c.s, c.e, 'Chat', `{\\pos(60,${o.chatY ?? 1000})\\fad(150,150)}{\\c${YELLOW}}${c.user.replace(/[{}\\]/g, '')}{\\c${WHITE}}  ${text}`);
   }
   if (o.tag) ev(0, o.durationSec, 'Tag', `{\\pos(540,1560)}${clean(o.tag).toLowerCase()}`);
+  // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
+  if (o.hook?.trim()) ev(0, Math.min(HOOK_SEC, o.durationSec), 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)${POP}}${clean(o.hook)}`);
   if (o.disclosure) ev(0, o.disclosureSec ?? 3, 'Disclosure', `{\\pos(70,280)}${clean(o.disclosure)}`);
 
   return `[Script Info]
@@ -108,6 +113,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Caption,${st.font},${st.size},${WHITE},${WHITE},${st.box ? '&H59000000' : BLACK},&H80000000,0,0,0,0,100,100,1,0,${st.box ? 3 : 1},${st.outline},${st.shadow},5,60,60,0,1
 Style: Tag,Russo One,44,&H33FFFFFF,${WHITE},${BLACK},&H80000000,0,0,0,0,100,100,1,0,1,3,0,5,60,60,0,1
 Style: Chat,Russo One,40,${WHITE},${WHITE},&H33101010,&H33101010,0,0,0,0,100,100,0,0,3,14,0,7,60,160,0,1
+Style: Hook,Russo One,72,&H00000000,${WHITE},${YELLOW},${YELLOW},0,0,0,0,100,100,1,0,3,18,0,5,90,90,0,1
 Style: Disclosure,Russo One,48,${WHITE},${WHITE},&H99000000,&H99000000,0,0,0,0,100,100,1,0,3,10,0,7,60,60,0,1
 
 [Events]
