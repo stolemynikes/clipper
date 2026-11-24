@@ -167,7 +167,7 @@ form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-
 .pill.warn{border-color:#f59e0b;color:#f59e0b}.facts{margin:8px 0 0;padding-left:20px}.facts li{margin:0 0 4px}p.warn{margin:8px 0 0;padding:8px 12px;border-left:3px solid #f59e0b;background:var(--bg);border-radius:8px}
 .btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
 </style></head><body>
-<header><h1>Accounts</h1><a href="/">Back to review</a>
+<header><h1>Accounts</h1><a href="/">Back to review</a><a href="/campaigns">Campaigns</a>
 <div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div>${titleTest(db)}</header>
 <main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
 <section><h2>Campaigns</h2>${campaignsHtml()}</section>

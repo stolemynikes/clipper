@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { Db } from '../db/client.ts';
 import { logger } from '../log.ts';
 import { setupRoute } from './setup.ts';
+import { campaignsRoute } from './campaigns.ts';
 import { CSS, esc } from './style.ts';
 import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setPaused, status } from './review.ts';
 
@@ -68,7 +69,7 @@ function page(db: Db) {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Clipper review</title>
 <style>
 ${CSS}</style></head><body>
-<header><h1>Clipper review</h1><a href="/setup">Accounts</a>
+<header><h1>Clipper review</h1><a href="/setup">Accounts</a><a href="/campaigns">Campaigns</a>
 <button class="toggle" onclick="post('/${st.paused ? 'resume' : 'pause'}').then(()=>location.reload())">${st.paused ? 'Start' : 'Pause'}</button>
 <p class="stats${st.paused ? ' paused' : ''}" role="status">${line}</p>
 <div class="tiles"><div class="tile"><b>${rows.length}</b><span>To review</span></div>
@@ -117,6 +118,7 @@ export function startReviewServer(db: Db) {
     try {
       const url = new URL(req.url ?? '/', 'http://x');
       if (/^\/(setup|connect|oauth)(\/|$)/.test(url.pathname) && await setupRoute(db, req, res, url)) return;
+      if (/^\/campaigns(\/|$)/.test(url.pathname) && await campaignsRoute(db, req, res, url)) return;
       route(db, req, res);
     } catch (e) { log.error('review request failed', { error: String(e) }); if (!res.headersSent) res.writeHead(500).end(); }
   };

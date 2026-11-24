@@ -17,6 +17,8 @@ Things only the owner can do. Checked against the official docs on 2026-11-24.
 - Until then (unaudited): at most 5 users per 24 h, the posting account must be private, and posts are SELF_ONLY.
 
 ## Ollama (titles)
+- [ ] Repair Ollama: its last update did not finish (`lib/ollama/cuda_v12` has no `ggml-cuda.dll`, only a leftover `.tmp`), so it runs on the CPU only.
+  Reading a campaign brief takes ~70 s instead of a few seconds. Fix: `winget install --force Ollama.Ollama` (or the installer from ollama.com), then restart the PC worker.
 - [ ] Let the Ollama app start at login (Start menu > Ollama, it adds itself to startup). Set the user environment variable `OLLAMA_MODELS=E:\dev\cache\ollama` first, or it downloads the models again to C:.
   Without Ollama, clips still work, but get a plain fallback title.
 
