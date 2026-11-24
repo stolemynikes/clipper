@@ -34,7 +34,7 @@ def load_audio(path: str) -> np.ndarray:
 
 def frames(audio: np.ndarray) -> list[tuple[float, dict]]:
     """[(start_sec, {class: score})] per YAMNet frame."""
-    opts = mp_audio.AudioClassifierOptions(base_options=BaseOptions(model_asset_path=MODEL), max_results=10)
+    opts = mp_audio.AudioClassifierOptions(base_options=BaseOptions(model_asset_path=MODEL), max_results=-1)  # all 521: laughter drops out of a top 10 under speech + game audio
     with mp_audio.AudioClassifier.create_from_options(opts) as clf:
         results = clf.classify(audio_data.AudioData.create_from_array(audio.astype(float), RATE))
     return [(r.timestamp_ms / 1000, {c.category_name: c.score for c in r.classifications[0].categories}) for r in results]
@@ -51,14 +51,16 @@ def summarize(fr: list[tuple[float, dict]], step: float = 0.975) -> dict:
             spans.append([round(t, 2), round(t + step, 2)])
     n = max(len(fr), 1)
     share = lambda names: round(sum(any(c.get(k, 0) >= HUMAN_MIN for k in names) for _, c in fr) / n, 3)
+    peak = lambda names: round(max((max(c.get(k, 0) for k in names) for _, c in fr), default=0), 3)
     return {"musicRatio": round(len(music) / n, 3), "vocalRatio": round(len(vocal) / n, 3), "musicSec": spans,
-            "laughRatio": share(LAUGH), "cheerRatio": share(CHEER)}
+            "laughRatio": share(LAUGH), "cheerRatio": share(CHEER),
+            "laughMax": peak(LAUGH), "cheerMax": peak(CHEER)}
 
 
 def main() -> None:
     args = json.loads(sys.argv[1])
     audio = load_audio(args["input"])
-    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": [], "laughRatio": 0, "cheerRatio": 0}, sys.stdout)
+    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": [], "laughRatio": 0, "cheerRatio": 0, "laughMax": 0, "cheerMax": 0}, sys.stdout)
 
 
 if __name__ == "__main__":

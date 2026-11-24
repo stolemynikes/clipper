@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Db } from '../../db/client.ts';
 import { paths } from '../../env.ts';
 
-export const LEARNED_SIGNALS = ['laughRatio', 'cheerRatio', 'speech', 'visual'] as const; // same list as judge FUN_SIGNALS
+export const LEARNED_SIGNALS = ['laughMax', 'cheerMax', 'speech', 'visual'] as const; // same list as judge FUN_SIGNALS
 const REPORT_ONLY = ['chatRate', 'emoteScore', 'viewerClipHits', 'audioPeak']; // tuned by hand in settings.yaml
 export const MIN_N = 20; // labeled clips before a weight may move
 const STEP = 1, MAX_W = 5, MIN_AUC = 0.6;

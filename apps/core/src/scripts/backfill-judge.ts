@@ -11,9 +11,9 @@ import { runCmd } from '../proc.ts';
 const db = openDb();
 for (const c of db.select().from(clips).all()) {
   const comp = (c.compliance ?? {}) as { music?: Record<string, unknown> };
-  if (existsSync(c.filePath) && comp.music?.laughRatio === undefined) {
+  if (existsSync(c.filePath) && comp.music?.laughMax === undefined) {
     const m = JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'music_detect.py'), JSON.stringify({ input: c.filePath })]));
-    db.update(clips).set({ compliance: { ...comp, music: { ...comp.music, laughRatio: m.laughRatio, cheerRatio: m.cheerRatio } } as typeof c.compliance }).where(eq(clips.id, c.id)).run();
+    db.update(clips).set({ compliance: { ...comp, music: { ...comp.music, laughMax: m.laughMax, cheerMax: m.cheerMax } } as typeof c.compliance }).where(eq(clips.id, c.id)).run();
   }
   await judgeClip(db, { clipId: c.id, notify: false });
 }

@@ -21,16 +21,16 @@ test('nextWeight: needs MIN_N, weak signal goes to 0, max 1 step, capped at 5', 
 
 test('learnStep: owner decisions beat proxy; auto-kept clips and unjudged clips are ignored', () => {
   const rows = Array.from({ length: 24 }, (_, i) => ({
-    signals: JSON.stringify({ laughRatio: i < 12 ? 0.5 : 0, viewerClipHits: i % 3, speech: 0.5 }),
+    signals: JSON.stringify({ laughMax: i < 12 ? 0.5 : 0, viewerClipHits: i % 3, speech: 0.5 }),
     status: i < 12 ? 'approved' : 'rejected', views: null,
   }));
   const { next, changes } = learnStep([...rows, { signals: '{"autoKept":1,"speech":1}', status: 'approved', views: null }, { signals: '{}', status: 'rejected', views: null }], null);
   assert.equal(next.label, 'owner Keep/Skip');
   assert.equal(next.n, 24);
-  assert.equal(next.auc.laughRatio, 1);
-  assert.equal(next.weights.laughRatio, 1);
+  assert.equal(next.auc.laughMax, 1);
+  assert.equal(next.weights.laughMax, 1);
   assert.equal(next.weights.speech, 0); // no signal (all equal): stays 0
-  assert.deepEqual(changes, ['laughRatio 0 -> 1 (AUC 1, 24 clips)']);
+  assert.deepEqual(changes, ['laughMax 0 -> 1 (AUC 1, 24 clips)']);
 });
 
 test('learnStep: proxy label never scores viewerClipHits against itself; views win when there are enough', () => {
@@ -43,6 +43,6 @@ test('learnStep: proxy label never scores viewerClipHits against itself; views w
 });
 
 test('funBonus: unproven weights add nothing', () => {
-  assert.equal(funBonus({ speech: 0.8, laughRatio: 0.5 }, {}), 0);
-  assert.equal(funBonus({ speech: 0.8, laughRatio: 0.5 }, { speech: 2, laughRatio: 1 }), 2.1);
+  assert.equal(funBonus({ speech: 0.8, laughMax: 0.5 }, {}), 0);
+  assert.equal(funBonus({ speech: 0.8, laughMax: 0.5 }, { speech: 2, laughMax: 1 }), 2.1);
 });

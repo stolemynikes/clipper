@@ -1,5 +1,5 @@
 // "Is it fun to watch?" signals per rendered clip, on top of chat and viewer clips (loud != funny):
-// laughRatio/cheerRatio (YAMNet, from music_detect), speech (local LLM reads the transcript),
+// laughMax/cheerMax (YAMNet peak score, from music_detect; the share-of-frames ratio was ~always 0 under speech), speech (local LLM reads the transcript),
 // visual (same LLM looks at 4 frames). They only change the score once the learner has proven them (weights start at 0).
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +17,7 @@ import { sourceContext } from '../vod-clipper/analyze.ts';
 
 const log = logger('judge');
 const OLLAMA = process.env.OLLAMA_HOST ?? 'http://127.0.0.1:11434';
-export const FUN_SIGNALS = ['laughRatio', 'cheerRatio', 'speech', 'visual'] as const;
+export const FUN_SIGNALS = ['laughMax', 'cheerMax', 'speech', 'visual'] as const;
 export type FunSignals = Partial<Record<(typeof FUN_SIGNALS)[number], number>>;
 
 /** Score bonus from the fun signals (0-1 each) with the learned weights. */
@@ -35,7 +35,7 @@ export async function useGpu(awayMin: number): Promise<boolean> {
   }
 }
 
-async function ask(model: string, gpu: boolean, prompt: string, images?: string[]): Promise<{ score: number; why: string }> {
+export async function ask(model: string, gpu: boolean, prompt: string, images?: string[]): Promise<{ score: number; why: string }> {
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST',
     body: JSON.stringify({
@@ -66,11 +66,12 @@ Transcript:
 """${transcript.slice(0, 1500)}"""
 Return JSON: "score" 0-10, "why" one short sentence.`;
 
-const VISUAL_PROMPT = `These are 4 frames from a short vertical stream clip, in order. Rate 0-10 how much is visibly happening that makes people keep watching:
+export const VISUAL_PROMPT = `These are 4 frames from a short stream clip, in order. Rate 0-10 how much is visibly happening that makes people keep watching:
 a strong facial reaction, action in the game, something surprising on screen. A static menu, a website, or a calm face scores low.
+Ignore captions, chat boxes and title text drawn on top: an editor added those, they are not what happens.
 Return JSON: "score" 0-10, "why" one short sentence.`;
 
-async function frames(file: string, dur: number): Promise<string[]> {
+export async function frames(file: string, dur: number): Promise<string[]> {
   const out: string[] = [];
   for (const f of [0.2, 0.4, 0.6, 0.8]) {
     const jpg = await runCmd('powershell', ['-NoProfile', '-Command', // binary stdout via base64: runCmd returns text
@@ -90,7 +91,7 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
   const model = s.titles?.model ?? 'gemma4:12b';
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;
   const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
-{ laughRatio: music?.laughRatio, cheerRatio: music?.cheerRatio };
+{ laughMax: music?.laughMax, cheerMax: music?.cheerMax };
   try {
     const gpu = await useGpu(s.judge?.awayMin ?? 10);
     if (gpu) stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM
