@@ -49,44 +49,49 @@ streamers:
         platforms: [tiktok, instagram, youtube, x]
         audience: "At least 50% from US, CA, AU, UK, NZ"
 
-  # Content Rewards "Kai Cenat - $10,000 GTA 6 Pool Campaign" (Clipped & Shipped), seen 2026-11-24, not joined yet.
-  # Full rules + 3 files unlock after joining: paste them, then switch stage to clips.
+  # Content Rewards "Kai Cenat - $10,000 GTA 6 Pool Campaign" (Clipped & Shipped), joined 2026-11-24.
+  # Brief: source only his GTA 6 marathon (Twitch + YouTube), Kai playing GTA 6 as main focus, caption #KaiCenat.
+  # Rules doc (Google Drive link on the page) not read yet.
   # Campaign page: https://contentrewards.com/c/campaigns/1d2bcb00-c904-415f-aa82-f95b96baad86
   - name: kaicenat
     platform: twitch
     channel: kaicenat
     tag: "@KaiCenat"
-    stage: study # no VOD clips until the rules are known
     campaign:
       platform: content_rewards
       url: https://contentrewards.com/c/campaigns/1d2bcb00-c904-415f-aa82-f95b96baad86
       ratePer1k: 0 # pool campaign: split by views, paid when the pool ends
       maxPerClip: 0
       pool: 10000
-      endsAt: 2026-11-30 # not on the page ("when the pool ends"); assumed month end, check after joining
+      endsAt: 2026-11-30 # not on the page ("when the pool ends"); assumed month end like Clix
       rules:
         minViews: 750000 # total views to share the pool
+        hashtags: ["#KaiCenat"]
         minClipViews: 1000 # a clip counts only from 1K views
-        sourceFrom: 2026-11-19 # GTA 6 streams only; assumed marathon start like Silky, check the brief
+        noNegative: true # assumed, not in the brief
+        sourceFrom: 2026-11-19 # GTA 6 marathon only; start date assumed, Kai must be the main focus
         platforms: [tiktok, instagram, youtube, x]
 
-  # Content Rewards "$12,500 LACY GTA VI Marathon Pool Campaign" (Reach), seen 2026-11-24, not joined yet.
-  # Brief: reachclipping.com (link truncated on the page). 1 creator requirement + 2 files unlock after joining.
+  # Content Rewards "$12,500 LACY GTA VI Marathon Pool Campaign" (Reach), joined 2026-11-24.
+  # Brief: caption must include #Lacy. Creator requirement: "LACY/STREAMER CLIPPERS".
+  # Reach rules page (link on the campaign page) not read yet; noLogos/noNegative copied from Reach's Clix/Silky briefs.
   # Campaign page: https://contentrewards.com/c/campaigns/a5c63fad-cd53-4b81-9305-4a2d1696872a
   - name: lacy
     platform: twitch
     channel: lacy
     tag: "@Lacy"
-    stage: study # no VOD clips until the rules are known
     campaign:
       platform: content_rewards
       url: https://contentrewards.com/c/campaigns/a5c63fad-cd53-4b81-9305-4a2d1696872a
       ratePer1k: 0
       maxPerClip: 0
       pool: 12500
-      endsAt: 2026-11-30 # assumed, check after joining
+      endsAt: 2026-11-30 # assumed month end like Clix
       rules:
         minViews: 750000
+        hashtags: ["#Lacy"]
         minClipViews: 500
-        sourceFrom: 2026-11-19 # GTA VI marathon only; assumed start, check the brief
+        noLogos: true
+        noNegative: true
+        sourceFrom: 2026-11-19 # GTA VI marathon only; start date assumed
         platforms: [tiktok, instagram, youtube, x]
