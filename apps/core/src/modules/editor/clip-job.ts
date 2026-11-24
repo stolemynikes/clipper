@@ -26,17 +26,18 @@ const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
 const SILENT_DB = -50; // peak below this = mic off / muted stream start: nothing worth clipping
 
-/** Cam box + content crop per clip (cams differ per streamer and per scene); config facecam as fallback. */
-async function detectLayout(src: string, fallback: Rect | null): Promise<Layout> {
+/** Cam box + content crop per clip (cams differ per streamer and per scene), measured on the kept part [start, end]. */
+async function detectLayout(src: string, hint: Rect | null, start: number, end: number): Promise<Layout> {
   try {
     const out = await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'face_track.py'),
-      JSON.stringify({ input: src, hint: fallback, model: join(paths.rootDir, 'assets', 'models', 'blaze_face_short_range.tflite') })]);
+      JSON.stringify({ input: src, hint, start, end, model: join(paths.rootDir, 'assets', 'models', 'blaze_face_short_range.tflite') })]);
     const r = JSON.parse(out) as Layout & { scene: string };
     log.info(`layout: ${r.scene}`);
     return r;
   } catch (e) {
-    log.warn(`face_track failed, using config facecam: ${(e as Error).message}`);
-    return { cam: fallback };
+    // No face found = no cam on top: a guessed cam box shows a blurry wall when the scene has no webcam.
+    log.warn(`face_track failed, showing the whole frame: ${(e as Error).message}`);
+    return { scene: 'nocam', cam: null, content: { x: 0, y: 0, w: 1, h: 1 } };
   }
 }
 
@@ -99,7 +100,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     return log.warn(`moment ${momentId} blocked: ${compliance.blocks.join('; ')}`);
   }
 
-  const layout = await detectLayout(src, cfg.facecam ?? null);
+  const layout = await detectLayout(src, cfg.facecam ?? null, lead, cut);
   const chatFile = join(dir, 'chat.json');
   const chatLines = existsSync(chatFile) ? JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[] : [];
   // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.

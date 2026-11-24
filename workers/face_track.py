@@ -1,6 +1,7 @@
 """Find the layout of a stream clip: scene type, facecam box, and where the action is.
 
-Usage: python face_track.py '{"input": "src.mp4", "model": "assets/models/blaze_face_short_range.tflite", "hint": Rect | null}'
+Usage: python face_track.py '{"input": "src.mp4", "model": "assets/models/blaze_face_short_range.tflite", "hint": Rect | null, "start": s, "end": s}'
+start/end (seconds, optional) = the part that ends up in the clip; a VOD window often switches scene halfway.
 hint = the facecam box from streamers.yaml; used when the detected face sits inside it (edge snapping
 can latch onto game UI, the hand-measured box cannot).
 Input may also be an image (for testing). Prints JSON:
@@ -21,10 +22,11 @@ from mediapipe.tasks.python import BaseOptions, vision
 SAMPLES = 16
 FULLCAM_FACE_W = 0.13  # a face wider than this (of frame width) means the camera fills the scene
 MIN_PRESENCE = 0.3  # a cam face must be seen in at least this share of sampled frames
+MIN_FACE_MOTION = 2.0  # mean frame diff inside a face box; measured: real faces 2.5-10, ornaments/photos in tweets 0.2-1.5
 W, H = 640, 360  # analysis size; fractions are resolution independent
 
 
-def read_frames(path: str) -> list[tuple[np.ndarray, np.ndarray]]:
+def read_frames(path: str, start: float = 0, end: float | None = None) -> list[tuple[np.ndarray, np.ndarray]]:
     """Pairs of frames ~0.2s apart at SAMPLES points; the pair difference is the motion."""
     img = cv2.imread(path) if path.lower().endswith((".jpg", ".png")) else None
     if img is not None:
@@ -32,10 +34,13 @@ def read_frames(path: str) -> list[tuple[np.ndarray, np.ndarray]]:
         return [(f, f)]
     cap = cv2.VideoCapture(path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
-    gap = max(1, int((cap.get(cv2.CAP_PROP_FPS) or 30) * 0.2))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    gap = max(1, int(fps * 0.2))
+    a0 = min(total - 1, int(start * fps))
+    a1 = max(a0 + 1, min(total, int(end * fps))) if end else total
     pairs = []
     for i in range(SAMPLES):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int((i + 0.5) * total / SAMPLES))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, a0 + int((i + 0.5) * (a1 - a0) / SAMPLES))
         ok_a, a = cap.read()
         for _ in range(gap - 1):
             cap.grab()
@@ -68,18 +73,26 @@ def detect_faces(frames: list[np.ndarray], model: str) -> list[tuple[int, tuple[
     return found
 
 
-def stable_face(found, n_frames: int):
-    """Median box of the face that stays in one place over most frames (filters game characters)."""
-    best = None
+def stable_face(found, n_frames: int, raw: np.ndarray | None = None):
+    """Median box of the face that stays in one place over most frames (filters game characters).
+    raw = mean frame diff: a face that never moves is an ornament or a photo on a web page, not the streamer.
+    A big moving face wins over a smaller, more stable one: that is a just-chatting scene, not a cam overlay."""
+    faces = []
     for _, (x, y, w, h) in found:
         cx, cy = x + w / 2, y + h / 2
         near = [(i, b) for i, b in found if abs(b[0] + b[2] / 2 - cx) < 0.06 and abs(b[1] + b[3] / 2 - cy) < 0.08]
-        frames_seen = len({i for i, _ in near})
-        if best is None or frames_seen > best[0]:
-            best = (frames_seen, near)
-    if best is None or best[0] < max(1, MIN_PRESENCE * n_frames):
+        if len({i for i, _ in near}) < max(1, MIN_PRESENCE * n_frames):
+            continue
+        box = tuple(float(np.median([b[k] for _, b in near])) for k in range(4))
+        if raw is not None:
+            x0, y0 = int(box[0] * W), int(box[1] * H)
+            if raw[y0:y0 + int(box[3] * H) + 1, x0:x0 + int(box[2] * W) + 1].mean() < MIN_FACE_MOTION:
+                continue
+        faces.append((len({i for i, _ in near}), box))
+    if not faces:
         return None
-    return tuple(float(np.median([b[k] for _, b in best[1]])) for k in range(4))
+    big = [f for f in faces if f[1][2] >= FULLCAM_FACE_W]
+    return max(big or faces, key=lambda f: (f[0], f[1][2]))[1]
 
 
 def edge_profile(gray: np.ndarray, axis: int) -> np.ndarray:
@@ -168,10 +181,12 @@ def inside(face, r: dict | None) -> bool:
     return r["x"] <= cx <= r["x"] + r["w"] and r["y"] <= cy <= r["y"] + r["h"]
 
 
-def analyze(path: str, model: str, hint: dict | None = None) -> dict:
-    pairs = read_frames(path)
+def analyze(path: str, model: str, hint: dict | None = None, start: float = 0, end: float | None = None) -> dict:
+    pairs = read_frames(path, start, end)
     frames = [a for a, _ in pairs]
-    face = stable_face(detect_faces(frames, model), len(frames))
+    still = len(pairs) == 1 and pairs[0][0] is pairs[0][1]  # test image: no motion to check
+    raw = None if still else sum(cv2.absdiff(cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)).astype(np.float32) for a, b in pairs) / len(pairs)
+    face = stable_face(detect_faces(frames, model), len(frames), raw)
     motion = motion_map(pairs)
 
     if face is None:
@@ -217,4 +232,4 @@ def analyze(path: str, model: str, hint: dict | None = None) -> dict:
 
 if __name__ == "__main__":
     args = json.loads(sys.argv[1])
-    json.dump(analyze(args["input"], args["model"], args.get("hint")), sys.stdout)
+    json.dump(analyze(args["input"], args["model"], args.get("hint"), args.get("start") or 0, args.get("end")), sys.stdout)
