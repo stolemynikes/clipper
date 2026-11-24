@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { loadSettings } from '../../config.ts';
+import { loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { clips, moments } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -25,10 +25,11 @@ import { transcribe } from './whisper.ts';
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
 const WEBSITE_PENALTY = 0.5;
+const CHAT_HOLD = 10; // s the Twitch chat box stays at least
 const SILENT_DB = -50; // peak below this = mic off / muted stream start: nothing worth clipping
 
 /** Cam box + content crop per clip (cams differ per streamer and per scene), measured on the kept part [start, end]. */
-async function detectLayout(src: string, hint: Rect | null, start: number, end: number): Promise<Layout> {
+async function detectLayout(src: string, hint: StreamerConfig["facecam"], start: number, end: number): Promise<Layout> {
   try {
     const out = await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'face_track.py'),
       JSON.stringify({ input: src, hint, start, end, model: join(paths.rootDir, 'assets', 'models', 'blaze_face_short_range.tflite') })]);
@@ -117,11 +118,15 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   let twitchChat: { file: string; at: number; dur: number } | null = null;
   const vodId = vodIdOf(source.url);
   if (busy && vodId) {
-    const [a, b] = [Math.max(busy[0], lead), Math.min(busy[1], cut)];
+    // Chat stays at least CHAT_HOLD s (a 5s burst felt cut short); shown CHAT_LAG earlier, so it may run up to cut + CHAT_LAG.
+    const [a, b] = [Math.max(busy[0], lead), Math.min(Math.max(busy[1], busy[0] + CHAT_HOLD), cut + CHAT_LAG)];
     try {
       if (b - a < 2) throw new Error('burst outside trimmed clip');
-      await renderTwitchChat({ vodId, from: moment.startSec + a, to: moment.startSec + b, dir, banWords: censor });
-      twitchChat = { file: 'twitch-chat.mov', at: Math.max(0, a - lead - CHAT_LAG), dur: b - a };
+      const mov = await renderTwitchChat({ vodId, from: moment.startSec + a, to: moment.startSec + b, dir, banWords: censor });
+      const at = Math.max(0, a - lead - CHAT_LAG);
+      // Fade-out needs the real end: the render can be shorter than asked, and it must end before the clip does.
+      const real = Number(await runCmd('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', mov])) || b - a;
+      twitchChat = { file: 'twitch-chat.mov', at, dur: Math.min(b - a, real, durationSec - at) };
     } catch (e) {
       log.warn(`twitch chat render failed, using caption chat: ${(e as Error).message}`);
     }

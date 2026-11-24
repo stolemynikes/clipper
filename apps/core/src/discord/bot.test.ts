@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { StreamerConfig } from '../config.ts';
-import { categoryName, clipEmbed, infoEmbed, statsText, totalsText } from './bot.ts';
+import { categoryName, clipCard, infoEmbed, statsText, totalsText } from './bot.ts';
 
 const acct = (o: Partial<{ streamer: string; platform: 'tiktok' | 'youtube'; name: string; pool: boolean; posts: number; views: number; earned: number }>) =>
   ({ id: 1, platform: 'tiktok' as const, name: 'acc', streamer: 'lacy', pool: false, posts: 1, views: 1000, earned: 1, ...o });
@@ -49,10 +49,15 @@ test('totals: money only from rate campaigns, clips per status', () => {
   assert.match(t, /• lacy: 1 posts, 12,000 views, \$3\.50\n• kai: 1 posts, 8,000 views\n/);
 });
 
-test('clip card: hook in italics, caption shown, warnings only when present', () => {
-  const e = clipEmbed({ title: 'Lacy loses it', hook: 'Wait for it', caption: 'Lacy loses it #ad @lacy', seconds: 23.4, why: ['Chat got busy'], warnings: [] });
-  assert.equal(e.description, '*Wait for it*');
-  assert.deepEqual(e.fields?.map((f) => f.name), ['Length', 'Status', 'Caption', 'Why this moment']);
-  assert.equal(e.fields?.[0].value, '23s');
-  assert.equal(clipEmbed({ rating: 9, title: 't', hook: null, caption: 'c', seconds: 5, why: [], warnings: [] }).fields?.[0].value, '**9**/10 · Strong');
+test('clip card: status sets the tint, video inside, buttons only while waiting', () => {
+  const d = { clipId: 7, rating: 9, title: 'Lacy loses it', hook: 'Wait for it', caption: 'Lacy loses it #ad @lacy', seconds: 23.4, why: ['Chat got busy'], warnings: [], media: 'attachment://clip-7.mp4' };
+  const j = JSON.stringify(clipCard(d, 'new').toJSON());
+  assert.equal(clipCard(d, 'new').toJSON().accent_color, 0xf59e0b);
+  assert.equal((clipCard(d, 'new').toJSON().components[0] as { content: string }).content, '## Lacy loses it\n*Wait for it*');
+  assert.match(j, /\*\*9\/10\*\* Strong  ·  23s  ·  🟡 Waiting for you/);
+  assert.match(j, /attachment:\/\/clip-7\.mp4/);
+  assert.match(j, /keep:7/);
+  const kept = clipCard(d, 'kept').toJSON();
+  assert.equal(kept.accent_color, 0x22c55e);
+  assert.doesNotMatch(JSON.stringify(kept), /keep:7|Check this/);
 });

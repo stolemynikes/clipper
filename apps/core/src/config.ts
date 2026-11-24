@@ -23,12 +23,15 @@ export interface Settings {
 
 export interface AutoKeep { enabled: boolean; minViewerClips: number; minChatRate: number }
 
+/** exact: the measured webcam border, used as is (edge snap is skipped; it found door frames inside the room). */
+export interface FacecamBox { x: number; y: number; w: number; h: number; exact?: boolean }
+
 export interface StreamerConfig {
   name: string;
   enabled?: boolean;
   platform: 'twitch' | 'kick' | 'youtube';
   channel: string;
-  facecam?: { x: number; y: number; w: number; h: number } | null; // fractions of the source frame
+  facecam?: FacecamBox | FacecamBox[] | null; // fractions of the source frame; list = one box per scene
   captionStyle?: CaptionStyle; // bold | pop | clean; overrides settings.clip.captionStyle
   tag: string;
   stage?: 'study' | 'clips'; // study: learn from top clips first, no VODs; clips (or unset): make clips

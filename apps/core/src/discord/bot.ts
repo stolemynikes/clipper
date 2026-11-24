@@ -6,7 +6,8 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, Events, GatewayIntentBits, PermissionFlagsBits,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, ContainerBuilder, Events, GatewayIntentBits, MediaGalleryBuilder,
+  MediaGalleryItemBuilder, MessageFlags, PermissionFlagsBits, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder,
   type APIEmbed, type ButtonInteraction, type ChatInputCommandInteraction, type ForumChannel, type Guild, type ThreadChannel,
 } from 'discord.js';
 import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
@@ -30,7 +31,7 @@ type Tag = (typeof TAGS)[number];
 const OLD = ['information', 'review', 'posted', 'controls', 'stats', 'overview', 'clips'] as const; // earlier layouts, removed on sync
 
 type Hub = { category: string; forum?: string; post?: string; statsMsg?: string } & Partial<Record<(typeof OLD)[number], string>>;
-type State = { general?: Hub; hubs: Record<string, Hub>; clips: Record<string, string> }; // clips: clip id -> post (thread) id
+type State = { general?: Hub; hubs: Record<string, Hub>; clips: Record<string, string>; cards?: Record<string, CardData> }; // clips: clip id -> post (thread) id
 const load = (): State => {
   const s = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {};
   return s.hubs ? s : { hubs: Object.fromEntries(Object.entries(s).filter(([, v]) => (v as Hub)?.category)) as Record<string, Hub>, clips: {} }; // first layout kept hubs at the top level
@@ -180,17 +181,26 @@ const reviewButtons = (id: number, decided: boolean) => row(...[
   new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(`${reviewUrl()}/#clip-${id}`).setLabel('Open review page'),
 ]);
 
-/** Clip card: title, hook, the caption that will be posted, why it was picked and what to check. */
-export function clipEmbed(o: { rating?: number; title: string; hook: string | null; caption: string; seconds: number; why: string[]; warnings: string[]; autoKept?: boolean }): APIEmbed {
-  const fields = [
-    ...(o.rating ? [{ name: 'Rating', value: `**${o.rating}**/10 · ${o.rating >= 8 ? 'Strong' : o.rating >= 5 ? 'Good' : 'Weak'}`, inline: true }] : []),
-    { name: 'Length', value: `${Math.round(o.seconds)}s`, inline: true },
-    { name: 'Status', value: o.autoKept ? '✅ Auto-kept' : '🟡 Waiting for you', inline: true },
-    { name: 'Caption', value: o.caption.slice(0, 1024), inline: false },
-  ];
-  if (o.why.length) fields.push({ name: 'Why this moment', value: o.why.map((r) => `• ${r}`).join('\n').slice(0, 1024), inline: false });
-  if (o.warnings.length) fields.push({ name: 'Check this', value: o.warnings.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
-  return { title: o.title.slice(0, 256), description: o.hook ? `*${o.hook}*` : undefined, color: o.autoKept ? COLOR.kept : COLOR.new, fields };
+export type CardData = { clipId: number; rating?: number; title: string; hook: string | null; caption: string; seconds: number; why: string[]; warnings: string[]; media?: string };
+export type CardStatus = 'new' | 'auto' | 'kept' | 'skipped';
+const CARD: Record<CardStatus, [string, number]> = {
+  new: ['🟡 Waiting for you', COLOR.new], auto: ['✅ Auto-kept', COLOR.kept], kept: ['✅ Kept · it will be posted', COLOR.kept], skipped: ['❌ Skipped', COLOR.skipped],
+};
+const grade = (r: number) => (r >= 8 ? 'Strong' : r >= 5 ? 'Good' : 'Weak');
+
+/** Clip card (Components V2): a rounded container tinted by status, with the video inside and the buttons at the bottom. */
+export function clipCard(o: CardData, status: CardStatus): ContainerBuilder {
+  const [label, color] = CARD[status];
+  const text = (t: string) => new TextDisplayBuilder().setContent(t.slice(0, 1900));
+  const meta = [o.rating ? `**${o.rating}/10** ${grade(o.rating)}` : null, `${Math.round(o.seconds)}s`, label].filter(Boolean).join('  ·  ');
+  const c = new ContainerBuilder().setAccentColor(color)
+    .addTextDisplayComponents(text(`## ${o.title}${o.hook ? `\n*${o.hook}*` : ''}`), text(meta));
+  if (o.media) c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(o.media)));
+  c.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large))
+    .addTextDisplayComponents(text(`**Caption**\n> ${o.caption}`));
+  if (o.why.length) c.addTextDisplayComponents(text(`**Why this moment**\n${o.why.map((r) => `• ${r}`).join('\n')}`));
+  if (o.warnings.length) c.addTextDisplayComponents(text(`**Check this**\n${o.warnings.map((w) => `⚠️ ${w}`).join('\n')}`));
+  return c.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(reviewButtons(o.clipId, status !== 'new'));
 }
 
 /** Small copy of the clip for Discord's 10MB upload cap: 720p, bitrate fitted to the length. The real clip is untouched. */
@@ -217,15 +227,14 @@ export async function discordReview(o: { clipId: number; streamer: string; file:
   const paid = (cfg?.campaign?.disclosure ?? clip.disclosure) && clip.disclosureInText;
   const caption = postText('tiktok', { title, streamer: o.streamer, tag: cfg?.tag ?? '', disclosure: paid ? clip.disclosureText : null }).title;
   const video = await preview(o.file, o.seconds).catch((e) => (log.warn('preview failed', { error: String(e) }), null));
+  const name = `clip-${o.clipId}.mp4`;
+  const card: CardData = { clipId: o.clipId, rating: o.rating, title, hook: o.hook, caption, seconds: o.seconds, why: reasons(o.signals), warnings: o.warnings, media: video ? `attachment://${name}` : undefined };
   const post = await forum.threads.create({
     name: title.slice(0, 95) || `Clip ${o.clipId}`,
     appliedTags: tagIds(forum, [o.autoKept ? 'kept' : 'new']),
-    message: {
-      embeds: [clipEmbed({ rating: o.rating, title, hook: o.hook, caption, seconds: o.seconds, why: reasons(o.signals), warnings: o.warnings, autoKept: o.autoKept })],
-      files: video ? [{ attachment: video, name: `clip-${o.clipId}.mp4` }] : [],
-      components: [reviewButtons(o.clipId, !!o.autoKept)],
-    },
+    message: { flags: MessageFlags.IsComponentsV2, components: [clipCard(card, o.autoKept ? 'auto' : 'new')], files: video ? [{ attachment: video, name }] : [] },
   });
+  (state.cards ??= {})[o.clipId] = card;
   state.clips[o.clipId] = post.id;
   save(state);
   return true;
@@ -248,11 +257,10 @@ async function onButton(db: Db, i: ButtonInteraction) {
   const [what, arg] = i.customId.split(':');
   if (what === 'keep' || what === 'skip') {
     const ok = decide(db, Number(arg), what === 'keep');
-    const keep = what === 'keep', card = { ...i.message.embeds[0]?.toJSON() } as APIEmbed;
-    const label = ok ? (keep ? '✅ Kept: it will be posted' : '❌ Skipped') : 'Already decided';
-    card.fields = (card.fields ?? []).map((f) => (f.name === 'Status' ? { ...f, value: label } : f));
-    if (ok) card.color = keep ? COLOR.kept : COLOR.skipped;
-    await i.update({ embeds: [card], components: [reviewButtons(Number(arg), true)] });
+    const card = load().cards?.[arg];
+    if (!ok) await i.reply({ content: 'Already decided.', ephemeral: true });
+    else if (card) await i.update({ components: [clipCard(card, what === 'keep' ? 'kept' : 'skipped')] });
+    else await i.update({ components: [] }); // older embed post: just drop the buttons
     if (ok) await setTags(i.channelId, [what === 'keep' ? 'kept' : 'skipped']);
     return syncDiscord(db); // totals change
   }

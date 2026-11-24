@@ -12,7 +12,8 @@ const fill = (w: number, h: number) => `scale=${w}:${h}:force_original_aspect_ra
 export function filterGraph(layout: Layout, assFile: string, fontsDir: string, chat?: { at: number; dur: number; x: number; y: number }): string {
   const subs = `ass=${assFile}:fontsdir=${fontsDir}`;
   const end = chat
-    ? `[pre];[1:v]fade=in:st=0:d=0.2:alpha=1,fade=out:st=${Math.max(0, chat.dur - 0.3).toFixed(2)}:d=0.3:alpha=1,setpts=PTS+${chat.at.toFixed(2)}/TB[ch];`
+    // PTS-STARTPTS: the chat render does not start at t=0, so fade times would miss without it. trim: fade-out always fully inside.
+    ? `[pre];[1:v]setpts=PTS-STARTPTS,trim=duration=${chat.dur.toFixed(2)},fade=in:st=0:d=0.3:alpha=1,fade=out:st=${Math.max(0, chat.dur - 0.5).toFixed(2)}:d=0.5:alpha=1,setpts=PTS+${chat.at.toFixed(2)}/TB[ch];`
       + `[pre][ch]overlay=${chat.x}:${chat.y}:eof_action=pass,${subs}[v]`
     : `,${subs}[v]`;
   const { cam, content } = layout;

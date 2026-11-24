@@ -79,6 +79,7 @@ streamers:
   - name: lacy
     platform: twitch
     channel: lacy
+    facecam: [{ x: 0.0, y: 0.0, w: 0.258, h: 0.254, exact: true }] # top-left webcam, his chat overlay right below it (measured Nov 2026); edge snap hit the door frame
     tag: "@Lacy"
     campaign:
       platform: content_rewards

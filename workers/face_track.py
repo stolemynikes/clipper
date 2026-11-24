@@ -153,18 +153,22 @@ def motion_map(pairs) -> np.ndarray:
 CAM_ASPECT = 1080 / 768  # top panel of the cam layout
 STATIC_SHARE = 0.25  # measured: browser scene moves in ~3% of pixels, gameplay in ~100%
 GAMEPLAY_SHARE = 0.6  # above this share of moving pixels the scene is gameplay
-FACE_ZOOM = 4  # face fills ~1/4 of the panel width: close, still shows hands and reactions
+FACE_ZOOM = 5.5  # face ~1/5 of the panel width: shows head, hands and room (4 cut foreheads, felt zoomed in)
+FACE_Y = 0.42  # face center at 42% of the window height: headroom above, no cut forehead
+CAM_INSET = 0.01  # stay 1% inside the detected border: a sliver of overlay/chat showed at the edge
 
 
 def center_on_face(cam: dict, face, aspect: float) -> dict:
-    """Window of the panel aspect inside the cam box, centered on the face (clamped to the box), at most
+    """Window of the panel aspect inside the cam box, around the face (clamped to the box), at most
     FACE_ZOOM face-widths wide. A hint box wider than the real webcam would otherwise show HUD and a tiny face."""
     fx, fy, fw, fh = face
     cx, cy = fx + fw / 2, fy + fh / 2
-    w_px = min(cam["w"] * W, cam["h"] * H * aspect, fw * W * FACE_ZOOM)
+    i = CAM_INSET
+    bx, by, bw, bh = cam["x"] + i, cam["y"] + i, cam["w"] - 2 * i, cam["h"] - 2 * i
+    w_px = min(bw * W, bh * H * aspect, fw * W * FACE_ZOOM)
     w, h = w_px / W, w_px / aspect / H
-    x = min(max(cx - w / 2, cam["x"]), cam["x"] + cam["w"] - w)
-    y = min(max(cy - h / 2, cam["y"]), cam["y"] + cam["h"] - h)
+    x = min(max(cx - w / 2, bx), bx + bw - w)
+    y = min(max(cy - h * FACE_Y, by), by + bh - h)
     return rect(x, y, w, h)
 
 
@@ -181,14 +185,21 @@ def inside(face, r: dict | None) -> bool:
     return r["x"] <= cx <= r["x"] + r["w"] and r["y"] <= cy <= r["y"] + r["h"]
 
 
-def analyze(path: str, model: str, hint: dict | None = None, start: float = 0, end: float | None = None) -> dict:
+def pick_hint(hints, face) -> dict | None:
+    """Smallest configured cam box holding the face. An exact box is the measured webcam border; others are loose."""
+    hits = [h for h in hints if inside(face, h)]
+    return min(hits, key=lambda h: h["w"] * h["h"]) if hits else None
+
+
+def analyze(path: str, model: str, hint: dict | list | None = None, start: float = 0, end: float | None = None) -> dict:
+    hints = hint if isinstance(hint, list) else [hint] if hint else []
     pairs = read_frames(path, start, end)
     frames = [a for a, _ in pairs]
     still = len(pairs) == 1 and pairs[0][0] is pairs[0][1]  # test image: no motion to check
     raw = None if still else sum(cv2.absdiff(cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)).astype(np.float32) for a, b in pairs) / len(pairs)
     found = detect_faces(frames, model)
     # Known webcam box: look there first. Realistic game faces (GTA 6) elsewhere are big and would win as "fullcam".
-    in_hint = [f for f in found if inside(f[1], hint)]
+    in_hint = [f for f in found if any(inside(f[1], h) for h in hints)]
     # No motion filter in the hint: a streamer sitting still in his webcam is not an ornament.
     face = (stable_face(in_hint, len(frames)) if in_hint else None) or stable_face(found, len(frames), raw)
     motion = motion_map(pairs)
@@ -204,7 +215,11 @@ def analyze(path: str, model: str, hint: dict | None = None, start: float = 0, e
         return {"scene": "fullcam", "cam": None, "content": best_window(weight, 9 / 16)}
 
     box = cam_rect(face, frames)
-    if inside(face, hint):
+    hint = pick_hint(hints, face)
+    if hint and hint.get("exact"):
+        # Measured border: the edge snap found door frames and walls inside the room (cut forehead, Nov 2026).
+        box = rect(hint["x"], hint["y"], hint["w"], hint["h"])
+    elif hint:
         # Hint = the webcam border; the edge snap can tighten it (smaller cam in other scenes) but not widen it.
         both = intersect(hint, box)
         box = both if both and inside(face, both) else hint
