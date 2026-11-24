@@ -20,5 +20,5 @@ export const paths = {
 };
 
 /** Keys the user must provide; values are never logged. */
-export const requiredKeys = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET'] as const;
-export const optionalKeys = ['ANTHROPIC_API_KEY'] as const;
+export const requiredKeys = ['BARK_URL', 'BARK_KEY', 'REVIEW_HOST', 'REVIEW_URL', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET'] as const;
+export const optionalKeys = ['ANTHROPIC_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'] as const;

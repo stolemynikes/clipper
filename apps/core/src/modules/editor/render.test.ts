@@ -1,0 +1,49 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { ffmpegArgs, filterGraph } from './render.ts';
+
+test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
+  const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
+  assert.match(g, /crop=iw\*0\.25:ih\*0\.25:iw\*0\.75:ih\*0/);
+  assert.match(g, /scale=1080:768/);
+  assert.match(g, /scale=1080:1152/);
+  assert.match(g, /vstack,ass=subs\.ass:fontsdir=\.\.\/fonts\[v\]$/);
+});
+
+test('no facecam: plain center crop', () => {
+  assert.equal(filterGraph({}, 's.ass', 'f'),
+    '[0:v]crop=ih*9/16:ih,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,ass=s.ass:fontsdir=f[v]');
+});
+
+test('detected content rect replaces the center crop', () => {
+  const g = filterGraph({ cam: { x: 0, y: 0.05, w: 0.35, h: 0.39 }, content: { x: 0.4, y: 0, w: 0.53, h: 1 } }, 's.ass', 'f');
+  assert.match(g, /\[b\]crop=iw\*0\.53:ih\*1:iw\*0\.4:ih\*0,scale=1080:1152/);
+  assert.match(filterGraph({ content: { x: 0.3, y: 0, w: 0.32, h: 1 } }, 's.ass', 'f'), /^\[0:v\]crop=iw\*0\.32:ih\*1:iw\*0\.3:ih\*0,scale=1080:1920/);
+});
+
+test('encoder choice', () => {
+  assert.ok(ffmpegArgs('i', 'o', 'g', 'h264_nvenc').includes('h264_nvenc'));
+  assert.ok(ffmpegArgs('i', 'o', 'g', 'libx264').includes('libx264'));
+});
+
+test('nocam: whole content on a blurred background, centered', () => {
+  const g = filterGraph({ scene: 'nocam', content: { x: 0.1, y: 0, w: 0.75, h: 1 } }, 's.ass', 'f');
+  assert.match(g, /boxblur/);
+  assert.match(g, /\[b\]crop=iw\*0\.75:ih\*1:iw\*0\.1:ih\*0,scale=1080:-2/);
+  assert.match(g, /overlay=0:\(H-h\)\/2,ass=s\.ass:fontsdir=f\[v\]$/);
+});
+
+test('dead air: trims to 1s before the first word only when the gap is over 3s', async () => {
+  const { deadAirLead } = await import('./clip-job.ts');
+  assert.equal(deadAirLead([{ w: 'oh', s: 12.5, e: 12.8 }]), 11.5);
+  assert.equal(deadAirLead([{ w: 'oh', s: 2, e: 2.3 }]), 0);
+  assert.equal(deadAirLead([]), 0);
+  assert.deepEqual(ffmpegArgs('i', 'o', 'g', 'libx264', 11.5).slice(4, 8), ['-ss', '11.50', '-i', 'i']);
+});
+
+test('cam + static screen: whole frame on blur below the cam', () => {
+  const g = filterGraph({ scene: 'cam', cam: { x: 0, y: 0, w: 0.2, h: 0.2 }, content: { x: 0, y: 0, w: 1, h: 1 }, fit: 'full' }, 's.ass', 'f');
+  assert.match(g, /\[c\]scale=1080:1152.*boxblur/);
+  assert.match(g, /\[d\]crop=iw\*1:ih\*1:iw\*0:ih\*0,scale=1080:-2/);
+  assert.match(g, /\[top\]\[bot\]vstack/);
+});

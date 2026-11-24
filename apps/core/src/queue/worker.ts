@@ -11,6 +11,8 @@ export interface WorkerOptions {
   signal?: AbortSignal;
   /** Called once a job has used its last attempt (Telegram alert in phase 1). */
   onFinalFailure?: (job: Job) => void | Promise<void>;
+  /** While true, no new jobs are claimed (Telegram /pause). */
+  paused?: () => boolean;
 }
 
 const log = logger('worker');
@@ -40,6 +42,6 @@ export async function runWorker(db: Db, handlers: Record<string, Handler>, opts:
   const recovered = recoverStale(db, opts.staleMs ?? 60 * 60_000);
   if (recovered) log.warn(`requeued ${recovered} stale running job(s)`);
   while (!opts.signal?.aborted) {
-    if (!(await runOnce(db, handlers, opts))) await sleep(opts.pollMs ?? 2000, undefined, { signal: opts.signal }).catch(() => {});
+    if (opts.paused?.() || !(await runOnce(db, handlers, opts))) await sleep(opts.pollMs ?? 2000, undefined, { signal: opts.signal }).catch(() => {});
   }
 }

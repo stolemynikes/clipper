@@ -10,6 +10,8 @@
   },
   "scripts": {
     "doctor": "npm run doctor -w @clip/core",
+    "start": "npm start -w @clip/core",
+    "clip": "npm run clip -w @clip/core --",
     "hardware": "npm run hardware -w @clip/core",
     "db:generate": "npm run db:generate -w @clip/core",
     "test": "npm test -w @clip/core",

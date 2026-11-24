@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "doctor": "node src/doctor.ts",
+    "start": "node src/main.ts",
+    "clip": "node src/clip.ts",
     "hardware": "node src/hardware.ts --write",
     "db:generate": "drizzle-kit generate",
     "test": "node --test \"src/**/*.test.ts\"",
@@ -12,6 +14,7 @@
   "dependencies": {
     "better-sqlite3": "^13.2.0",
     "drizzle-orm": "^0.45.4",
+    "grammy": "^1.48.0",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
