@@ -59,10 +59,10 @@ test('styles: font in style line, pop adds scale animation, clean uses a box', (
 });
 
 test('hook burned in for the whole clip, braces stripped', () => {
-  const ass = buildAss({ words, durationSec: 10, tag: '@Streamer', disclosure: '#ad', hook: 'He {did} WHAT?' });
+  const ass = buildAss({ words, durationSec: 10, tag: '@Streamer', disclosure: '#ad', hook: 'He {did} WHAT? 😭💀' });
   const line = ass.split('\n').find((l) => l.includes(',Hook,'))!;
   assert.ok(line.startsWith('Dialogue: 0,0:00:00.00,0:00:10.00,Hook,'));
-  assert.ok(line.endsWith('HE DID WHAT?'));
-  assert.ok(line.includes('{\\pos(540,470)\\fad(0,200)'));
+  assert.ok(line.endsWith('}He did WHAT?')); // sentence case kept, emoji dropped
+  assert.ok(line.includes('{\\pos(540,470)\\fad(0,200)}'));
   assert.ok(!buildAss({ words, durationSec: 10, tag: '@S', disclosure: null }).includes(',Hook,,'));
 });

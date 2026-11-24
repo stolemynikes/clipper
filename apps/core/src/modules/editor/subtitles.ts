@@ -62,6 +62,8 @@ const ts = (sec: number) => {
 
 // ASS treats {} and \ as markup; captions must never inject override tags.
 const clean = (t: string) => t.replace(/[{}\\]/g, '').toUpperCase();
+// Title like top Shorts: white sentence case, black outline. Emoji dropped: libass draws no colour emoji (they go in the post title).
+const hookText = (t: string) => t.replace(/[{}\\]|\p{Extended_Pictographic}|️/gu, '').replace(/\s+/g, ' ').trim();
 
 /** Masks a word whose letters start with a censored stem: "fucking" -> "F******". */
 export function censorWord(w: string, stems: string[]): string {
@@ -99,7 +101,7 @@ export function buildAss(o: AssOptions): string {
   }
   if (o.tag) ev(0, o.durationSec, 'Tag', `{\\pos(540,1560)}${clean(o.tag).toLowerCase()}`);
   // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
-  if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)${POP}}${clean(o.hook)}`);
+  if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)}${hookText(o.hook)}`);
   if (o.disclosure) ev(0, o.disclosureSec ?? 3, 'Disclosure', `{\\pos(70,280)}${clean(o.disclosure)}`);
 
   return `[Script Info]
@@ -114,7 +116,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Caption,${st.font},${st.size},${WHITE},${WHITE},${st.box ? '&H59000000' : BLACK},&H80000000,0,0,0,0,100,100,1,0,${st.box ? 3 : 1},${st.outline},${st.shadow},5,60,60,0,1
 Style: Tag,Russo One,44,&H33FFFFFF,${WHITE},${BLACK},&H80000000,0,0,0,0,100,100,1,0,1,3,0,5,60,60,0,1
 Style: Chat,Russo One,40,${WHITE},${WHITE},&H33101010,&H33101010,0,0,0,0,100,100,0,0,3,14,0,7,60,160,0,1
-Style: Hook,Russo One,72,&H00000000,${WHITE},${YELLOW},${YELLOW},0,0,0,0,100,100,1,0,3,18,0,5,90,90,0,1
+Style: Hook,Montserrat,66,${WHITE},${WHITE},${BLACK},&H80000000,-1,0,0,0,100,100,0,0,1,5,2,5,90,90,0,1
 Style: Disclosure,Russo One,48,${WHITE},${WHITE},&H99000000,&H99000000,0,0,0,0,100,100,1,0,3,10,0,7,60,60,0,1
 
 [Events]
