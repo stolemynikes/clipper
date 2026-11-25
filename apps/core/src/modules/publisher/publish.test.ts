@@ -92,3 +92,8 @@ test('politics blocked on TikTok and X only', () => {
   assert.equal(politicsBlocked('youtube', 'he talks about Trump again'), false);
   assert.equal(politicsBlocked('tiktok', 'he trumped the boss fight'), false);
 });
+
+test('study hashtags go after the required tags and never duplicate them', () => {
+  const o = { title: 'He hit the shot', streamer: 'Clix', tag: '@Clix', disclosure: '#ad', extra: ['#gaming', '#CLIX'] };
+  assert.equal(postText('tiktok', o).title, 'He hit the shot #ad @Clix #Clix #fyp #gaming');
+});

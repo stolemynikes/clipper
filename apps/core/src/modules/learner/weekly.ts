@@ -46,11 +46,22 @@ export async function weeklyShorts(max = 25) {
 }
 
 /** What the editor and title writer take from the last weekly study; empty until it has run. */
-export function weeklyInsights(): { at: string | null; titles: string[]; wordsPerLine: number | null } {
+/** Hashtags that 3+ top Shorts from 2+ channels use, minus any channel or streamer name (no other streamers' tags) and the ones we always add. Max 3. */
+export function genericHashtags(shorts: Pick<ShortFacts, 'channel' | 'hashtags'>[], names: string[] = []) {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const banned = [...shorts.map((f) => norm(f.channel)), ...names.map(norm)].filter((n) => n.length >= 3);
+  const seen = new Map<string, Set<string>>(), uses = new Map<string, number>();
+  for (const f of shorts) for (const h of new Set(f.hashtags.map(norm))) { uses.set(h, (uses.get(h) ?? 0) + 1); seen.set(h, (seen.get(h) ?? new Set()).add(f.channel)); }
+  return [...uses].filter(([h, n]) => h.length >= 3 && n >= 3 && seen.get(h)!.size >= 2 && !['shorts', 'fyp', 'reels', 'ad'].includes(h) && !banned.some((b) => h.includes(b) || b.includes(h)))
+    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h]) => `#${h}`);
+}
+
+export function weeklyInsights(names: string[] = []): { at: string | null; titles: string[]; wordsPerLine: number | null; hashtags: string[]; titleLen: number | null } {
   try {
     const { at, shorts } = JSON.parse(readFileSync(file(), 'utf8')) as { at: string; shorts: ShortFacts[] };
     const wpl = shorts.map((f) => f.look?.subs.wordsPerLine).filter((x): x is number => !!x);
     // shortcut: wordsPerLine undercounts when captions highlight word by word (each color change counts as a new line); clamp 2-4.
-    return { at, titles: [...shorts].sort((a, b) => b.views - a.views).slice(0, 5).map((f) => f.title), wordsPerLine: wpl.length >= 5 ? Math.min(4, Math.max(2, Math.round(median(wpl)))) : null };
-  } catch { return { at: null, titles: [], wordsPerLine: null }; }
+    return { at, titles: [...shorts].sort((a, b) => b.views - a.views).slice(0, 5).map((f) => f.title), wordsPerLine: wpl.length >= 5 ? Math.min(4, Math.max(2, Math.round(median(wpl)))) : null,
+      hashtags: genericHashtags(shorts, names), titleLen: shorts.length >= 5 ? Math.min(100, Math.max(30, median(shorts.map((f) => f.title.length)))) : null };
+  } catch { return { at: null, titles: [], wordsPerLine: null, hashtags: [], titleLen: null }; }
 }

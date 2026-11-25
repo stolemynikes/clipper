@@ -79,7 +79,7 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   const live = tweaks(); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
   const target = settings.clip.targetSec ?? [settings.clip.minSec, maxSec];
   const trimFor = (ch: Change) => trimWindow({ words: t.words, durationSec: moment.endSec - moment.startSec, peakRel, windowSec: sc.windowSec,
-    tailSec: sc.tailSec ?? 0, targetSec: [target[0], Math.max(target[0], ch.maxLen ?? target[1])], minSec: settings.clip.minSec, maxSec, leadSec: ch.leadSec });
+    tailSec: sc.tailSec ?? 0, targetSec: [target[0], Math.max(target[0], ch.maxLen ?? target[1])], minSec: settings.clip.minSec, maxSec, leadSec: ch.leadSec, deadAirSec: ch.deadAirSec });
   const { start: lead, end: cut } = trimFor(live);
   const words = t.words.filter((w) => w.s >= lead && w.s < cut).map((w) => ({ ...w, s: w.s - lead, e: Math.min(w.e, cut) - lead }));
   if ((peakDb ?? 0) < SILENT_DB) {
@@ -156,16 +156,18 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
       captionY: Math.min(1560, base + (ch.captionShift ?? 0)), chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
     }));
     // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
-    const graph = filterGraph(layout, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
+    const own = ch.gameCrop?.[cfg.name]; // only the plain cam scene: stack/full layouts already pick their own content
+    const lay = own && layout.cam && !layout.fit ? { ...layout, content: own } : layout;
+    const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead,
-      duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
-      twitchChat?.file ?? null), { cwd: dir });
+      duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
+      twitchChat?.file ?? null, ch.lufs), { cwd: dir });
   };
   await encode('clip.mp4', live);
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
-  const props = practice ? activeProposals() : [];
+  const props = practice ? activeProposals().filter((p) => !p.change.gameCrop || p.change.gameCrop[cfg.name]) : [];
   for (const p of props) {
     if (!isLength(p.change)) { await encode(`clip-${p.id}.mp4`, { ...live, ...p.change }); continue; }
     // Length: only the cut moves, judged on the transcripts, so no encode needed.

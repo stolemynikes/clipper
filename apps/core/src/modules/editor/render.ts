@@ -79,13 +79,14 @@ export function duckFilter(spans: [number, number][], vol = 0.5, ramp = 0.5): st
 }
 
 /** Same loudness on every clip (TikTok/Shorts play around -14 LUFS); LRA 7 tames shouting and explosions. */
-export const LOUDNORM = 'loudnorm=I=-14:LRA=7:TP=-1.5,aresample=48000';
+export const loudnorm = (lufs = -14) => `loudnorm=I=${lufs}:LRA=7:TP=-1.5,aresample=48000`; // a sound proposal may change lufs
+export const LOUDNORM = loudnorm();
 
-export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null): string[] {
+export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null, lufs = -14): string[] {
   const video = encoder === 'h264_nvenc'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
   return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, ...(overlayInput ? ['-i', overlayInput] : []), '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
-    '-af', audioFilter ? `${audioFilter},${LOUDNORM}` : LOUDNORM,
+    '-af', audioFilter ? `${audioFilter},${loudnorm(lufs)}` : loudnorm(lufs),
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }

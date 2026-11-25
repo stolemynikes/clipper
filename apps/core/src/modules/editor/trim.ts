@@ -11,6 +11,7 @@ export interface TrimInput {
   targetSec: [number, number];
   minSec: number;
   maxSec: number;
+  deadAirSec?: number; // silence at the start before it is cut; default 3 (a sound proposal may change it)
   leadSec?: number; // build-up before the peak; default LEAD_SEC (a length proposal may change it)
 }
 
@@ -40,6 +41,6 @@ export function trimWindow(o: TrimInput): { start: number; end: number } {
   let start = starts.length ? starts.reduce((a, b) => (Math.abs(b - ideal) < Math.abs(a - ideal) ? b : a)) : ideal;
   // Dead air at the start loses viewers: begin 1s before the first word if nobody talks for 3s (keeping minSec).
   const first = ws.find((w) => w.s >= start);
-  if (first && first.s - start > 3) start = Math.max(start, Math.min(first.s - 1, end - o.minSec));
+  if (first && first.s - start > (o.deadAirSec ?? 3)) start = Math.max(start, Math.min(first.s - 1, end - o.minSec));
   return { start, end };
 }

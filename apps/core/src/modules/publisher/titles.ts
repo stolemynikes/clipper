@@ -62,7 +62,7 @@ export async function generateTitle(transcript: string, streamer: string, model:
   });
   if (!r.ok) throw new Error(`Ollama ${model} failed: ${r.status} ${(await r.text()).slice(0, 200)}`);
   const j = await r.json() as { message?: { content?: string } };
-  const out = cleanTitle(JSON.parse(j.message?.content ?? '{}'));
+  const out = cleanTitle(JSON.parse(j.message?.content ?? '{}'), tweaks().titleMax);
   log.info(`title by ${model} in ${Date.now() - t0} ms`);
   return out;
 }

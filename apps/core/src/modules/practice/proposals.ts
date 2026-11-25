@@ -4,12 +4,16 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from '../../env.ts';
+import type { Rect } from '../editor/render.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
 
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
 export type Change = {
   wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[];
   leadSec?: number; maxLen?: number;
+  duckVol?: number; deadAirSec?: number; lufs?: number; // sound: the frame judge cannot hear, so these come from the sound study (untested)
+  hashtags?: string[]; titleMax?: number; // metadata from the weekly study: added after the required tags, never instead of them
+  gameCrop?: Record<string, Rect>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
 };
 /** Length changes move the cut: judged on the two transcripts, not on frames. */
@@ -87,18 +91,20 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'lead-6', title: 'Shorter build-up (6 s before the peak)', why: 'Gets to the point faster; most viewers decide in the first seconds. Now 12 s.', change: { leadSec: 6 } });
   add({ id: 'lead-18', title: 'Longer build-up (18 s before the peak)', why: 'More context, so the joke lands for someone who never saw the stream. Now 12 s.', change: { leadSec: 18 } });
   add({ id: 'max-20', title: 'Clips at most 20 s', why: 'Nov 24 study: clips under 20 s beat the streamer median 54% vs ~33% for longer. Now up to 26 s.', change: { maxLen: 20 } });
+  // Calibration (docs/practice-calibration.md): lacy's chat overlay (top-right, y < 0.18) cuts into the center crop. Same 1080:1152 shape, below it.
+  add({ id: 'crop-lacy', title: 'Lacy: game part without his chat box', why: 'The judge saw his stream chat overlay inside the game part. It sits top-right; this crop starts below it (zoom 1.2x).', change: { gameCrop: { lacy: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   saveProposals(ps);
 }
 
 /** Metadata from the weekly study becomes an untested proposal, once per study run; live titles never follow the study on their own. */
-export function seedStudy(study: { at: string | null; titles: string[] }) {
-  if (!study.at || !study.titles.length) return;
-  const id = `titles-${study.at.slice(0, 10)}`, ps = proposals();
-  if (ps.some((x) => x.id === id)) return;
-  ps.push({ id, title: "Title style of this week's top Shorts", why: `The title writer copies the style (not the content) of the ${study.titles.length} most-viewed gaming Shorts of the weekly study.`,
-    change: { titleExamples: study.titles }, untested: true, status: 'ready', created: Date.now(), pairs: [], aa: [], frames: [] });
-  saveProposals(ps);
+export function seedStudy(study: { at: string | null; titles: string[]; hashtags?: string[]; titleLen?: number | null }) {
+  if (!study.at) return;
+  const day = study.at.slice(0, 10), note = 'From the weekly study, not tested: real views after posting measure it.';
+  if (study.titles.length) addProposal({ id: `titles-${day}`, title: "Title style of this week's top Shorts", why: `The title writer copies the style (not the content) of the ${study.titles.length} most-viewed gaming Shorts of the weekly study.`, change: { titleExamples: study.titles } });
+  if (study.hashtags?.length) addProposal({ id: `hashtags-${day}`, title: `Add ${study.hashtags.join(' ')}`, why: "General hashtags used by several channels in this week's top gaming Shorts. Added after the streamer tag and #ad, never instead of them.", change: { hashtags: study.hashtags }, evidence: note });
+  // 70 = cleanTitle default; only worth asking when the top Shorts clearly differ.
+  if (study.titleLen && Math.abs(study.titleLen - 70) >= 15) addProposal({ id: `title-len-${day}`, title: `Titles up to ${study.titleLen} characters`, why: `Median title length of this week's top gaming Shorts is ${study.titleLen}. Now up to 70.`, change: { titleMax: study.titleLen }, evidence: note });
 }
 
 /** Untested proposal from a study or the learner; waits for the owner ("ready"). Same id twice is ignored. */

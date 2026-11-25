@@ -11,14 +11,19 @@ Claude scores a sample of practice clips blind and compares with gemma4:12b (doc
 
 **Layout penalty:** -2 or -3 on all 16 clips. Checked frames by eye: the judge is mostly **right**.
 - lacy: the stream's own chat overlay sits inside the gameplay crop (top-left of the game panel).
+  Checked 2026-11-25 on 4 full frames: the overlay is top-right of the source (x 0.72-0.93, y < 0.18) and
+  the center crop catches its left edge.
   Our caption sometimes lands on top of it. This is a crop problem, not a judge problem.
 - kaicenat (no cam layout): "top of the head cut off" in several frames.
 
 ## Proposals for the owner (morning, not changed at night)
 
 1. **Gameplay crop per streamer without the chat overlay** (lacy): move or narrow the game crop in
-   `config/streamers.yaml` so the overlay is outside. Can be an A/B proposal once a `gameCrop` knob exists.
+   `config/streamers.yaml` so the overlay is outside. Built: A/B proposal `crop-lacy` (`gameCrop`, crop below the
+   overlay, zoom 1.2x), tested only on lacy practice clips.
 2. **No-cam framing** (kaicenat): keep more headroom when the face tracker centers the face.
+   Open: nocam picks a 16:9 window by motion (`best_window` in `workers/face_track.py`), not by the face, so
+   `FACE_Y` does not apply. Needs a frame check of the kaicenat clips before a knob is built.
 3. **Judge prompt:** keep as is. Optional: ask "is there a joke or surprise?" so loud talk alone scores lower.
 4. **Pair judge reasons:** on `captions-lower` the judge sometimes says one edit has "larger" or "smaller"
    captions while both use the same size (only the height differs). The pick may still be fine, but the reason
