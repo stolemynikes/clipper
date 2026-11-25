@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ago, count, money, useOverview, type Activity, type Campaign } from '../api.ts';
 import { Counter, Empty, Icon, Page, Skeleton, Stat, useMore } from '../ui.tsx';
 
@@ -69,11 +70,13 @@ export function Home() {
             : <Empty icon="clock" title="Nothing ending this week" text="Campaigns that end within 7 days show up here." />}
         </ListCard>
         <ListCard title="Activity" footer={act.footer}>
-          {act.shown.length ? act.shown.map((a, i) => (
-            <div key={i} className="flex items-center gap-3 min-h-12 px-5 py-2 border-b border-line last:border-0 text-sm">
+          {/* stable key: a new item slides in on the 15 s refetch, the rest moves down (initial={false}: no animation on first load) */}
+          {act.shown.length ? <AnimatePresence initial={false}>{act.shown.map((a) => (
+            <motion.div key={`${a.kind}-${a.at}-${a.text}`} layout="position" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }} className="flex items-center gap-3 min-h-12 px-5 py-2 border-b border-line last:border-0 text-sm">
               <Icon name={ACT[a.kind][0]} className={ACT[a.kind][1]} /><span className="flex-1 min-w-0">{a.text}</span><span className="text-f text-xs whitespace-nowrap">{ago(a.at)}</span>
-            </div>
-          )) : <Empty icon="clock" title="No activity yet" text="New clips, keeps and posts show up here." />}
+            </motion.div>
+          ))}</AnimatePresence> : <Empty icon="clock" title="No activity yet" text="New clips, keeps and posts show up here." />}
           {act.sentinel}
         </ListCard>
       </div>
