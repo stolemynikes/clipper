@@ -29,12 +29,12 @@ _find_alignment = WhisperModel.find_alignment
 def _safe_find_alignment(self, tokenizer, text_tokens, encoder_output, num_frames, median_filter_width=7):
     """faster-whisper 1.2.1 crashes (IndexError on time_indices[jumps]) when ctranslate2's align returns no
     alignment pairs for a segment; that happens at random on temperature-fallback text. Give that 30s window
-    no word timings instead of failing the whole clip (the library already returns [] for 0-1 word segments).
+    no word timings (seg_words then estimates them) instead of failing the whole clip (the library already returns [] for 0-1 word segments).
     We use the sequential model, so text_tokens is one window per call."""
     try:
         return _find_alignment(self, tokenizer, text_tokens, encoder_output, num_frames, median_filter_width)
     except IndexError:
-        print("word alignment failed for one window; it gets no captions", file=sys.stderr)
+        print("word alignment failed for one window; its words get estimated timings", file=sys.stderr)
         return [[] for _ in text_tokens]
 
 
@@ -59,7 +59,22 @@ def transcribe(audio: np.ndarray, model_name: str, language, device: str, comput
         _models[key] = WhisperModel(model_name, device=device, compute_type=compute)
     segments, info = _models[key].transcribe(audio, language=language, word_timestamps=True, vad_filter=True)
     # segments is lazy: CUDA errors surface here, inside the caller's try
-    return {"language": info.language, "words": join_words((w.word, w.start, w.end) for seg in segments for w in (seg.words or []))}
+    return {"language": info.language, "words": join_words(w for seg in segments for w in seg_words(seg.words, seg.text, seg.start, seg.end))}
+
+
+def seg_words(words, text, start, end):
+    """Word timings of a segment. A segment whose alignment failed has text but no words:
+    spread its words over the segment's own start-end by length, so its captions still show."""
+    if words:
+        return [(w.word, w.start, w.end) for w in words]
+    parts = [" " + t for t in text.split()]
+    total = sum(len(p) for p in parts)
+    out, t = [], start
+    for p in parts:
+        d = (end - start) * len(p) / total
+        out.append((p, t, t + d))
+        t += d
+    return out
 
 
 def join_words(raw):
@@ -104,6 +119,12 @@ def main() -> None:
             where = " < ".join(f"{os.path.basename(f.filename)}:{f.lineno}" for f in reversed(traceback.extract_tb(e.__traceback__)[-3:]))
             out = {"error": f"{type(e).__name__}: {e} (at {where})"}
         print(json.dumps(out), flush=True)
+
+
+def _selftest():
+    w = seg_words(None, " hoi daar", 1.0, 2.0)
+    assert [x[0] for x in w] == [" hoi", " daar"] and w[0][1] == 1.0 and abs(w[-1][2] - 2.0) < 1e-9, w
+    assert seg_words(None, "  ", 0, 1) == []
 
 
 if __name__ == "__main__":
