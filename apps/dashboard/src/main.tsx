@@ -38,12 +38,12 @@ function Side({ route }: { route: string }) {
       {p === '/review' && data?.toReview ? <span className="badge num">{data.toReview}</span> : null}</a>
   );
   return (
-    <aside className="hidden md:flex w-[248px] shrink-0 h-screen flex-col gap-1 p-4 border-r border-line">
-      <a href="#/" className="flex items-center gap-2 h-12 px-3 mb-4 no-underline"><span className="w-8 h-8 rounded-xl bg-p flex items-center justify-center"><Icon name="scissors" size={16} /></span><span className="text-lg font-semibold">Snip</span></a>
-      {NAV.map((n) => <div key={n[0]}>{n[3] ? <div className="kicker px-3 pt-4 pb-2">{n[3]}</div> : null}{link(n)}</div>)}
+    <aside className="hidden md:flex w-[248px] shrink-0 h-screen flex-col gap-1 py-6 px-4 border-r border-line">
+      <a href="#/" className="flex items-center gap-2 h-12 px-3 mb-4 no-underline"><span className="w-8 h-8 rounded-[10px] bg-p flex items-center justify-center"><Icon name="scissors" size={16} /></span><span className="text-lg font-semibold">Snip</span></a>
+      {NAV.map((n) => <div key={n[0]}>{n[3] ? <div className="kicker pt-4 px-3 pb-1.5">{n[3]}</div> : null}{link(n)}</div>)}
       <div className="mt-auto flex flex-col gap-1">
         {BOTTOM.map((n) => link(n))}
-        <div className="mt-3 p-3 rounded-xl bg-s border border-line flex items-center gap-2 text-sm">
+        <div className="mt-3 p-3 rounded-[14px] bg-s border border-line flex items-center gap-2 text-sm">
           <span className="dot" style={{ background: data?.paused ? 'var(--color-warn)' : 'var(--color-up)' }} />
           {data ? (data.paused ? 'Paused' : `Running · ${data.working} job${data.working === 1 ? '' : 's'}`) : 'Connecting…'}
         </div>

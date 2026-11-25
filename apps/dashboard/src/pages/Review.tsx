@@ -14,8 +14,8 @@ function Checks({ c }: { c: ReviewClip }) {
     ...c.warnings.map((w): [boolean, string] => [false, w]),
   ];
   return (
-    <section className="card flex flex-col gap-3">
-      <h2 className="text-[17px] font-semibold m-0">Campaign rules</h2>
+    <section className="card flex flex-col gap-3 min-w-0">
+      <h2 className="text-[17px] font-semibold m-0 truncate">Campaign rules <span className="text-f font-medium">· {c.streamer}</span></h2>
       {rows.map(([ok, t], i) => <div key={i} className="flex items-start gap-3 text-sm"><Icon name={ok ? 'check' : 'alert'} className={ok ? 'text-up mt-px' : 'text-warn mt-px'} /><span className={ok ? 'text-m' : ''}>{t}</span></div>)}
     </section>
   );
@@ -58,11 +58,11 @@ export function Review({ focus }: { focus?: number }) {
   return (
     <Page kicker={`Clip ${gone.length + 1} of ${total} · ${c.streamer} · ${ago(c.at)}`} title={c.title ?? `${c.streamer} clip`}>
       <div className="flex flex-col md:flex-row gap-6 md:flex-1 md:min-h-0">
-        <div className="flex flex-col gap-4 md:w-[396px] shrink-0 md:min-h-0">
+        <div className="flex flex-col gap-4 md:w-fit md:max-w-[396px] shrink-0 md:min-h-0">
           <AnimatePresence mode="wait">
             <motion.video key={c.id} src={`/clip/${c.id}.mp4`} controls playsInline autoPlay preload="metadata"
               initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, transition: { duration: .12 } }}
-              className="w-full aspect-[9/16] md:h-auto md:max-h-[calc(100vh-260px)] rounded-[20px] bg-black object-contain border border-line" />
+              className="w-full aspect-[9/16] md:w-auto md:h-[min(704px,calc(100vh/var(--z,1)-180px))] rounded-[20px] bg-black object-contain border border-line" />
           </AnimatePresence>
           {list.length > 1 ? (
             <div className="hidden md:flex flex-col gap-2 min-h-0">
@@ -72,18 +72,21 @@ export function Review({ focus }: { focus?: number }) {
           ) : null}
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col gap-4 md:scroll md:min-h-0">
+        <div className="flex-1 min-w-0 max-w-[960px] flex flex-col gap-4 md:scroll md:min-h-0">
           {c.hook ? <div className="text-m text-sm">On screen: <span className="text-t font-medium">{c.hook}</span></div> : null}
           <section className="card flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3"><h2 className="text-[17px] font-semibold m-0">Why Snip picked this</h2><span className={`pill ${sTone}`}>{sLabel}</span></div>
-            {c.reasons.map((r) => <div key={r} className="flex items-center gap-3 text-sm"><span className="w-8 h-8 rounded-xl bg-r flex items-center justify-center text-a"><Icon name={why(r)} size={16} /></span>{r}</div>)}
+            {c.reasons.map((r) => <div key={r} className="flex items-center gap-3"><span className="tile"><Icon name={why(r)} size={18} /></span><span className="text-[15px] font-semibold">{r}</span></div>)}
             <a href={c.source} target="_blank" rel="noreferrer" className="text-sm text-a no-underline flex items-center gap-2 w-fit"><Icon name="link" size={14} />Watch it in the stream</a>
           </section>
-          <Checks c={c} />
-          <section className="card flex flex-col gap-3">
-            <h2 className="text-[17px] font-semibold m-0">Will post to</h2>
-            <div className="flex flex-wrap gap-2">{c.platforms.length ? c.platforms.map((p) => <span key={p} className="pill">{PLATFORM[p] ?? p}</span>) : <span className="text-sm text-f">No platforms in the campaign rules</span>}</div>
-          </section>
+          <div className="grid xl:grid-cols-2 gap-4">
+            <Checks c={c} />
+            <section className="card flex flex-col gap-3 min-w-0">
+              <h2 className="text-[17px] font-semibold m-0">Will post to</h2>
+              {c.platforms.length ? c.platforms.map((p) => <div key={p} className="flex items-center gap-3 text-sm"><span className="dot bg-a" />{PLATFORM[p] ?? p}</div>) : <span className="text-sm text-f">No platforms in the campaign rules</span>}
+              <span className="text-[13px] text-f">Each gets its own title and caption.</span>
+            </section>
+          </div>
           <div className="grid grid-cols-2 gap-3 mt-auto sticky bottom-24 md:static">
             <button className="btn big" disabled={busy} onClick={() => decide(false)}><Icon name="x" />Skip <span className="kbd hidden md:inline">S</span></button>
             <button className="btn btn-1 big" disabled={busy} onClick={() => decide(true)}><Icon name="check" />Keep and post <span className="kbd hidden md:inline">K</span></button>

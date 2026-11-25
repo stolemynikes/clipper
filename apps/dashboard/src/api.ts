@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 export interface Study { done: number; total: number; finished: boolean; error: string | null }
 export interface Campaign {
   name: string; tag: string; status: string; open: boolean; on: boolean; stage: string; endsAt: string; daysLeft: number;
-  ratePer1k: number; maxPerClip: number; pool: number | null; url: string | null; platforms: string[];
+  ratePer1k: number; maxPerClip: number; pool: number | null; url: string | null; platforms: string[]; site: string;
   views: number; earned: number; posts: number; perClip: unknown; study: Study | null; facts: string[]; warnings: string[];
 }
 export interface PostRow { id: number; clip: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: boolean; views: number; earned: number }

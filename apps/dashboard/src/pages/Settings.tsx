@@ -26,7 +26,7 @@ export function Settings() {
   };
   return (
     <Page kicker="Changes apply right away" title="Settings">
-      <section className="card !p-0 flex flex-col divide-y divide-line">
+      <section className="card !p-0 max-w-[960px] flex flex-col divide-y divide-line">
         {rows.map((r) => (
           <div key={r.key} className="flex items-center justify-between gap-4 p-5">
             <div className="flex flex-col gap-1 min-w-0"><span id={`s-${r.key}`} className="font-semibold">{r.title}</span><span className="text-sm text-m">{r.text}</span></div>

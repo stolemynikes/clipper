@@ -112,9 +112,9 @@ export const Stat = ({ label, children, sub }: { label: string; children: ReactN
 
 export const Page = ({ back, kicker, title, right, children }: { back?: ReactNode; kicker?: string; title: string; right?: ReactNode; children: ReactNode }) => (
   <motion.main initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
-    className="flex-1 min-w-0 min-h-0 flex flex-col gap-6 p-5 md:p-8 pb-28 md:pb-8 md:h-screen md:overflow-hidden">
+    className="flex-1 min-w-0 min-h-0 flex flex-col gap-6 p-5 md:py-8 md:px-10 pb-28 md:pb-8 md:h-screen md:overflow-hidden">
     <header className="flex flex-wrap items-end justify-between gap-4 shrink-0">
-      <div className="flex flex-col gap-2 min-w-0">{back}{kicker ? <span className="kicker">{kicker}</span> : null}<h1 className="text-[28px] md:text-[32px] font-semibold leading-tight m-0 truncate">{title}</h1></div>
+      <div className="flex flex-col gap-2 min-w-0">{back}{kicker ? <span className="kicker !text-m">{kicker}</span> : null}<h1 className="text-[28px] font-bold tracking-[-0.03em] leading-tight m-0 truncate">{title}</h1></div>
       {right}
     </header>
     {children}

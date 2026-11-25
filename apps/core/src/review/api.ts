@@ -28,7 +28,7 @@ function campaignRow(s: StreamerConfig, posts: Post[]) {
   const earned = mine.reduce((t, x) => t + earn(x.views ?? 0, c.ratePer1k, c.maxPerClip), 0);
   const { facts, warnings } = campaignNotes(c);
   return {
-    name: s.name, tag: s.tag, status: campaignStatus(s, p).label, open: campaignOpen(c), on: s.enabled !== false && campaignOpen(c), stage: s.stage ?? 'clips',
+    name: s.name, tag: s.tag, site: c.platform, status: campaignStatus(s, p).label, open: campaignOpen(c), on: s.enabled !== false && campaignOpen(c), stage: s.stage ?? 'clips',
     endsAt: c.endsAt, daysLeft: daysLeft(c.endsAt), ratePer1k: c.ratePer1k, maxPerClip: c.maxPerClip, pool: c.pool ?? null, url: c.url ?? null,
     platforms: (Array.isArray(c.rules?.platforms) ? c.rules.platforms : []).map(String), views, earned, posts: mine.length,
     perClip: expectedPerClip(c, p?.medianShortViews), study: p ? { done: p.done, total: p.total, finished: Boolean(p.finished), error: p.error ?? null } : null,
