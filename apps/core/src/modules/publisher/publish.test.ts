@@ -19,6 +19,7 @@ test('post text carries disclosure and tag on every platform', () => {
   assert.match(yt.description, /^#ad @Clix #Clix #shorts$/);
   assert.equal(postText('tiktok', o).title, 'He hit the shot #ad @Clix #Clix #fyp');
   assert.equal(postText('youtube', { ...o, title: 'x'.repeat(150) }).title.length, 100);
+  assert.equal(postText('tiktok', { ...o, hashtags: ['#CLIX', '#ClixClips'] }).title, 'He hit the shot #ad @Clix #CLIX #ClixClips #fyp'); // campaign hashtags required, no duplicates
   assert.doesNotMatch(postText('tiktok', { ...o, disclosure: null }).title, /#ad/);
 });
 

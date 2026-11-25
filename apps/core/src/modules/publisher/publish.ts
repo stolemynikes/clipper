@@ -26,8 +26,8 @@ export function fallbackTitle(transcript: string | null, streamer: string): stri
 }
 
 /** Per-platform text: YouTube has a 100-char title plus description, TikTok one caption. */
-export function postText(platform: AccountPlatform, o: { title: string; streamer: string; tag: string; disclosure: string | null; extra?: string[] }) {
-  const req = [o.disclosure, o.tag, `#${o.streamer.replace(/\W/g, '')}`, platform === 'youtube' ? '#shorts' : platform === 'instagram' ? '#reels' : '#fyp'].filter(Boolean) as string[];
+export function postText(platform: AccountPlatform, o: { title: string; streamer: string; tag: string; disclosure: string | null; extra?: string[]; hashtags?: string[] }) {
+  const req = [...new Map([o.disclosure, o.tag, `#${o.streamer.replace(/\W/g, '')}`, ...(o.hashtags ?? []), platform === 'youtube' ? '#shorts' : platform === 'instagram' ? '#reels' : '#fyp'].filter(Boolean).map((h) => [String(h).toLowerCase(), h])).values()] as string[]; // campaign hashtags are required; one copy each
   // Approved study hashtags go last, so a length cap can only cut them, never the required ones.
   const tags = [...req, ...(o.extra ?? []).filter((h) => !req.some((r) => r.toLowerCase() === h.toLowerCase()))].join(' ');
   return platform === 'youtube'
@@ -156,7 +156,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
   const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
   const text = postText(account.platform as AccountPlatform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags }); // CR FTC page: written #ad plus the paid-promotion toggle
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags, hashtags: (Array.isArray(cfg.campaign?.rules?.hashtags) ? cfg.campaign.rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
   const pp = viaPostpeer(account.platform);
   if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
   const token = pp ? '' : await accessToken(accountId, account.platform as Platform);
