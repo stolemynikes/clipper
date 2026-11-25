@@ -23,6 +23,23 @@ for _lib in ("cublas", "cudnn"):
 
 from faster_whisper import WhisperModel
 
+_find_alignment = WhisperModel.find_alignment
+
+
+def _safe_find_alignment(self, tokenizer, text_tokens, encoder_output, num_frames, median_filter_width=7):
+    """faster-whisper 1.2.1 crashes (IndexError on time_indices[jumps]) when ctranslate2's align returns no
+    alignment pairs for a segment; that happens at random on temperature-fallback text. Give that 30s window
+    no word timings instead of failing the whole clip (the library already returns [] for 0-1 word segments).
+    We use the sequential model, so text_tokens is one window per call."""
+    try:
+        return _find_alignment(self, tokenizer, text_tokens, encoder_output, num_frames, median_filter_width)
+    except IndexError:
+        print("word alignment failed for one window; it gets no captions", file=sys.stderr)
+        return [[] for _ in text_tokens]
+
+
+WhisperModel.find_alignment = _safe_find_alignment
+
 
 def load_audio(path: str) -> np.ndarray:
     """16 kHz mono float32 via ffmpeg (faster-whisper's PyAV decoder breaks on av>=19)."""
