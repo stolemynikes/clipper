@@ -19,7 +19,7 @@ import { studyJob } from './modules/learner/study.ts';
 import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
 import { enqueue, recoverStale } from './queue/queue.ts';
 import { scoutOnce } from './modules/scout/scout.ts';
-import { liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
+import { isPractice, liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
 const log = logger('main');
@@ -68,7 +68,7 @@ const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure
 await Promise.all([
   runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
   // Own loop so the Settings switch can hold study jobs queued without blocking clips.
-  runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => isPaused() || isOff('study') }),
+  runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => (isPaused() && !isPractice()) || isOff('study') }), // studies are analysis only: also run in practice mode
   // Practice (data/practice): old VODs judged and deleted, never reviewed. Runs while Snip is paused; live work goes first.
   runWorker(db, { 'practice.analyze': tracked((p: any) => analyzeVod(db, p)), 'practice.render': tracked((p: any) => renderClip(db, p)), 'practice.judge': tracked((p: any) => judgeClip(db, p)) },
     { signal: ac.signal, paused: () => practiceHeld() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),

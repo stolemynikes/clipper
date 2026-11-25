@@ -6,12 +6,13 @@ import { join } from 'node:path';
 import { paths } from '../../env.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
 
-/** What a proposal changes. Only render knobs the frame judge can see. */
-export type Change = { wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle };
+/** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
+export type Change = { wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[] };
 export type Pair = { clipId: number; newFirst: boolean; pick: 'new' | 'old' | 'same'; why: string; at: number };
 export type Proposal = {
   id: string; title: string; why: string; change: Change;
   status: 'testing' | 'ready' | 'approved' | 'rejected'; created: number; decided?: number;
+  untested?: boolean; // from study, no A/B: gemma cannot judge metadata. Real views after posting measure it.
   pairs: Pair[]; aa: { pick: 0 | 1 | 2 }[]; // A/A control: same clip twice, pick 1 or 2 should be ~50/50 (0 = no difference, the right answer)
   frames: { clipId: number; old: string; new: string }[]; // small jpgs in data/proposals/<id>/ for the report
 };
@@ -75,6 +76,16 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   if (fewer !== cur.weeklyPer && fewer !== cur.per) add({ id: `words-${fewer}`, title: `${fewer} words per caption line`, why: `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, change: { wordsPerChunk: fewer } });
   add({ id: 'captions-lower', title: 'Captions 150 px lower', why: 'Lower captions cover less of the face and the action; still above the app buttons.', change: { captionShift: 150 } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
+  saveProposals(ps);
+}
+
+/** Metadata from the weekly study becomes an untested proposal, once per study run; live titles never follow the study on their own. */
+export function seedStudy(study: { at: string | null; titles: string[] }) {
+  if (!study.at || !study.titles.length) return;
+  const id = `titles-${study.at.slice(0, 10)}`, ps = proposals();
+  if (ps.some((x) => x.id === id)) return;
+  ps.push({ id, title: "Title style of this week's top Shorts", why: `The title writer copies the style (not the content) of the ${study.titles.length} most-viewed gaming Shorts of the weekly study.`,
+    change: { titleExamples: study.titles }, untested: true, status: 'ready', created: Date.now(), pairs: [], aa: [], frames: [] });
   saveProposals(ps);
 }
 

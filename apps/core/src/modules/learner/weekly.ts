@@ -46,11 +46,11 @@ export async function weeklyShorts(max = 25) {
 }
 
 /** What the editor and title writer take from the last weekly study; empty until it has run. */
-export function weeklyInsights(): { titles: string[]; wordsPerLine: number | null } {
+export function weeklyInsights(): { at: string | null; titles: string[]; wordsPerLine: number | null } {
   try {
-    const { shorts } = JSON.parse(readFileSync(file(), 'utf8')) as { shorts: ShortFacts[] };
+    const { at, shorts } = JSON.parse(readFileSync(file(), 'utf8')) as { at: string; shorts: ShortFacts[] };
     const wpl = shorts.map((f) => f.look?.subs.wordsPerLine).filter((x): x is number => !!x);
     // shortcut: wordsPerLine undercounts when captions highlight word by word (each color change counts as a new line); clamp 2-4.
-    return { titles: [...shorts].sort((a, b) => b.views - a.views).slice(0, 5).map((f) => f.title), wordsPerLine: wpl.length >= 5 ? Math.min(4, Math.max(2, Math.round(median(wpl)))) : null };
-  } catch { return { titles: [], wordsPerLine: null }; }
+    return { at, titles: [...shorts].sort((a, b) => b.views - a.views).slice(0, 5).map((f) => f.title), wordsPerLine: wpl.length >= 5 ? Math.min(4, Math.max(2, Math.round(median(wpl)))) : null };
+  } catch { return { at: null, titles: [], wordsPerLine: null }; }
 }

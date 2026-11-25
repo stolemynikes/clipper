@@ -26,3 +26,9 @@ test('tweaks uses only approved proposals, later approval wins', () => {
   assert.deepEqual(tweaks([prop('a', { wordsPerChunk: 2 }, 'testing'), prop('b', { captionShift: 150 }, 'rejected', 1)]), {});
   assert.deepEqual(tweaks([prop('a', { wordsPerChunk: 4 }, 'approved', 2), prop('b', { wordsPerChunk: 2, captionShift: 150 }, 'approved', 1)]), { wordsPerChunk: 4, captionShift: 150 });
 });
+
+test('study titles become one untested proposal per study run, live only after approval', () => {
+  const p = { ...prop('t', { titleExamples: ['A', 'B'] }, 'ready'), untested: true };
+  assert.deepEqual(tweaks([p]), {});
+  assert.deepEqual(tweaks([{ ...p, status: 'approved', decided: 1 }]), { titleExamples: ['A', 'B'] });
+});

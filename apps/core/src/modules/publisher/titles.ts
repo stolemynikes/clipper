@@ -7,7 +7,7 @@ import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
-import { weeklyInsights } from '../learner/weekly.ts';
+import { tweaks } from '../practice/proposals.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 
 const log = logger('titles');
@@ -32,8 +32,8 @@ const STYLE: Record<TitleStyle, string> = {
   bold: 'Maximum clickbait: the most extreme true framing, big emotion and stakes, cliffhanger, hide the payoff completely ("He LOST it when...", "This went TOO far"). Up to two words in CAPS, "..." at the end is allowed.',
 };
 
-export function titlePrompt(transcript: string, streamer: string, style: TitleStyle = 'mild', top = weeklyInsights().titles) {
-  // Real top titles of this week (weekly study): style examples only, never facts for this clip.
+export function titlePrompt(transcript: string, streamer: string, style: TitleStyle = 'mild', top = tweaks().titleExamples ?? []) {
+  // Top titles from an approved study proposal: style examples only, never facts for this clip.
   const week = top.length ? `\n  Most-viewed gaming Shorts this week were titled (copy the style, not the content): ${top.map((t) => `"${t.replace(/["\n]/g, ' ').slice(0, 80)}"`).join(', ')}.` : '';
   return `You write titles for short vertical gaming clips (TikTok, YouTube Shorts) of the streamer ${streamer}.
 Transcript of the clip:
