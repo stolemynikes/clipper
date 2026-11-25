@@ -20,3 +20,11 @@ Claude scores a sample of practice clips blind and compares with gemma4:12b (doc
    `config/streamers.yaml` so the overlay is outside. Can be an A/B proposal once a `gameCrop` knob exists.
 2. **No-cam framing** (kaicenat): keep more headroom when the face tracker centers the face.
 3. **Judge prompt:** keep as is. Optional: ask "is there a joke or surprise?" so loud talk alone scores lower.
+4. **Pair judge reasons:** on `captions-lower` the judge sometimes says one edit has "larger" or "smaller"
+   captions while both use the same size (only the height differs). The pick may still be fine, but the reason
+   is made up. Optional: tell the judge what is the same in both, so the reason names the real difference.
+
+## captions-lower frames (checked 05:40)
+
+The render is correct: captions sit 150 px lower, fully on screen, not behind the tag. The judge prefers the
+current height (new 2, old 10 after 12 pairs). That is a valid result, not a bug.
