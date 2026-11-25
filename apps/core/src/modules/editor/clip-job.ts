@@ -21,6 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
+import { weeklyInsights } from '../learner/weekly.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
@@ -142,6 +143,7 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
     // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
     disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
     style: cfg.captionStyle ?? settings.clip.captionStyle,
+    wordsPerChunk: weeklyInsights().wordsPerLine ?? undefined, // what top Shorts use this week; style default until the weekly study ran
     censor,
     // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
     // stack: everything moves down with the centered block; chat sits on the game's bottom edge.

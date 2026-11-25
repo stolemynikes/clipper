@@ -16,6 +16,8 @@ import { learnDue, learnOnce } from './modules/learner/weights.ts';
 import { startReviewServer } from './review/server.ts';
 import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
+import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
+import { enqueue } from './queue/queue.ts';
 import { scoutOnce } from './modules/scout/scout.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
@@ -43,17 +45,24 @@ const learn = () => {
 };
 learn();
 const learnTimer = setInterval(learn, 24 * 60 * 60_000); // checks daily, runs weekly
+// Weekly top-Shorts study as a queued job: held by the same pause/study switches as campaign studies.
+const weekly = () => {
+  if (isOff('study') || !weeklyDue()) return;
+  if (!db.$client.prepare("select 1 from jobs where type = 'study.weekly' and status in ('queued','running')").get()) enqueue(db, 'study.weekly', {});
+};
+weekly();
+const weeklyTimer = setInterval(weekly, 24 * 60 * 60_000);
 const scout = () => { if (!isPaused() && loadSettings().scout?.enabled !== false) scoutOnce(db).catch((e) => log.error('scout failed', { error: String(e) })); };
 const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most 3 new campaigns per run
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); server.close(); stopDiscord(); });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); server.close(); stopDiscord(); });
 
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
 await Promise.all([
   runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
   // Own loop so the Settings switch can hold study jobs queued without blocking clips.
-  runWorker(db, { 'campaign.study': (p) => studyJob(p) }, { ...opts, paused: () => isPaused() || isOff('study') }),
+  runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => isPaused() || isOff('study') }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);

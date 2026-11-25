@@ -2,7 +2,13 @@
 // Used only to study layout and editing; we never repost these videos.
 const API = 'https://www.googleapis.com/youtube/v3';
 
-export interface Short { id: string; title: string; channel: string; views: number; url: string }
+export interface Short {
+  id: string; title: string; channel: string; views: number; url: string;
+  description: string; tags: string[]; durationSec: number; likes: number; comments: number; publishedAt: string; lang: string;
+}
+
+/** ISO 8601 duration from videos.list ("PT1M5S") to seconds. */
+export const isoSeconds = (d: string) => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d ?? ''); return m ? (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0)) : 0; };
 
 export const hasYoutubeKey = () => !!process.env.YOUTUBE_API_KEY;
 
@@ -13,15 +19,19 @@ async function yt<T>(path: string, params: Record<string, string>): Promise<{ it
 }
 
 /** search.list costs 100 quota units of the 10,000 free per day; videos.list costs 1. */
-export async function topShorts(query: string, since: Date, max = 10): Promise<Short[]> {
+/** extra: more search.list params, e.g. { videoCategoryId: '20' } (Gaming), { relevanceLanguage: 'en' }. */
+export async function topShorts(query: string, since: Date, max = 10, extra: Record<string, string> = {}): Promise<Short[]> {
   const found = await yt<{ id: { videoId: string } }>('search', {
     part: 'id', q: `${query} #shorts`, type: 'video', videoDuration: 'short', order: 'viewCount',
-    publishedAfter: since.toISOString(), maxResults: String(max),
+    publishedAfter: since.toISOString(), maxResults: String(max), ...extra,
   });
   const ids = found.items.map((i) => i.id.videoId).join(',');
   if (!ids) return [];
-  const { items } = await yt<{ id: string; snippet: { title: string; channelTitle: string }; statistics: { viewCount?: string } }>(
-    'videos', { part: 'snippet,statistics', id: ids });
+  const { items } = await yt<{ id: string; snippet: { title: string; channelTitle: string; description?: string; tags?: string[]; publishedAt: string; defaultAudioLanguage?: string; defaultLanguage?: string };
+    statistics: { viewCount?: string; likeCount?: string; commentCount?: string }; contentDetails: { duration: string } }>(
+    'videos', { part: 'snippet,statistics,contentDetails', id: ids });
   return items.map((v) => ({ id: v.id, title: v.snippet.title, channel: v.snippet.channelTitle, views: Number(v.statistics.viewCount ?? 0),
-    url: `https://www.youtube.com/shorts/${v.id}` })).sort((a, b) => b.views - a.views);
+    url: `https://www.youtube.com/shorts/${v.id}`, description: v.snippet.description ?? '', tags: v.snippet.tags ?? [],
+    durationSec: isoSeconds(v.contentDetails.duration), likes: Number(v.statistics.likeCount ?? 0), comments: Number(v.statistics.commentCount ?? 0),
+    publishedAt: v.snippet.publishedAt, lang: v.snippet.defaultAudioLanguage ?? v.snippet.defaultLanguage ?? '' })).sort((a, b) => b.views - a.views);
 }

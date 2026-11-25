@@ -12,6 +12,7 @@ import { profitScore, viewsToPay } from '../compliance/campaign-notes.ts';
 import { transcribe } from '../editor/whisper.ts';
 import { getTopClips, getUserId } from '../../twitch.ts';
 import { hasYoutubeKey, topShorts } from '../../youtube.ts';
+import { factLines, shortFacts } from './short-analysis.ts';
 
 const log = logger('study');
 const DAY = 86_400_000;
@@ -65,13 +66,11 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
     for (const v of shortsList) {
       const file = join(dir, `yt-${v.id}.mp4`), sheet = join(dir, `yt-${v.id}.jpg`);
       try {
-        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '-o', file, v.url]);
+        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', file, v.url]);
         // 4 frames side by side (one per 6s): shows cam size, caption style, hook text, layout
         if (!existsSync(sheet)) await runCmd('ffmpeg', ['-v', 'error', '-y', '-i', file, '-vf',
           "select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,6)',scale=270:-2,tile=4x1", '-frames:v', '1', sheet]);
-        const t = await transcribe({ input: file, model, language: null });
-        const hook = t.words.filter((w) => w.s < 3).map((w) => w.w).join(' ').trim();
-        out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n- First 3s: "${hook || '(no speech)'}"\n- Frames: ${sheet}\n`);
+        out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n${factLines(await shortFacts(v, file, model))}\n- Frames: ${sheet}\n`);
         log.info(`${s.name}: short ${v.views} views "${v.title}"`);
       } catch (e) {
         out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n- Skipped: ${(e as Error).message.slice(0, 200)}\n`);

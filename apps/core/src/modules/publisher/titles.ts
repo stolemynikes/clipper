@@ -7,6 +7,7 @@ import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
+import { weeklyInsights } from '../learner/weekly.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 
 const log = logger('titles');
@@ -31,7 +32,9 @@ const STYLE: Record<TitleStyle, string> = {
   bold: 'Maximum clickbait: the most extreme true framing, big emotion and stakes, cliffhanger, hide the payoff completely ("He LOST it when...", "This went TOO far"). Up to two words in CAPS, "..." at the end is allowed.',
 };
 
-export function titlePrompt(transcript: string, streamer: string, style: TitleStyle = 'mild') {
+export function titlePrompt(transcript: string, streamer: string, style: TitleStyle = 'mild', top = weeklyInsights().titles) {
+  // Real top titles of this week (weekly study): style examples only, never facts for this clip.
+  const week = top.length ? `\n  Most-viewed gaming Shorts this week were titled (copy the style, not the content): ${top.map((t) => `"${t.replace(/["\n]/g, ' ').slice(0, 80)}"`).join(', ')}.` : '';
   return `You write titles for short vertical gaming clips (TikTok, YouTube Shorts) of the streamer ${streamer}.
 Transcript of the clip:
 """${transcript.slice(0, 2000)}"""
@@ -39,7 +42,7 @@ Transcript of the clip:
 Return JSON with:
 - "moment": one plain sentence: what really happens in this clip, only facts from the transcript.
 - "title": 30-50 characters, in the language of the transcript. ${STYLE[style]} Use stakes, conflict, a specific number or name from the transcript, or a reaction ("He did NOT expect this", "Why chat turned on Lacy"). Put the strongest words first.
-  Like the most-viewed clipper Shorts: name ${streamer} in the first 3 words and name the other people from the transcript ("Clix EXPOSED for faking...", "Silky Shows Up 2 Days Late..."); drama words (EXPOSED, argue, couldn't believe) only when true.
+  Like the most-viewed clipper Shorts: name ${streamer} in the first 3 words and name the other people from the transcript ("Clix EXPOSED for faking...", "Silky Shows Up 2 Days Late..."); drama words (EXPOSED, argue, couldn't believe) only when true.${week}
   The title must be true for the "moment" sentence. Never promise anything that is not in the transcript: YouTube removes titles that mislead about the video.
   No hashtags, no quotes, not the word "streamer". End with exactly one emoji from: 😭 💀 😂 🥀.
 - "hook": max 6 words shown on screen in the first second, same language, a teaser that makes people stay (not the same words as the title). Vary the wording: avoid "actually".`;
