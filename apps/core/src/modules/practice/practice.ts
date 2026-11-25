@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import { activeStreamers, clipStreamers, loadSettings } from '../../config.ts';
 import { STYLES } from '../editor/subtitles.ts';
 import { weeklyInsights } from '../learner/weekly.ts';
-import { activeProposals, seedProposals, seedStudy } from './proposals.ts';
+import { activeProposals, isLength, seedProposals, seedStudy } from './proposals.ts';
 import type { Db } from '../../db/client.ts';
 import { moments, sources } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -103,6 +103,8 @@ function fallback(db: Db, known: Set<string>, ids: Map<string, number>) {
     log.info(`practice: re-test moment ${w.id}`);
     return true;
   }
+  // Study clips are short viewer clips: length proposals give "same cut" on them, so only render proposals use them.
+  if (!activeProposals().some((p) => !isLength(p.change))) return false;
   let rows: StudyRow[] = [];
   try { rows = Object.values(JSON.parse(readFileSync(join(paths.dataDir, 'study-eval.json'), 'utf8'))); } catch { /* no study yet */ }
   const r = pickStudy(rows, known, new Set(ids.keys()), existsSync);
