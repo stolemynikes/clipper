@@ -71,7 +71,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   // Only the moment itself is downloaded, never the whole VOD.
   const src = join(dir, 'src.mp4'); // already there for a re-test or a study clip
   if (!existsSync(src)) await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
-    '--download-sections', `*${moment.startSec}-${moment.endSec}`, '--merge-output-format', 'mp4', '-o', src, source.url]);
+    '--download-sections', `*${moment.startSec}-${moment.endSec}`, '--merge-output-format', 'mp4', '-o', src, source.url], { timeoutMs: 15 * 60_000 }); // HLS section downloads can stall forever
 
   const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
   const { peakDb } = t;
