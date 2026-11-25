@@ -75,7 +75,7 @@ export async function extract(text: string, url: string): Promise<{ fields: Extr
 - hashtags: the hashtags captions must use, separated by spaces, else "".
 - accountNote: one short sentence on account rules (e.g. "account may only post GTA 6 content"), else "".
 - contentRules: what the brief requires or forbids IN the clip itself (e.g. "Kai must be the main focus", "no logos", "no hate clips"), separated by " | ", else "". Not posting, payment or account rules.
-- disclosure: true if posts must be marked as paid or sponsored.
+- disclosure: true only if the brief itself says posts must carry #ad or be marked as paid, sponsored or FTC-disclosed, else false.
 - gambling: true if it promotes a casino, betting, slots or any gambling.
 Campaign page: ${url || 'not given'}
 
@@ -134,7 +134,7 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
   if (notes.length) rules.notes = notes; // per-streamer content rules the judge checks
   const tag = str('tag') || `@${name}`;
   const campaign: Campaign = { platform: 'content_rewards', ...(url ? { url } : {}), ratePer1k, maxPerClip: num('maxPerClip'), endsAt, rules,
-    disclosure: b.disclosure !== false && b.disclosure !== 'false' };
+    disclosure: b.disclosure === true || b.disclosure === 'true' }; // off unless the brief asks for #ad
   if (pool) campaign.pool = pool;
   if (num('budgetLeft')) campaign.budgetLeft = num('budgetLeft');
   return { name, platform: 'twitch', channel, tag: tag.startsWith('@') ? tag : `@${tag}`, stage: 'study', enabled: false, campaign } as StreamerConfig;
@@ -222,7 +222,7 @@ progress::-webkit-progress-value{background:var(--ok);transition:width .4s}progr
 <label>Hashtags<input name="hashtags" placeholder="#Name"></label><label>Tag<input name="tag" placeholder="@name"></label>
 <label>Account rule<input name="accountNote" maxlength="200"></label>
 <label>Content rules<input name="contentRules" maxlength="600" placeholder="Kai must be the main focus | no logos"></label>
-<div class="checks"><label><input type="checkbox" name="disclosure" checked>Mark posts as paid</label></div>
+<div class="checks"><label><input type="checkbox" name="disclosure">Mark posts as paid</label></div>
 <input type="hidden" name="url"><input type="hidden" name="brief">
 <button class="ok">Save (starts off)</button></form></article></section></main>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -251,7 +251,7 @@ async function readBrief(e) {
   if (fields.gambling) toast('This looks like a gambling campaign: it cannot be saved.');
   for (const [k, v] of Object.entries(fields)) {
     if (k === 'platforms') s.querySelectorAll('[name=platforms]').forEach((i) => { i.checked = v.includes(i.value); });
-    else if (k === 'disclosure') s.disclosure.checked = v !== false;
+    else if (k === 'disclosure') s.disclosure.checked = v === true;
     else if (s[k] && s[k].type !== 'checkbox') s[k].value = Array.isArray(v) ? v.join(' ') : (v || '');
   }
   s.querySelectorAll('[data-k]').forEach((l) => l.classList.toggle('check', check.includes(l.dataset.k)));

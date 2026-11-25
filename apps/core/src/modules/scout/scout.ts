@@ -40,7 +40,7 @@ export function pickCampaigns(list: CrCampaign[], saved: StreamerConfig[], max =
 }
 
 /** The form fields toEntry validates, from CR's data. Text-only fields (tag, hashtags, rules) come from the brief. */
-export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; contentRules?: string; minViews?: number; totalViews?: number; endsAt?: string }, now = new Date()) {
+export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; contentRules?: string; disclosure?: boolean; minViews?: number; totalViews?: number; endsAt?: string }, now = new Date()) {
   const pays = c.payouts.filter((p) => paying(c).includes(p.platform));
   const pool = c.payoutType === 'pool';
   const left = c.budgetCents - (c.metrics?.budgetSpentCents ?? 0);
@@ -51,7 +51,7 @@ export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]
     pool: pool ? c.budgetCents / 100 : 0, budgetLeft: left > 0 && left < c.budgetCents ? left / 100 : 0,
     endsAt: datedEnd(brief.endsAt, now) ?? new Date(now.getTime() + ASSUMED_DAYS * 86_400_000).toISOString().slice(0, 10),
     tag: brief.tag ?? '', hashtags: brief.hashtags ?? [], accountNote: brief.accountNote ?? '', contentRules: brief.contentRules ?? '', minViews: brief.minViews ?? 0, totalViews: brief.totalViews ?? 0,
-    disclosure: true, // Content Rewards requires #ad on every post (FTC page), whatever the brief says
+    disclosure: brief.disclosure === true, // owner 2026-11-25: #ad only when the brief itself asks for it
   };
 }
 

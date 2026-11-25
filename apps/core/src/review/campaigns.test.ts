@@ -45,7 +45,8 @@ test('save rejects gambling and bad input', () => {
   assert.equal(e.tag, '@silky');
   assert.deepEqual(e.campaign!.rules!.hashtags, ['#Silky', '#clips']);
   assert.equal(e.campaign!.rules!.minViews, 10000);
-  assert.equal(e.campaign!.disclosure, true);
+  assert.equal(e.campaign!.disclosure, false); // #ad only when the brief asks
+  assert.equal(toEntry({ ...ok, disclosure: true }).campaign!.disclosure, true);
 });
 
 test('expected $ per clip: rate campaigns use median views and the cap, pools return null', () => {
