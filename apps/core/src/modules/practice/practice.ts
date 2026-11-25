@@ -1,13 +1,13 @@
 // Practice mode (docs/practice-plan.md): render and judge old VODs at night to learn, never review or post them.
 // Runs while data/practice exists, also when Snip itself is paused. Heals itself without Claude.
-import { existsSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { activeStreamers, clipStreamers, loadSettings } from '../../config.ts';
 import { STYLES } from '../editor/subtitles.ts';
 import { weeklyInsights } from '../learner/weekly.ts';
-import { seedProposals, seedStudy } from './proposals.ts';
+import { activeProposals, seedProposals, seedStudy } from './proposals.ts';
 import type { Db } from '../../db/client.ts';
-import { sources } from '../../db/schema.ts';
+import { moments, sources } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { enqueue, type Job } from '../../queue/queue.ts';
@@ -67,6 +67,57 @@ export function pickVod(vods: Vod[], known: Set<string>, now: number): Vod | und
     .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))[0];
 }
 
+// Stored practice windows: the raw download (src.mp4) + chat.json + tried.txt (proposal ids already tested on it),
+// so a proposal added later still gets pairs when no new VOD is available.
+export const KEEP_WINDOWS = 50;
+const KEEP = new Set(['src.mp4', 'chat.json', 'tried.txt']);
+export const tried = (dir: string) => { try { return readFileSync(join(dir, 'tried.txt'), 'utf8').split('\n').filter(Boolean); } catch { return []; } };
+function windows() {
+  const d = join(paths.dataDir, 'clips');
+  if (!existsSync(d)) return [];
+  return readdirSync(d).map((m) => join(d, m)).filter((p) => existsSync(join(p, 'src.mp4')) && existsSync(join(p, 'tried.txt')))
+    .map((p) => ({ p, id: Number(basename(p)), t: statSync(join(p, 'src.mp4')).mtimeMs })).sort((a, b) => b.t - a.t);
+}
+/** After judging a practice clip: keep only the raw window (newest KEEP_WINDOWS), delete the renders. */
+export function keepWindow(dir: string) {
+  if (!existsSync(join(dir, 'tried.txt'))) return rmSync(dir, { recursive: true, force: true });
+  for (const f of readdirSync(dir)) if (!KEEP.has(f)) rmSync(join(dir, f), { recursive: true, force: true });
+  for (const w of windows().slice(KEEP_WINDOWS)) rmSync(w.p, { recursive: true, force: true });
+}
+
+export type StudyRow = { streamer: string; slug: string; views: number; sec: number };
+export const studyUrl = (slug: string) => `https://clips.twitch.tv/${slug}`;
+/** Next downloaded study clip (raw viewer clip) to practice on: active streamer, not used yet, most views first. */
+export function pickStudy(rows: StudyRow[], known: Set<string>, names: Set<string>, has: (f: string) => boolean): StudyRow | undefined {
+  return rows.filter((r) => names.has(r.streamer) && !known.has(studyUrl(r.slug)) && has(join(paths.dataDir, 'study', r.streamer, `${r.slug}.mp4`)))
+    .sort((a, b) => b.views - a.views)[0];
+}
+
+/** No VOD: re-test a stored window on proposals it has not seen, else use a study clip. Only while proposals wait for pairs. */
+function fallback(db: Db, known: Set<string>, ids: Map<string, number>) {
+  const active = activeProposals().map((p) => p.id);
+  if (!active.length) return false;
+  const w = windows().find((x) => { const t = new Set(tried(x.p)); return active.some((id) => !t.has(id)); });
+  if (w) {
+    enqueue(db, 'practice.render', { momentId: w.id, practice: true, retest: true }, { maxAttempts: 2 });
+    log.info(`practice: re-test moment ${w.id}`);
+    return true;
+  }
+  let rows: StudyRow[] = [];
+  try { rows = Object.values(JSON.parse(readFileSync(join(paths.dataDir, 'study-eval.json'), 'utf8'))); } catch { /* no study yet */ }
+  const r = pickStudy(rows, known, new Set(ids.keys()), existsSync);
+  if (!r) return false;
+  const src = db.insert(sources).values({ url: studyUrl(r.slug), streamerId: ids.get(r.streamer)!, durationSec: r.sec }).onConflictDoNothing().returning().get();
+  if (!src) return false;
+  const m = db.insert(moments).values({ sourceId: src.id, startSec: 0, endSec: r.sec, score: 0 }).returning().get();
+  const dir = join(paths.dataDir, 'clips', String(m.id));
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(join(paths.dataDir, 'study', r.streamer, `${r.slug}.mp4`), join(dir, 'src.mp4')); // render skips the download
+  enqueue(db, 'practice.render', { momentId: m.id, practice: true }, { maxAttempts: 2 });
+  log.info(`practice: study clip ${r.slug} (${r.streamer})`);
+  return true;
+}
+
 /** One tick (every minute): disk guard, morning summary, and queue the next VOD when practice is idle. */
 let lastNoVod = 0; // tick runs every minute: say it at most once an hour
 export async function practiceTick(db: Db, now = new Date()) {
@@ -81,13 +132,17 @@ export async function practiceTick(db: Db, now = new Date()) {
   }
   const known = new Set(db.select({ url: sources.url }).from(sources).all().map((r) => r.url));
   let best: { vod: Vod; streamerId: number } | undefined;
+  const ids = new Map<string, number>(); // streamer name -> id, for study clips
   for (const cfg of clipStreamers(now).filter((s) => s.platform === 'twitch')) {
     try {
       const userId = await getUserId(cfg.channel);
+      const streamerId = ensureStreamer(db, cfg, userId).id;
+      ids.set(cfg.name, streamerId);
       const v = pickVod(await listVods(userId), known, now.getTime());
-      if (v && (!best || (v.view_count ?? 0) > (best.vod.view_count ?? 0))) best = { vod: v, streamerId: ensureStreamer(db, cfg, userId).id };
+      if (v && (!best || (v.view_count ?? 0) > (best.vod.view_count ?? 0))) best = { vod: v, streamerId };
     } catch (e) { log.warn(`practice: ${cfg.name} VOD list failed: ${String(e).slice(0, 200)}`); }
   }
+  if (!best && fallback(db, known, ids)) return;
   if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-14 days old, not done yet)'); } return; }
   const row = db.insert(sources).values({ url: best.vod.url, streamerId: best.streamerId, durationSec: parseDuration(best.vod.duration) }).onConflictDoNothing().returning().get();
   if (!row) return;

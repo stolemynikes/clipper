@@ -14,6 +14,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { learnedWeights } from '../learner/weights.ts';
 import { tweaks } from '../practice/proposals.ts';
+import { keepWindow } from '../practice/practice.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { type Proposal, proposalDir, proposals, recordPair } from '../practice/proposals.ts';
 import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules, type Rule } from './layout.ts';
@@ -182,7 +183,7 @@ const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
 export const JUDGE_VERSION = 1;
 
 /** Job: judge one clip, store the signals on its moment, add the proven part to the score, then ask for review. */
-export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: number; notify?: boolean }) {
+export async function judgeClip(db: Db, { clipId, notify = true, retest }: { clipId: number; notify?: boolean; retest?: boolean }) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
   if (!clip) return;
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
@@ -198,6 +199,11 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
     if (gpu) stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM
     const t0 = Date.now();
     const why: string[] = [];
+    if (retest) { // re-test of a kept practice window: only the new pairs, the clip's own scores stay
+      const r = await judgePair(model, gpu, clipId, dirname(clip.filePath), clip.durationSec ?? 20, clip.transcript ?? '');
+      log.info(`clip ${clipId} re-test: ${r ?? 'no pairs'}`);
+      return keepWindow(dirname(clip.filePath));
+    }
     if (clip.transcript && clip.transcript.split(' ').length >= 8) {
       const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name)));
       fun.speech = a.score / 10; why.push(`talk ${a.score}: ${a.why}`);
@@ -230,6 +236,6 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
     db.update(clips).set({ compliance: { ...c, warnings } }).where(eq(clips.id, clipId)).run();
   }
   // Practice clips are never reviewed or posted: keep the scores, delete the video files.
-  if (clip.status === 'practice') return rmSync(dirname(clip.filePath), { recursive: true, force: true });
+  if (clip.status === 'practice') return keepWindow(dirname(clip.filePath)); // raw window stays for later proposals
   if (notify) enqueue(db, 'review.notify', { clipId });
 }
