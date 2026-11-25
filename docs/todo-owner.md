@@ -2,6 +2,13 @@
 
 Things only the owner can do. Checked against the official docs on 2026-11-24.
 
+## When home: assisted account setup (planned 2026-11-25)
+Say "ik ben thuis" and Claude clicks through the steps below in your logged-in Chrome. You only log in, create the PostPeer account and click "Allow".
+- [ ] CR: Settings > Accounts > Connect TikTok, Google and Instagram.
+- [ ] Google Cloud: publishing status "In production", OAuth client and API key; Claude puts the keys in `.env` without showing them.
+- [ ] PostPeer: you sign up; Claude connects TikTok + Instagram, creates the API key and puts `POSTPEER_API_KEY` in `.env`.
+- [ ] First test upload of the 5 approved clips, then submit to CR.
+
 ## Content Rewards
 - [x] Whop connected in CR settings (2026-11-24).
 - [ ] Link the posting accounts in CR: open the CR Chrome (`.venv/Scripts/python -I workers/cr_browser.py open https://contentrewards.com/c/settings`), log into TikTok, Google and Instagram there yourself, then Settings > Accounts > Connect account > platform > approve. Without a linked account CR refuses every submit ("Your account is not linked").
