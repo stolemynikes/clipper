@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { loadSettings, type StreamerConfig } from '../../config.ts';
@@ -57,7 +57,14 @@ async function detectMusic(src: string): Promise<(Music & { musicSec: [number, n
 
 /** Downloads only [from, to] of a VOD. Twitch goes through TwitchDownloaderCLI: it picks segments from the playlist, while
  *  ffmpeg's -ss trusts MPEG-TS timestamps, which wrap at 2^33/90 kHz (26.5 h), so ffmpeg searched forever past that point. */
-async function downloadSection(url: string, from: number, to: number, out: string) {
+async function downloadSection(url: string, from: number, to: number, final: string) {
+  const out = final.replace(/\.mp4$/, '.part.mp4'); // a killed download leaves only the .part file, never a broken src.mp4
+  await fetchSection(url, from, to, out);
+  if (!existsSync(out) || statSync(out).size === 0) { rmSync(out, { force: true }); throw new Error('section download left no video'); }
+  renameSync(out, final);
+}
+
+async function fetchSection(url: string, from: number, to: number, out: string) {
   const vodId = vodIdOf(url), timeoutMs = 15 * 60_000; // a stalled download fails the job instead of holding the queue
   if (vodId) {
     try {
@@ -85,7 +92,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
 
   // Only the moment itself is downloaded, never the whole VOD.
   const src = join(dir, 'src.mp4'); // already there for a re-test or a study clip
-  if (!existsSync(src)) await downloadSection(source.url, moment.startSec, moment.endSec, src);
+  if (!existsSync(src) || statSync(src).size === 0) await downloadSection(source.url, moment.startSec, moment.endSec, src);
 
   const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
   const { peakDb } = t;
