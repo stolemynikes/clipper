@@ -17,7 +17,7 @@ import { startReviewServer } from './review/server.ts';
 import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
 import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
-import { enqueue } from './queue/queue.ts';
+import { enqueue, recoverStale } from './queue/queue.ts';
 import { scoutOnce } from './modules/scout/scout.ts';
 import { liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
@@ -60,6 +60,9 @@ const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); clearInterval(practiceTimer); server.close(); stopDiscord(); });
 
+// One worker process: anything still 'running' at start was cut off by a stop or crash. Requeue before any loop claims.
+const orphans = recoverStale(db, 0);
+if (orphans) log.warn(`requeued ${orphans} job(s) cut off by the last stop`);
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
 await Promise.all([
