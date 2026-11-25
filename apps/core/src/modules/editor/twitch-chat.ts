@@ -17,11 +17,11 @@ export async function renderTwitchChat(o: { vodId: string; from: number; to: num
   const tmp = process.env.TEMP ?? o.dir;
   const json = join(o.dir, 'twitch-chat.json'), out = join(o.dir, 'twitch-chat.mov');
   const common = ['--collision', 'Overwrite', '--banner', 'false', '--log-level', 'Error', '--temp-path', tmp];
-  await runCmd(exe, ['chatdownload', '--id', o.vodId, '-b', `${Math.max(0, Math.floor(o.from - 20))}s`, '-e', `${Math.ceil(o.to + 1)}s`, '-o', json, '--compression', 'None', ...common]);
+  await runCmd(exe, ['chatdownload', '--id', o.vodId, '-b', `${Math.max(0, Math.floor(o.from - 20))}s`, '-e', `${Math.ceil(o.to + 1)}s`, '-o', json, '--compression', 'None', ...common], { timeoutMs: 10 * 60_000 });
   await runCmd(exe, ['chatrender', '-i', json, '-o', out, '-w', String(CHAT_BOX.w), '-h', String(CHAT_BOX.h), '--font-size', '30',
     '--background-color', '#B3101014', '--outline', 'false', // dark see-through box like the Twitch player '--sub-messages', 'false',
     '--ignore-users', BOTS, ...(o.banWords?.length ? ['--ban-words', o.banWords.join(',')] : []),
     '-b', `${Math.round(o.from * 1000)}ms`, '-e', `${Math.round(o.to * 1000)}ms`, '--framerate', '30',
-    '--output-args=-c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le "{save_path}"' /* = form: a value starting with - is read as an option */, ...common]);
+    '--output-args=-c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le "{save_path}"' /* = form: a value starting with - is read as an option */, ...common], { timeoutMs: 10 * 60_000 });
   return out;
 }

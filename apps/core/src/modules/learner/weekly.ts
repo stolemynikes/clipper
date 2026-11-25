@@ -28,7 +28,7 @@ export async function weeklyShorts(max = 25) {
   for (const v of found.filter((x) => x.lang.startsWith('en')).slice(0, max)) {
     const mp4 = join(dir, `${v.id}.mp4`);
     try {
-      if (!existsSync(mp4)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', mp4, v.url]);
+      if (!existsSync(mp4)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', mp4, v.url], { timeoutMs: 10 * 60_000 });
       out.push(await shortFacts(v, mp4, model));
       log.info(`weekly: ${v.views} views "${v.title}"`);
     } catch (e) { log.warn(`weekly: skipped ${v.id}: ${(e as Error).message.slice(0, 150)}`); }

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
@@ -55,6 +55,21 @@ async function detectMusic(src: string): Promise<(Music & { musicSec: [number, n
   }
 }
 
+/** Downloads only [from, to] of a VOD. Twitch goes through TwitchDownloaderCLI: it picks segments from the playlist, while
+ *  ffmpeg's -ss trusts MPEG-TS timestamps, which wrap at 2^33/90 kHz (26.5 h), so ffmpeg searched forever past that point. */
+async function downloadSection(url: string, from: number, to: number, out: string) {
+  const vodId = vodIdOf(url), timeoutMs = 15 * 60_000; // a stalled download fails the job instead of holding the queue
+  if (vodId) {
+    try {
+      await runCmd(join(paths.toolsDir, 'TwitchDownloaderCLI.exe'), ['videodownload', '--id', vodId, '-b', `${from}s`, '-e', `${to}s`, '-q', '1080p60', '-o', out,
+        '--collision', 'Overwrite', '--banner', 'false', '--log-level', 'Error', '--temp-path', process.env.TEMP ?? dirname(out)], { timeoutMs });
+      return;
+    } catch (e) { log.warn('TwitchDownloader failed, trying yt-dlp', { error: String(e).slice(0, 300) }); rmSync(out, { force: true }); }
+  }
+  await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
+    '--download-sections', `*${from}-${to}`, '--merge-output-format', 'mp4', '-o', out, url], { timeoutMs });
+}
+
 /** retest: practice moment rendered before, raw window kept; encode only the proposals it has not tried. */
 export async function renderClip(db: Db, { momentId, practice, retest }: { momentId: number; practice?: boolean; retest?: boolean }) {
   const moment = db.select().from(moments).where(eq(moments.id, momentId)).get();
@@ -70,8 +85,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
 
   // Only the moment itself is downloaded, never the whole VOD.
   const src = join(dir, 'src.mp4'); // already there for a re-test or a study clip
-  if (!existsSync(src)) await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
-    '--download-sections', `*${moment.startSec}-${moment.endSec}`, '--merge-output-format', 'mp4', '-o', src, source.url], { timeoutMs: 15 * 60_000 }); // HLS section downloads can stall forever
+  if (!existsSync(src)) await downloadSection(source.url, moment.startSec, moment.endSec, src);
 
   const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
   const { peakDb } = t;

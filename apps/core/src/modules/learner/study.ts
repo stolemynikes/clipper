@@ -44,7 +44,7 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
   const stats: { dur: number; wps: number }[] = [];
   for (const c of clips) {
     const file = join(dir, `${c.id}.mp4`);
-    if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=720]/b', '-o', file, c.url ?? `https://clips.twitch.tv/${c.id}`]);
+    if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=720]/b', '-o', file, c.url ?? `https://clips.twitch.tv/${c.id}`], { timeoutMs: 10 * 60_000 });
     // One bad clip (e.g. no audio) must not stop the whole study.
     const t = await transcribe({ input: file, model, language: null }).catch(() => ({ words: [] as { w: string; s: number }[] }));
     const text = t.words.map((w) => w.w).join(' ').replace(/\s+/g, ' ').trim();
@@ -66,7 +66,7 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
     for (const v of shortsList) {
       const file = join(dir, `yt-${v.id}.mp4`), sheet = join(dir, `yt-${v.id}.jpg`);
       try {
-        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', file, v.url]);
+        if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', file, v.url], { timeoutMs: 10 * 60_000 });
         // 4 frames side by side (one per 6s): shows cam size, caption style, hook text, layout
         if (!existsSync(sheet)) await runCmd('ffmpeg', ['-v', 'error', '-y', '-i', file, '-vf',
           "select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,6)',scale=270:-2,tile=4x1", '-frames:v', '1', sheet]);
