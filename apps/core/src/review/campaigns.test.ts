@@ -7,7 +7,7 @@ const brief = `Silky clipping campaign. Earn $1.50 per 1,000 views, max $750 per
 Clips need 10K views before they pay, min payout $5. Ends Dec 15. Views count on TikTok and YouTube Shorts.
 Tag @Silky and use #Silky. Watch twitch.tv/silky.`;
 const base: Extract = { name: 'silky', channel: 'silky', tag: '@Silky', ratePer1k: 1.5, maxPerClip: 750, pool: 0, minViews: 10000, totalViews: 0, minPayout: 5,
-  budgetLeft: 7500, endsAt: '2026-12-15', platforms: ['tiktok', 'youtube'], hashtags: ['#Silky'], accountNote: '', disclosure: true, gambling: false };
+  budgetLeft: 7500, endsAt: '2026-12-15', platforms: ['tiktok', 'youtube'], hashtags: ['#Silky'], accountNote: '', contentRules: '', disclosure: true, gambling: false };
 
 test('numbers with commas, decimals and K are found', () => {
   const n = numbersIn(brief);
@@ -71,4 +71,10 @@ test('yaml write keeps comments', () => {
   assert.match(out, /# owner notes/);
   assert.match(out, /# main one/);
   assert.match(out, /name: b/);
+});
+
+test('toEntry: content rules become per-streamer notes', () => {
+  const e = toEntry({ name: 'kai', platforms: 'tiktok', ratePer1k: 1, endsAt: '2099-01-01', contentRules: 'Kai must be the main focus |  no logos | ' });
+  assert.deepEqual(e.campaign!.rules!.notes, ['Kai must be the main focus', 'no logos']);
+  assert.equal(toEntry({ name: 'kai', platforms: 'tiktok', ratePer1k: 1, endsAt: '2099-01-01' }).campaign!.rules!.notes, undefined);
 });

@@ -26,7 +26,7 @@ export const isGambling = (text: string) => GAMBLING.test(text);
 
 export type Extract = {
   name: string; channel: string; tag: string; ratePer1k: number; maxPerClip: number; pool: number; minViews: number; totalViews: number; minPayout: number;
-  budgetLeft: number; endsAt: string; platforms: string[]; hashtags: string[]; accountNote: string; disclosure: boolean; gambling: boolean;
+  budgetLeft: number; endsAt: string; platforms: string[]; hashtags: string[]; accountNote: string; contentRules: string; disclosure: boolean; gambling: boolean;
 };
 const NUMS = ['ratePer1k', 'maxPerClip', 'pool', 'minViews', 'totalViews', 'minPayout', 'budgetLeft'] as const;
 
@@ -63,7 +63,7 @@ export async function extract(text: string, url: string): Promise<{ fields: Extr
     ...Object.fromEntries(NUMS.map((k) => [k, { type: 'number' }])),
     // Booleans and a plain string, not arrays: at temperature 0 gemma repeated array items until the token cap.
     endsAt: { type: 'string' }, ...Object.fromEntries(PLATFORMS.map((p) => [p, { type: 'boolean' }])),
-    hashtags: { type: 'string' }, accountNote: { type: 'string' }, disclosure: { type: 'boolean' }, gambling: { type: 'boolean' },
+    hashtags: { type: 'string' }, accountNote: { type: 'string' }, contentRules: { type: 'string' }, disclosure: { type: 'boolean' }, gambling: { type: 'boolean' },
   };
   const prompt = `Read this clipping campaign brief and fill the fields. Use ONLY facts written in the text. If something is not written, use 0 or "".
 - name: the streamer's name, lowercase, no spaces. channel: their Twitch login if written, else the name.
@@ -74,6 +74,7 @@ export async function extract(text: string, url: string): Promise<{ fields: Extr
 - tiktok, youtube, instagram, x: true if views on that platform count (YouTube Shorts = youtube).
 - hashtags: the hashtags captions must use, separated by spaces, else "".
 - accountNote: one short sentence on account rules (e.g. "account may only post GTA 6 content"), else "".
+- contentRules: what the brief requires or forbids IN the clip itself (e.g. "Kai must be the main focus", "no logos", "no hate clips"), separated by " | ", else "". Not posting, payment or account rules.
 - disclosure: true if posts must be marked as paid or sponsored.
 - gambling: true if it promotes a casino, betting, slots or any gambling.
 Campaign page: ${url || 'not given'}
@@ -84,7 +85,7 @@ ${text.slice(0, 12_000)}`;
     method: 'POST', signal: AbortSignal.timeout(180_000),
     body: JSON.stringify({
       model: loadSettings().titles?.model ?? 'gemma4:12b', stream: false, think: false, keep_alive: '2m',
-      format: { type: 'object', properties: props, required: Object.keys(props) }, options: { temperature: 0, num_predict: 600 },
+      format: { type: 'object', properties: props, required: Object.keys(props) }, options: { temperature: 0, num_predict: 900 },
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -129,6 +130,8 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
   const rules: Record<string, unknown> = { platforms, hashtags: list('hashtags').map((h) => (h.startsWith('#') ? h : `#${h}`)) };
   for (const k of ['minViews', 'totalViews', 'minPayout'] as const) if (num(k)) rules[k] = num(k);
   if (str('accountNote')) rules.accountNote = str('accountNote').slice(0, 200);
+  const notes = str('contentRules').split('|').map((n) => n.trim()).filter(Boolean).slice(0, 8);
+  if (notes.length) rules.notes = notes; // per-streamer content rules the judge checks
   const tag = str('tag') || `@${name}`;
   const campaign: Campaign = { platform: 'content_rewards', ...(url ? { url } : {}), ratePer1k, maxPerClip: num('maxPerClip'), endsAt, rules,
     disclosure: b.disclosure !== false && b.disclosure !== 'false' };
@@ -218,6 +221,7 @@ progress::-webkit-progress-value{background:var(--ok);transition:width .4s}progr
 <fieldset class="checks" style="border:0;padding:0;margin:8px 0"><legend class="sub">Views count on</legend>${PLATFORMS.map((p) => `<label><input type="checkbox" name="platforms" value="${p}">${p}</label>`).join('')}</fieldset>
 <label>Hashtags<input name="hashtags" placeholder="#Name"></label><label>Tag<input name="tag" placeholder="@name"></label>
 <label>Account rule<input name="accountNote" maxlength="200"></label>
+<label>Content rules<input name="contentRules" maxlength="600" placeholder="Kai must be the main focus | no logos"></label>
 <div class="checks"><label><input type="checkbox" name="disclosure" checked>Mark posts as paid</label></div>
 <input type="hidden" name="url"><input type="hidden" name="brief">
 <button class="ok">Save (starts off)</button></form></article></section></main>
