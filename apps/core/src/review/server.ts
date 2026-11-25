@@ -5,6 +5,7 @@ import type { Db } from '../db/client.ts';
 import { logger } from '../log.ts';
 import { setupRoute } from './setup.ts';
 import { campaignsRoute } from './campaigns.ts';
+import { apiRoute } from './api.ts';
 import { CSS, esc } from './style.ts';
 import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setPaused, status } from './review.ts';
 
@@ -118,6 +119,7 @@ export function startReviewServer(db: Db) {
     try {
       const url = new URL(req.url ?? '/', 'http://x');
       if (/^\/(setup|connect|oauth)(\/|$)/.test(url.pathname) && await setupRoute(db, req, res, url)) return;
+      if (url.pathname.startsWith('/api/') && apiRoute(db, req, res, url)) return;
       if (/^\/campaigns(\/|$)/.test(url.pathname) && await campaignsRoute(db, req, res, url)) return;
       route(db, req, res);
     } catch (e) { log.error('review request failed', { error: String(e) }); if (!res.headersSent) res.writeHead(500).end(); }

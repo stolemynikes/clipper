@@ -148,7 +148,7 @@ export function update(name: string, patch: Partial<StreamerConfig> | StreamerCo
   writeFileSync(file(), doc.toString());
 }
 
-function status(s: StreamerConfig, p: Progress | null): { label: string; cls: string } {
+export function campaignStatus(s: StreamerConfig, p: Progress | null): { label: string; cls: string } {
   if (!campaignOpen(s.campaign!)) return { label: 'Ended', cls: '' };
   if (s.enabled === false) return { label: 'Off', cls: '' };
   if (s.stage === 'study') return p?.finished ? { label: 'Study done', cls: 'on' } : p?.error ? { label: 'Study failed', cls: 'warn' } : { label: 'Studying', cls: 'warn' };
@@ -156,7 +156,7 @@ function status(s: StreamerConfig, p: Progress | null): { label: string; cls: st
 }
 
 function card(s: StreamerConfig, earned: { views: number; earned: number }) {
-  const c = s.campaign!, p = readProgress(s.name), st = status(s, p);
+  const c = s.campaign!, p = readProgress(s.name), st = campaignStatus(s, p);
   const { facts, warnings } = campaignNotes(c);
   const exp = expectedPerClip(c, p?.medianShortViews);
   const plats = (Array.isArray(c.rules?.platforms) ? c.rules.platforms : []).map(String);
