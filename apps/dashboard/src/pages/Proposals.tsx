@@ -9,7 +9,7 @@ const STATUS: Record<Proposal['status'], string> = { testing: 'Testing', ready: 
 /** One line per proposal, plain words: what the owner pastes to Claude. */
 function summary(ps: Proposal[]) {
   return ps.map((p) => {
-    const s = p.untested ? 'from study, not tested' : p.score ? `wins ${p.score.wins} of ${p.score.n} (${pct(p.score.share)}, likely ${pct(p.score.low)}-${pct(p.score.high)})` : `${p.allPairs} of 20 tests`;
+    const s = p.untested ? (p.evidence ?? 'from study, not tested') : p.score ? `wins ${p.score.wins} of ${p.score.n} (${pct(p.score.share)}, likely ${pct(p.score.low)}-${pct(p.score.high)})` : `${p.allPairs} of 20 tests`;
     const aa = p.aa.biased ? ', judge leans to one side: score not trusted' : p.aa.n ? `, judge check ${p.aa.n}x ok` : '';
     return `- ${p.title} [${STATUS[p.status]}]: ${s}${aa}`;
   }).join('\n');
@@ -18,7 +18,7 @@ function summary(ps: Proposal[]) {
 function Score({ p }: { p: Proposal }) {
   if (p.untested) return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm text-m">From study, not tested. The judge cannot rate this, so real views after posting will show if it helps.</p>
+      <p className="text-sm text-m">{p.evidence ?? 'From study, not tested. The judge cannot rate this, so real views after posting will show if it helps.'}</p>
       {p.change.titleExamples?.length ? <ul className="text-sm flex flex-col gap-1 list-disc pl-5">{p.change.titleExamples.map((t) => <li key={t}>{t}</li>)}</ul> : null}
     </div>);
   if (!p.score) return <p className="text-sm text-m">{p.allPairs} of 20 tests done. The score shows after 20.</p>;

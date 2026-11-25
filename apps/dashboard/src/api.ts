@@ -23,7 +23,7 @@ export interface Proposal {
   score: { wins: number; n: number; share: number; low: number; high: number } | null;
   aa: { n: number; biased: boolean; firstShare: number | null; sameShare: number | null };
   frames: { clipId: number; old: string; new: string }[];
-  untested?: boolean; change: { titleExamples?: string[] };
+  untested?: boolean; evidence?: string; change: { titleExamples?: string[] };
 }
 
 const get = async <T,>(path: string): Promise<T> => {

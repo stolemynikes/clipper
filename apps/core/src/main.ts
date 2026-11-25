@@ -39,9 +39,9 @@ const trackTimer = setInterval(track, 60 * 60_000); // hourly: views move slowly
 const learn = () => {
   if (isOff('learn') || !learnDue()) return;
   try {
-    const { next, changes } = learnOnce(db);
+    const { next, changes, proposal } = learnOnce(db);
     log.info(`learner: ${next.n} clips, label ${next.label}, auc ${JSON.stringify(next.auc)}`);
-    bark('Weekly learning', changes.length ? changes.join('\n') : `No weight changes (${next.n} clips, label: ${next.label}).`, { level: 'passive' }).catch(() => {});
+    bark('Weekly learning', proposal ? `New weights proposed (dashboard, Proposals):\n${changes.join('\n')}\n${proposal.evidence}` : `No weight changes (${next.n} clips, label: ${next.label}).`, { level: 'passive' }).catch(() => {});
   } catch (e) { log.error('learner failed', { error: String(e) }); }
 };
 learn();

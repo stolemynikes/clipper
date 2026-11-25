@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Db } from '../../db/client.ts';
 import { paths } from '../../env.ts';
+import { addProposal, tweaks } from '../practice/proposals.ts';
 
 export const LEARNED_SIGNALS = ['laughMax', 'cheerMax', 'speech', 'visual'] as const; // same list as judge FUN_SIGNALS
 const REPORT_ONLY = ['chatRate', 'emoteScore', 'viewerClipHits', 'audioPeak']; // tuned by hand in settings.yaml
@@ -65,13 +66,42 @@ export function learnStep(rows: Row[], prev: Learned | null, now = new Date()): 
   return { next: { at: now.toISOString(), label, n: items.length, weights, auc: aucs }, changes };
 }
 
+/** AUC of the weighted fun score on the study viewer clips (data/study-eval.json): good = above its streamer's median views. */
+export function studyAuc(w: Record<string, number>, rows = studyRows()): { auc: number | null; n: number } {
+  const by = new Map<string, number[]>();
+  for (const r of rows) by.set(r.streamer, [...(by.get(r.streamer) ?? []), r.views]);
+  const med = (xs: number[]) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
+  const score = (r: StudyRow) => LEARNED_SIGNALS.reduce((a, k) => a + (w[k] ?? 0) * (r[k] ?? 0), 0);
+  return { auc: auc(rows.map(score), rows.map((r) => r.views > med(by.get(r.streamer)!))), n: rows.length };
+}
+type StudyRow = { streamer: string; views: number } & Partial<Record<(typeof LEARNED_SIGNALS)[number], number>>;
+const studyRows = (): StudyRow[] => {
+  try { return Object.values(JSON.parse(readFileSync(join(paths.dataDir, 'study-eval.json'), 'utf8'))); } catch { return []; }
+};
+
+/** Weekly run. Live weights stay frozen (practice-plan): a change becomes a proposal the owner approves. */
 export function learnOnce(db: Db, now = new Date()) {
   const rows = db.$client.prepare(`
     select m.signals, c.status, (select max(st.views) from posts p join stats st on st.post_id = p.id where p.clip_id = c.id) views
     from clips c join moments m on m.id = c.moment_id`).all() as Row[];
-  const r = learnStep(rows, readLearned(), now);
-  writeFileSync(file(), JSON.stringify(r.next, null, 2));
-  return r;
+  const prev = readLearned(), live = { ...prev?.weights, ...tweaks().funWeights }; // same as judge liveWeights()
+  const r = learnStep(rows, prev && { ...prev, weights: live }, now);
+  writeFileSync(file(), JSON.stringify({ ...r.next, weights: prev?.weights ?? {} }, null, 2)); // AUCs update, weights do not
+  const proposal = r.changes.length ? weightProposal(r.next, live, now) : null;
+  if (proposal) addProposal(proposal);
+  return { ...r, proposal };
+}
+
+/** Proposal for new fun weights, with how both weight sets rank the study clips by real views. */
+export function weightProposal(next: Learned, live: Record<string, number>, now = new Date(), rows = studyRows()) {
+  const a = studyAuc(live, rows), b = studyAuc(next.weights, rows), pct = (x: number | null) => (x === null ? '?' : `${Math.round(x * 100)}%`);
+  const list = (w: Record<string, number>) => LEARNED_SIGNALS.map((k) => `${k} ${w[k] ?? 0}`).join(', ');
+  return {
+    id: `weights-${now.toISOString().slice(0, 10)}`, title: 'New weights for the fun signals',
+    why: `Weekly learner (${next.n} clips, label: ${next.label}) suggests ${list(next.weights)}. Now ${list(live)}.`,
+    change: { funWeights: next.weights },
+    evidence: `Checked on ${b.n} viewer clips with real views: the new weights pick the better clip ${pct(b.auc)} of the time, the current ones ${pct(a.auc)} (50% = coin flip).`,
+  };
 }
 
 export const learnDue = (now = new Date()) => { const l = readLearned(); return !l || now.getTime() - new Date(l.at).getTime() >= 7 * 86_400_000; };

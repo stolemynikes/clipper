@@ -13,6 +13,7 @@ import { runCmd } from '../../proc.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { learnedWeights } from '../learner/weights.ts';
+import { tweaks } from '../practice/proposals.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 import { type Proposal, proposalDir, proposals, recordPair } from '../practice/proposals.ts';
 import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules, type Rule } from './layout.ts';
@@ -174,6 +175,9 @@ function saveCalibration(clipId: number, frame: string | undefined, transcript: 
   appendFileSync(join(d, 'index.jsonl'), JSON.stringify({ clipId, transcript: (transcript ?? '').slice(0, 1500), ...fun }) + '\n');
 }
 
+/** Weights frozen at the last learner run before proposals, plus owner-approved weight proposals. */
+const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
+
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
 export const JUDGE_VERSION = 1;
 
@@ -218,8 +222,8 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
     log.warn(`clip ${clipId}: LLM judge skipped: ${(e as Error).message}`); // Ollama down: clip still goes to review
   }
   const signals = { ...(moment.signals ?? {}), ...Object.fromEntries(Object.entries(fun).filter(([, v]) => v !== undefined)) };
-  const base = moment.score - funBonus((moment.signals ?? {}) as FunSignals, learnedWeights()); // re-judge: don't add twice
-  db.update(moments).set({ signals: signals as Record<string, number>, score: base + funBonus(fun, learnedWeights()) }).where(eq(moments.id, moment.id)).run();
+  const base = moment.score - funBonus((moment.signals ?? {}) as FunSignals, liveWeights()); // re-judge: don't add twice
+  db.update(moments).set({ signals: signals as Record<string, number>, score: base + funBonus(fun, liveWeights()) }).where(eq(moments.id, moment.id)).run();
   if (layoutWarnings) { // replace the old layout warnings on a re-judge; they show on the card and block auto-keep
     const c = (clip.compliance ?? {}) as { warnings?: string[] };
     const warnings = [...(c.warnings ?? []).filter((w) => !w.startsWith(LAYOUT_PREFIX)), ...layoutWarnings];

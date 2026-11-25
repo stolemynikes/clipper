@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auc, learnStep, MIN_N, nextWeight } from './weights.ts';
+import { auc, learnStep, MIN_N, nextWeight, studyAuc, weightProposal } from './weights.ts';
 import { funBonus } from '../judge/judge.ts';
 
 test('auc: perfect, inverse, ties, one class empty', () => {
@@ -45,4 +45,17 @@ test('learnStep: proxy label never scores viewerClipHits against itself; views w
 test('funBonus: unproven weights add nothing', () => {
   assert.equal(funBonus({ speech: 0.8, laughMax: 0.5 }, {}), 0);
   assert.equal(funBonus({ speech: 0.8, laughMax: 0.5 }, { speech: 2, laughMax: 1 }), 2.1);
+});
+
+test('studyAuc / weightProposal: ranks study clips against views above the streamer median', () => {
+  const rows = [
+    { streamer: 'a', views: 100, speech: 0.1 }, { streamer: 'a', views: 900, speech: 0.9 }, { streamer: 'a', views: 500, speech: 0.5 },
+    { streamer: 'b', views: 10, speech: 0.2 }, { streamer: 'b', views: 90, speech: 0.8 }, { streamer: 'b', views: 50, speech: 0.4 },
+  ];
+  assert.equal(studyAuc({ speech: 1 }, rows).auc, 1);
+  assert.equal(studyAuc({ speech: -1 }, rows).auc, 0);
+  const p = weightProposal({ at: '', label: 'x', n: 20, weights: { speech: 1 }, auc: {} }, {}, new Date('2026-11-25'), rows);
+  assert.equal(p.id, 'weights-2026-11-25');
+  assert.deepEqual(p.change, { funWeights: { speech: 1 } });
+  assert.match(p.evidence, /new weights pick the better clip 100%.*current ones 50%/);
 });

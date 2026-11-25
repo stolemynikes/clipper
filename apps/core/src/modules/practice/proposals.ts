@@ -9,7 +9,8 @@ import type { CaptionStyle } from '../editor/subtitles.ts';
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
 export type Change = {
   wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[];
-  leadSec?: number; maxLen?: number; // length: build-up before the peak, longest cut (campaign maxSec still caps)
+  leadSec?: number; maxLen?: number;
+  funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
 };
 /** Length changes move the cut: judged on the two transcripts, not on frames. */
 export const isLength = (c: Change) => c.leadSec !== undefined || c.maxLen !== undefined;
@@ -18,6 +19,7 @@ export type Proposal = {
   id: string; title: string; why: string; change: Change;
   status: 'testing' | 'ready' | 'approved' | 'rejected'; created: number; decided?: number;
   untested?: boolean; // from study, no A/B: gemma cannot judge metadata. Real views after posting measure it.
+  evidence?: string; // untested by the judge but checked another way (e.g. weights on real views), shown instead of "not tested"
   pairs: Pair[]; aa: { pick: 0 | 1 | 2 }[]; // A/A control: same clip twice, pick 1 or 2 should be ~50/50 (0 = no difference, the right answer)
   frames: { clipId: number; old: string; new: string }[]; // small jpgs in data/proposals/<id>/ for the report
 };
@@ -97,6 +99,15 @@ export function seedStudy(study: { at: string | null; titles: string[] }) {
   ps.push({ id, title: "Title style of this week's top Shorts", why: `The title writer copies the style (not the content) of the ${study.titles.length} most-viewed gaming Shorts of the weekly study.`,
     change: { titleExamples: study.titles }, untested: true, status: 'ready', created: Date.now(), pairs: [], aa: [], frames: [] });
   saveProposals(ps);
+}
+
+/** Untested proposal from a study or the learner; waits for the owner ("ready"). Same id twice is ignored. */
+export function addProposal(p: Pick<Proposal, 'id' | 'title' | 'why' | 'change' | 'evidence'>) {
+  const ps = proposals();
+  if (ps.some((x) => x.id === p.id)) return false;
+  ps.push({ ...p, untested: true, status: 'ready', created: Date.now(), pairs: [], aa: [], frames: [] });
+  saveProposals(ps);
+  return true;
 }
 
 export const hasProposals = () => existsSync(file());
