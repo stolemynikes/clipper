@@ -25,7 +25,7 @@ async function helix<T>(path: string, params: Record<string, string>): Promise<{
   return res.json() as any;
 }
 
-export interface Vod { id: string; user_id: string; user_login: string; title: string; created_at: string; duration: string; url: string }
+export interface Vod { id: string; user_id: string; user_login: string; title: string; created_at: string; duration: string; url: string; view_count?: number }
 export interface Clip { id: string; video_id: string; vod_offset: number | null; duration: number; view_count: number; created_at: string; title?: string; url?: string }
 
 /** "3h2m1s" -> 10921 */

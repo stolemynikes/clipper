@@ -27,13 +27,13 @@ Nothing is posted or submitted: Snip stays paused (`data/paused`).
 
 ## What practice mode does
 
-1. **Pick a VOD.** One VOD 3 to 14 days old, never analyzed before, with the most views first (Helix `view_count`). Only streamers with an active campaign. It picks the next VOD only when no `vod.analyze` or `clip.render` job is queued.
+1. **Pick a VOD.** One VOD 3 to 14 days old, never analyzed before, with the most views first (Helix `view_count`). Only streamers with an active campaign. It picks the next VOD only when no practice job is queued or running. Practice jobs (`practice.analyze/render/judge`) run in their own loop, also while Snip is paused; they wait while live `vod.analyze`/`clip.render`/`clip.judge` jobs wait (unless Snip is paused).
 2. **Analyze it** as usual: chat, viewer clips, audio peaks, then the top-N moments.
 3. **Render each moment** with the current template. These clips get status `practice`. Phase 2 adds a second render with the proposal.
 4. **Judge each clip with gemma4:12b:** speech (with study examples), frames, layout. Phase 2 adds audio and the pairwise judge. There is no Telegram/Bark review notify for practice clips.
 5. **Clean up.** Delete the practice clip files and the VOD segments after judging. Study mp4s are deleted after analysis. Only scores, signals and the small frames for the report stay.
-6. **Study daily** in practice mode: weekly Shorts plus the campaign study (top viewer clips and top YouTube Shorts per streamer).
-7. **Learn.** The learner runs every 6h in practice mode instead of daily.
+6. **Study daily** (phase 2) in practice mode: weekly Shorts plus the campaign study (top viewer clips and top YouTube Shorts per streamer).
+7. **Learn** (phase 2): the learner runs every 6h in practice mode. In phase 1 the learner is frozen: `data/off-learn` is set, so live weights never change from practice data.
 8. **Stop** when the owner turns off "Oefenen 's nachts" (`data/practice` removed). The running job finishes first.
 
 ## What it learns (phase 2: proposals only, live unchanged)
@@ -82,7 +82,7 @@ Also on the page:
 ## Self-healing (no Claude needed)
 
 - **A VOD fails:** skip it and take the next VOD.
-- **3 different VODs fail in a row:** pause 1 hour, then retry once. If it still fails: stop practice and send a Bark alert.
+- **3 practice jobs fail in a row** (final failure, after retries): pause 1 hour, then retry once. If it still fails: stop practice and send a Bark alert.
 - **Less than 100 GB free on E::** stop practice and send a Bark alert.
 - **08:00 morning summary via Bark:** for example "6 VODs, 2 proposals ready, 1 error fixed". It comes from the worker, so it works even if Claude has no tokens. Later it moves to the dashboard.
 

@@ -19,6 +19,7 @@ import { studyJob } from './modules/learner/study.ts';
 import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
 import { enqueue } from './queue/queue.ts';
 import { scoutOnce } from './modules/scout/scout.ts';
+import { liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
 const log = logger('main');
@@ -53,9 +54,11 @@ const weekly = () => {
 weekly();
 const weeklyTimer = setInterval(weekly, 24 * 60 * 60_000);
 const scout = () => { if (!isPaused() && loadSettings().scout?.enabled !== false) scoutOnce(db).catch((e) => log.error('scout failed', { error: String(e) })); };
+const practice = () => practiceTick(db).catch((e) => log.error('practice tick failed', { error: String(e) }));
+const practiceTimer = setInterval(practice, 60_000);
 const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most 3 new campaigns per run
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); server.close(); stopDiscord(); });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); clearInterval(practiceTimer); server.close(); stopDiscord(); });
 
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
@@ -63,6 +66,9 @@ await Promise.all([
   runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
   // Own loop so the Settings switch can hold study jobs queued without blocking clips.
   runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => isPaused() || isOff('study') }),
+  // Practice (data/practice): old VODs judged and deleted, never reviewed. Runs while Snip is paused; live work goes first.
+  runWorker(db, { 'practice.analyze': tracked((p: any) => analyzeVod(db, p)), 'practice.render': tracked((p: any) => renderClip(db, p)), 'practice.judge': tracked((p: any) => judgeClip(db, p)) },
+    { signal: ac.signal, paused: () => practiceHeld() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);

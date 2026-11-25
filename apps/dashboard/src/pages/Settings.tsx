@@ -17,6 +17,10 @@ export function Settings() {
       path: (on) => `/toggle/study/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Studying is on' : 'Studying is off. Waiting studies stay in line.') },
     { key: 'learn', title: 'Weekly learning', text: 'Once a week Snip looks at which clips got views and adjusts how it picks moments.', on: data.learning,
       path: (on) => `/toggle/learn/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Weekly learning is on' : 'Weekly learning is off') },
+    { key: 'practice', title: 'Practice at night', text: 'Snip makes practice clips from older VODs to learn what works. They are never posted and are deleted after scoring. Turn off to stop.', on: data.practice,
+      path: (on) => `/toggle/practice/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Practice is on' : 'Practice stops after the current step') },
+    { key: 'claude', title: 'Claude watches along', text: 'Claude checks the practice run now and then and fixes errors. Turn off when you need your Claude usage.', on: data.claude,
+      path: (on) => `/toggle/claude/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Claude watches along' : 'Claude stops watching. Practice keeps running.') },
   ];
   const flip = async (r: Row) => {
     setBusy(r.key);

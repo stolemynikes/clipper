@@ -7,6 +7,7 @@ import { readProgress } from '../modules/learner/study.ts';
 import { accountWarnings, allStreamers, campaignStatus, expectedPerClip } from './campaigns.ts';
 import { bestScores, isOff, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
+import { isPractice } from '../modules/practice/practice.ts';
 import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
 
 const DAY = 86_400_000;
@@ -42,13 +43,13 @@ function overview(db: Db) {
   const st = status(db), posts = allPosts(db), camps = allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, posts));
   const week = Date.now() - 7 * DAY;
   const recentClips = db.$client.prepare(`select c.id, c.status, c.created_at at, s.name streamer from clips c join moments m on m.id = c.moment_id
-    join sources so on so.id = m.source_id join streamers s on s.id = so.streamer_id order by c.created_at desc limit 30`).all() as { id: number; status: string; at: number; streamer: string }[];
+    join sources so on so.id = m.source_id join streamers s on s.id = so.streamer_id where c.status != 'practice' order by c.created_at desc limit 30`).all() as { id: number; status: string; at: number; streamer: string }[];
   const activity = [
     ...recentClips.map((c) => ({ kind: c.status === 'rejected' ? 'skipped' : c.status === 'pending_review' ? 'new' : 'kept', text: `${c.status === 'rejected' ? 'Skipped' : c.status === 'pending_review' ? 'New clip from' : 'Kept'} ${c.streamer}${c.status === 'pending_review' ? '' : ' clip'}`, at: c.at })),
     ...posts.filter((p) => p.postedAt).slice(0, 30).map((p) => ({ kind: 'posted', text: `Posted ${p.streamer} clip to ${LABEL[p.platform as keyof typeof LABEL] ?? p.platform}`, at: p.postedAt! })),
   ].sort((a, b) => b.at - a.at).slice(0, 40);
   return {
-    paused: st.paused, study: !isOff('study'), learning: !isOff('learn'), working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
+    paused: st.paused, study: !isOff('study'), learning: !isOff('learn'), practice: isPractice(), claude: !isOff('claude'), working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
     toReview: sum(st.clips, 'pending_review'), kept: sum(st.clips, 'approved', 'posted'), skipped: sum(st.clips, 'rejected'),
     posted: posts.length, postedThisWeek: posts.filter((p) => (p.postedAt ?? 0) >= week).length,
     views: posts.reduce((t, p) => t + (p.views ?? 0), 0), earned: camps.reduce((t, c) => t + c.earned, 0),

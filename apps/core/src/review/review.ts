@@ -16,7 +16,7 @@ const pauseFile = join(paths.dataDir, 'paused');
 export const isPaused = () => existsSync(pauseFile);
 export const setPaused = (on: boolean) => (on ? writeFileSync(pauseFile, new Date().toISOString()) : rmSync(pauseFile, { force: true }));
 /** Owner switches (dashboard Settings): a file in data/ means that part is off. */
-export type Toggle = 'study' | 'learn';
+export type Toggle = 'study' | 'learn' | 'claude';
 const offFile = (k: Toggle) => join(paths.dataDir, `off-${k}`);
 export const isOff = (k: Toggle) => existsSync(offFile(k));
 export const setOff = (k: Toggle, off: boolean) => (off ? writeFileSync(offFile(k), new Date().toISOString()) : rmSync(offFile(k), { force: true }));

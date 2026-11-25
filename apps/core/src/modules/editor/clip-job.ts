@@ -54,7 +54,7 @@ async function detectMusic(src: string): Promise<(Music & { musicSec: [number, n
   }
 }
 
-export async function renderClip(db: Db, { momentId }: { momentId: number }) {
+export async function renderClip(db: Db, { momentId, practice }: { momentId: number; practice?: boolean }) {
   const moment = db.select().from(moments).where(eq(moments.id, momentId)).get();
   if (!moment) throw new Error(`moment ${momentId} not found`);
   if (db.select().from(clips).where(eq(clips.momentId, momentId)).get()) return log.info(`moment ${momentId} already rendered`);
@@ -159,8 +159,8 @@ export async function renderClip(db: Db, { momentId }: { momentId: number }) {
   for (const f of [src, join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },
-    title: title?.title, hook: title?.hook, titleStyle: title?.style }).returning().get();
+    title: title?.title, hook: title?.hook, titleStyle: title?.style, ...(practice && { status: 'practice' as const }) }).returning().get();
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
-  enqueue(db, 'clip.judge', { clipId: clip.id }); // judge then asks for review
+  enqueue(db, practice ? 'practice.judge' : 'clip.judge', { clipId: clip.id }); // judge then asks for review (not for practice)
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);
 }

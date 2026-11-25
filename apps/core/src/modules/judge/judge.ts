@@ -1,8 +1,8 @@
 // "Is it fun to watch?" signals per rendered clip, on top of chat and viewer clips (loud != funny):
 // laughMax/cheerMax (YAMNet peak score, from music_detect; the share-of-frames ratio was ~always 0 under speech), speech (local LLM reads the transcript),
 // visual (same LLM looks at 4 frames). They only change the score once the learner has proven them (weights start at 0).
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { loadSettings } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
@@ -92,6 +92,9 @@ export async function frames(file: string, dur: number, width = 360): Promise<st
   return out;
 }
 
+/** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
+export const JUDGE_VERSION = 1;
+
 /** Job: judge one clip, store the signals on its moment, add the proven part to the score, then ask for review. */
 export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: number; notify?: boolean }) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
@@ -101,7 +104,7 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
   const s = loadSettings();
   const model = s.titles?.model ?? 'gemma4:12b';
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;
-  const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number; layoutPenalty?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
+  const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number; layoutPenalty?: number; judgeVersion?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
 { laughMax: music?.laughMax, cheerMax: music?.cheerMax };
   let layoutWarnings: string[] | undefined;
   try {
@@ -121,7 +124,7 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
     }
     log.info(`clip ${clipId} judged on ${gpu ? 'GPU' : 'CPU'} in ${Date.now() - t0} ms: ${why.join(' | ')}`);
-    Object.assign(fun, { judgeGpu: gpu ? 1 : 0, judgeWhy: why.join(' | ') });
+    Object.assign(fun, { judgeVersion: JUDGE_VERSION, judgeGpu: gpu ? 1 : 0, judgeWhy: why.join(' | ') });
   } catch (e) {
     log.warn(`clip ${clipId}: LLM judge skipped: ${(e as Error).message}`); // Ollama down: clip still goes to review
   }
@@ -133,5 +136,7 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
     const warnings = [...(c.warnings ?? []).filter((w) => !w.startsWith(LAYOUT_PREFIX)), ...layoutWarnings];
     db.update(clips).set({ compliance: { ...c, warnings } }).where(eq(clips.id, clipId)).run();
   }
+  // Practice clips are never reviewed or posted: keep the scores, delete the video files.
+  if (clip.status === 'practice') return rmSync(dirname(clip.filePath), { recursive: true, force: true });
   if (notify) enqueue(db, 'review.notify', { clipId });
 }

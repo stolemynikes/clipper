@@ -27,7 +27,7 @@ export function sourceContext(db: Db, sourceId: number) {
   return { source, cfg };
 }
 
-export async function analyzeVod(db: Db, { sourceId, vodId }: { sourceId: number; vodId: string }) {
+export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { sourceId: number; vodId: string; practice?: boolean }) {
   const { source, cfg } = sourceContext(db, sourceId);
   if (db.select().from(moments).where(eq(moments.sourceId, sourceId)).get()) return log.info(`source ${sourceId} already analyzed`);
   const settings = loadSettings();
@@ -52,7 +52,7 @@ export async function analyzeVod(db: Db, { sourceId, vodId }: { sourceId: number
     const clipDir = join(paths.dataDir, 'clips', String(row.id));
     mkdirSync(clipDir, { recursive: true });
     writeFileSync(join(clipDir, 'chat.json'), JSON.stringify(chat.filter((c) => c.t >= m.start && c.t < m.end).map((c) => ({ ...c, t: c.t - m.start }))));
-    enqueue(db, 'clip.render', { momentId: row.id });
+    enqueue(db, practice ? 'practice.render' : 'clip.render', { momentId: row.id, practice });
   }
   db.update(sources).set({ status: 'analyzed' }).where(eq(sources.id, sourceId)).run();
   log.info(`source ${sourceId}: ${chat.length} chat msgs, ${viewerClips.length} viewer clips -> ${picked.length} moments`);
