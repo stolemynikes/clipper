@@ -83,11 +83,11 @@ a strong facial reaction, action in the game, something surprising on screen. A 
 Ignore captions, chat boxes and title text drawn on top: an editor added those, they are not what happens.
 Return JSON: "score" 0-10, "why" one short sentence.`;
 
-export async function frames(file: string, dur: number, width = 360): Promise<string[]> { // layout check: 540+, thin strips vanish at 360
+export async function frames(file: string, dur: number, width = 360, at = [0.2, 0.4, 0.6, 0.8].map((f) => dur * f)): Promise<string[]> { // layout check: 540+, thin strips vanish at 360
   const out: string[] = [];
-  for (const f of [0.2, 0.4, 0.6, 0.8]) {
+  for (const t of at) {
     const jpg = await runCmd('powershell', ['-NoProfile', '-Command', // binary stdout via base64: runCmd returns text
-      `$p=[IO.Path]::GetTempFileName()+'.jpg'; ffmpeg -v error -y -ss ${(dur * f).toFixed(1)} -i '${file.replace(/'/g, "''")}' -frames:v 1 -vf scale=${width}:-2 $p; [Convert]::ToBase64String([IO.File]::ReadAllBytes($p)); Remove-Item $p`]);
+      `$p=[IO.Path]::GetTempFileName()+'.jpg'; ffmpeg -v error -y -ss ${t.toFixed(1)} -i '${file.replace(/'/g, "''")}' -frames:v 1 -vf scale=${width}:-2 $p; [Convert]::ToBase64String([IO.File]::ReadAllBytes($p)); Remove-Item $p`]);
     out.push(jpg.trim());
   }
   return out;
@@ -101,12 +101,23 @@ Return JSON: "pick" 1, 2 or 0, "why" one short sentence.`;
 const PICK = { type: 'object', properties: { pick: { type: 'integer' }, why: { type: 'string' } }, required: ['pick', 'why'] };
 
 /** Practice A/B: pairwise judge on clip.mp4 (current) vs clip-b.mp4 (proposal), random order; ~1 in 5 is an A/A control. */
+/** Mid-points of 4 caption events spread over the clip (from the burned-in .ass). */
+export function captionTimes(ass: string): number[] {
+  if (!existsSync(ass)) return [];
+  const sec = (t: string) => { const [h, m, x] = t.split(':').map(Number); return h * 3600 + m * 60 + x; };
+  const mids = [...readFileSync(ass, 'utf8').matchAll(/^Dialogue: \d+,([\d:.]+),([\d:.]+),Caption,/gm)].map((m) => (sec(m[1]) + sec(m[2])) / 2);
+  return mids.length <= 4 ? mids : [0.15, 0.4, 0.65, 0.9].map((f) => mids[Math.floor(f * (mids.length - 1))]);
+}
+
 async function judgePair(model: string, gpu: boolean, clipId: number, dir: string, dur: number) {
   const idFile = join(dir, 'proposal.txt'), b = join(dir, 'clip-b.mp4'), a = join(dir, 'clip.mp4');
   if (!existsSync(idFile) || !existsSync(b)) return;
   const id = readFileSync(idFile, 'utf8').trim(), p = proposals().find((x) => x.id === id);
   if (!p || p.status !== 'testing') return;
-  const [fa, fb] = [await frames(a, dur, 540), await frames(b, dur, 540)];
+  // Frames where a caption is on screen: a frame without one looks the same in both edits and invites a guess.
+  const at = captionTimes(join(dir, 'clip.ass'));
+  if (at.length < 2) return 'no captions';
+  const [fa, fb] = [await frames(a, dur, 540, at), await frames(b, dur, 540, at)];
   if (Math.random() < 0.2) { // A/A: same video twice; the right answer is 0, a 1/2 lean shows position bias
     const j = await askJson(model, gpu, PAIR_PROMPT, PICK, [...fa, ...fa]);
     const pick = ([0, 1, 2].includes(Number(j.pick)) ? Number(j.pick) : 0) as 0 | 1 | 2;
