@@ -58,3 +58,20 @@ It cannot judge sound quality:
 
 So the sound proposals (`sound-duck-0.3`, `sound-deadair-2`) stay untested by a judge. Real views after posting decide them.
 Audio could still help as a content signal (laughter, shouting) later, not as an A/B judge.
+
+## Open checks (Nov 25)
+
+**Sleep at night:** power plan sleeps and hibernates never on AC (`STANDBYIDLE`/`HIBERNATEIDLE` AC = 0). DC (battery) is 10 min and does not apply to this desktop.
+
+**music_detect.py (YAMNet):** controlled test. A study clip with musicRatio 0 got a synthetic instrumental track (chords + kick) mixed in. Speech is about -31.7 dB mean.
+
+| Music level | musicRatio |
+|---|---|
+| none | 0.00 |
+| about 3 dB under the voice | 0.86 |
+| about 11 dB under the voice | 0.19 |
+| louder than the voice | 1.00 |
+
+- Instrumental music is caught. Quiet background music lands around MUSIC_WARN (0.15) and stays well under MUSIC_BLOCK (0.5). That fits: it warns and ducks, and does not block.
+- Not tested: `vocalRatio` on a real song with vocals (no licensed or CC song on disk). That is the riskier block. Test it once a CC vocal track is available.
+- gemma4 is no referee for music: on the 6 highest-musicRatio study clips it said "no music" 5 times.
