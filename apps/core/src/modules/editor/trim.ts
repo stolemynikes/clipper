@@ -11,6 +11,7 @@ export interface TrimInput {
   targetSec: [number, number];
   minSec: number;
   maxSec: number;
+  leadSec?: number; // build-up before the peak; default LEAD_SEC (a length proposal may change it)
 }
 
 const LEAD_SEC = 12; // ideal build-up before the peak: 12 + window + tail ~ 25s, the popular Shorts length (median 23s)
@@ -32,7 +33,7 @@ export function trimWindow(o: TrimInput): { start: number; end: number } {
   end = Math.min(dur, end);
 
   const lo = Math.max(0, end - maxLen), hi = Math.max(lo, end - o.targetSec[0]);
-  const ideal = Math.min(hi, Math.max(lo, o.peakRel - LEAD_SEC));
+  const ideal = Math.min(hi, Math.max(lo, o.peakRel - (o.leadSec ?? LEAD_SEC)));
   // Sentence starts: first word, or a word after a full stop or a pause.
   const starts = ws.filter((w, k) => k === 0 || ends(ws[k - 1]) || w.s - ws[k - 1].e > GAP).map((w) => Math.max(0, w.s - 0.3))
     .filter((s) => s >= lo && s <= hi);

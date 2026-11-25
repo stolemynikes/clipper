@@ -109,38 +109,58 @@ export function captionTimes(ass: string): number[] {
   return mids.length <= 4 ? mids : [0.15, 0.4, 0.65, 0.9].map((f) => mids[Math.floor(f * (mids.length - 1))]);
 }
 
-async function judgePair(model: string, gpu: boolean, clipId: number, dir: string, dur: number) {
+export const LENGTH_PROMPT = `Two cuts of the same stream moment for TikTok/Shorts: transcripts with their length.
+They differ only in where the cut starts and ends, or not at all.
+Which cut works better as a Short? A good cut gets to the point fast, keeps the build-up needed to get the joke,
+and ends right after the payoff. If you see no real difference, answer 0. Do not guess.
+Return JSON: "pick" 1, 2 or 0, "why" one short sentence.`;
+type Cut = { sec: number; text: string };
+const cutText = (c: Cut, n: number) => `Cut ${n} (${c.sec.toFixed(0)}s): "${c.text.slice(0, 1500)}"`;
+
+async function judgePair(model: string, gpu: boolean, clipId: number, dir: string, dur: number, text: string) {
   const idFile = join(dir, 'proposals.txt'), a = join(dir, 'clip.mp4');
   if (!existsSync(idFile)) return;
   // Frames where a caption is on screen: a frame without one looks the same in both edits and invites a guess.
   const at = captionTimes(join(dir, 'clip.ass'));
-  if (at.length < 2) return 'no captions';
-  const fa = await frames(a, dur, 540, at), out: string[] = [];
+  let fa: string[] | null = null;
+  const out: string[] = [];
   for (const id of readFileSync(idFile, 'utf8').split('\n').map((x) => x.trim()).filter(Boolean)) {
-    const b = join(dir, `clip-${id}.mp4`), p = proposals().find((x) => x.id === id);
-    if (!p || p.status !== 'testing' || !existsSync(b)) continue;
-    try { out.push(await judgeOne(model, gpu, clipId, p, fa, await frames(b, dur, 540, at))); }
-    catch (e) { out.push(`${id} failed`); log.warn(`clip ${clipId}: pair ${id} failed: ${(e as Error).message}`); }
+    const p = proposals().find((x) => x.id === id);
+    if (!p || p.status !== 'testing') continue;
+    try {
+      const cut = join(dir, `clip-${id}.json`), b = join(dir, `clip-${id}.mp4`);
+      if (existsSync(cut)) { // length proposal: other start/end, judged on the transcripts (stills cannot show length)
+        const cb = JSON.parse(readFileSync(cut, 'utf8')) as Cut, ca = { sec: dur, text };
+        if (cb.text === ca.text) { out.push(`${id} same cut`); continue; } // proposal changes nothing here: no evidence either way
+        out.push(await judgeOne(clipId, p, ca, cb, (x, y) => askJson(model, gpu, `${LENGTH_PROMPT}\n\n${cutText(x, 1)}\n\n${cutText(y, 2)}`, PICK)));
+      } else if (existsSync(b)) {
+        if (at.length < 2) { out.push(`${id} no captions`); continue; }
+        fa ??= await frames(a, dur, 540, at);
+        const fb = await frames(b, dur, 540, at);
+        out.push(await judgeOne(clipId, p, fa, fb, (x, y) => askJson(model, gpu, PAIR_PROMPT, PICK, [...x, ...y]), [fa[1], fb[1]]));
+      }
+    } catch (e) { out.push(`${id} failed`); log.warn(`clip ${clipId}: pair ${id} failed: ${(e as Error).message}`); }
   }
   return out.join(', ');
 }
 
-async function judgeOne(model: string, gpu: boolean, clipId: number, p: Proposal, fa: string[], fb: string[]) {
+/** One A/B (or, 1 in 5, an A/A control) for proposal p: `run` asks the judge about (first, second). */
+async function judgeOne<T>(clipId: number, p: Proposal, a: T, b: T, run: (x: T, y: T) => Promise<{ pick?: unknown; why?: unknown }>, jpg?: [string, string]) {
   const id = p.id;
-  if (Math.random() < 0.2) { // A/A: same video twice; the right answer is 0, a 1/2 lean shows position bias
-    const j = await askJson(model, gpu, PAIR_PROMPT, PICK, [...fa, ...fa]);
+  if (Math.random() < 0.2) { // A/A: same edit twice; the right answer is 0, a 1/2 lean shows position bias
+    const j = await run(a, a);
     const pick = ([0, 1, 2].includes(Number(j.pick)) ? Number(j.pick) : 0) as 0 | 1 | 2;
     recordPair(id, { aa: pick });
     return `${id} A/A ${pick}`;
   }
   const newFirst = Math.random() < 0.5;
-  const j = await askJson(model, gpu, PAIR_PROMPT, PICK, newFirst ? [...fb, ...fa] : [...fa, ...fb]);
+  const j = await run(newFirst ? b : a, newFirst ? a : b);
   const n = Number(j.pick), pick = n === 0 || ![1, 2].includes(n) ? 'same' : (n === 1) === newFirst ? 'new' : 'old';
-  const keep = p.frames.length < 6; // a few old/new frames for the report page
+  const keep = !!jpg && p.frames.length < 6; // a few old/new frames for the report page
   if (keep) {
     mkdirSync(proposalDir(id), { recursive: true });
-    writeFileSync(join(proposalDir(id), `${clipId}-old.jpg`), Buffer.from(fa[1], 'base64'));
-    writeFileSync(join(proposalDir(id), `${clipId}-new.jpg`), Buffer.from(fb[1], 'base64'));
+    writeFileSync(join(proposalDir(id), `${clipId}-old.jpg`), Buffer.from(jpg[0], 'base64'));
+    writeFileSync(join(proposalDir(id), `${clipId}-new.jpg`), Buffer.from(jpg[1], 'base64'));
   }
   recordPair(id, { pair: { clipId, newFirst, pick, why: String(j.why ?? '').slice(0, 160), at: Date.now() }, ...(keep && { frames: { clipId, old: `${clipId}-old.jpg`, new: `${clipId}-new.jpg` } }) });
   return `${id} ${pick}`;
@@ -188,7 +208,7 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
     }
     if (clip.status === 'practice') {
-      try { const r = await judgePair(model, gpu, clipId, dirname(clip.filePath), clip.durationSec ?? 20); if (r) why.push(`pair ${r}`); }
+      try { const r = await judgePair(model, gpu, clipId, dirname(clip.filePath), clip.durationSec ?? 20, clip.transcript ?? ''); if (r) why.push(`pair ${r}`); }
       catch (e) { log.warn(`clip ${clipId}: pair judge failed: ${(e as Error).message}`); }
       saveCalibration(clipId, shot, clip.transcript, { speech: fun.speech, visual: fun.visual, layoutPenalty: fun.layoutPenalty });
     }

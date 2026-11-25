@@ -21,7 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
-import { activeProposals, type Change, tweaks } from '../practice/proposals.ts';
+import { activeProposals, type Change, isLength, tweaks } from '../practice/proposals.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
@@ -76,8 +76,11 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   const sc = settings.scoring;
   const maxSec = cfg.campaign?.maxSec ?? settings.clip.maxSec;
   const peakRel = (moment.signals?.peakAt ?? moment.endSec - sc.windowSec - (sc.tailSec ?? 0)) - moment.startSec;
-  const { start: lead, end: cut } = trimWindow({ words: t.words, durationSec: moment.endSec - moment.startSec, peakRel, windowSec: sc.windowSec,
-    tailSec: sc.tailSec ?? 0, targetSec: settings.clip.targetSec ?? [settings.clip.minSec, maxSec], minSec: settings.clip.minSec, maxSec });
+  const live = tweaks(); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
+  const target = settings.clip.targetSec ?? [settings.clip.minSec, maxSec];
+  const trimFor = (ch: Change) => trimWindow({ words: t.words, durationSec: moment.endSec - moment.startSec, peakRel, windowSec: sc.windowSec,
+    tailSec: sc.tailSec ?? 0, targetSec: [target[0], Math.max(target[0], ch.maxLen ?? target[1])], minSec: settings.clip.minSec, maxSec, leadSec: ch.leadSec });
+  const { start: lead, end: cut } = trimFor(live);
   const words = t.words.filter((w) => w.s >= lead && w.s < cut).map((w) => ({ ...w, s: w.s - lead, e: Math.min(w.e, cut) - lead }));
   if ((peakDb ?? 0) < SILENT_DB) {
     rmSync(src, { force: true });
@@ -138,7 +141,6 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   const dy = stackTop(layout);
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
-  const live = tweaks(); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
   const encode = async (out: string, ch: Change) => {
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
@@ -164,7 +166,13 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
   const props = practice ? activeProposals() : [];
-  for (const p of props) await encode(`clip-${p.id}.mp4`, { ...live, ...p.change });
+  for (const p of props) {
+    if (!isLength(p.change)) { await encode(`clip-${p.id}.mp4`, { ...live, ...p.change }); continue; }
+    // Length: only the cut moves, judged on the transcripts, so no encode needed.
+    const v = trimFor({ ...live, ...p.change });
+    const text = t.words.filter((w) => w.s >= v.start && w.s < v.end).map((w) => w.w).join(' ');
+    writeFileSync(join(dir, `clip-${p.id}.json`), JSON.stringify({ sec: v.end - v.start, text }));
+  }
   if (props.length) writeFileSync(join(dir, 'proposals.txt'), props.map((p) => p.id).join('\n'));
   for (const f of [src, join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 

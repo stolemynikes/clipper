@@ -41,3 +41,8 @@ test('long silence at the start is cut, keeping minSec', () => {
 test('no words: plain window around the peak', () => {
   assert.deepEqual(trimWindow({ ...base, words: [] }), { start: 35, end: 60 });
 });
+
+test('leadSec moves the start: shorter or longer build-up before the peak', () => {
+  assert.deepEqual(trimWindow({ ...base, words: [], leadSec: 6 }), { start: 40, end: 60 }); // 41 wanted, min length 20 s wins
+  assert.deepEqual(trimWindow({ ...base, words: [], leadSec: 18 }), { start: 29, end: 60 });
+});

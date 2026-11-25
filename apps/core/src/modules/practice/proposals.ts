@@ -7,7 +7,12 @@ import { paths } from '../../env.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
 
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
-export type Change = { wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[] };
+export type Change = {
+  wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[];
+  leadSec?: number; maxLen?: number; // length: build-up before the peak, longest cut (campaign maxSec still caps)
+};
+/** Length changes move the cut: judged on the two transcripts, not on frames. */
+export const isLength = (c: Change) => c.leadSec !== undefined || c.maxLen !== undefined;
 export type Pair = { clipId: number; newFirst: boolean; pick: 'new' | 'old' | 'same'; why: string; at: number };
 export type Proposal = {
   id: string; title: string; why: string; change: Change;
@@ -76,6 +81,10 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   const fewer = Math.max(1, cur.per - 1);
   if (fewer !== cur.weeklyPer && fewer !== cur.per) add({ id: `words-${fewer}`, title: `${fewer} words per caption line`, why: `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, change: { wordsPerChunk: fewer } });
   add({ id: 'captions-lower', title: 'Captions 150 px lower', why: 'Lower captions cover less of the face and the action; still above the app buttons.', change: { captionShift: 150 } });
+  // Length (trim.ts: lead 12s, target 12-26s). Judged on transcripts: does the cut keep the build-up and end on the payoff?
+  add({ id: 'lead-6', title: 'Shorter build-up (6 s before the peak)', why: 'Gets to the point faster; most viewers decide in the first seconds. Now 12 s.', change: { leadSec: 6 } });
+  add({ id: 'lead-18', title: 'Longer build-up (18 s before the peak)', why: 'More context, so the joke lands for someone who never saw the stream. Now 12 s.', change: { leadSec: 18 } });
+  add({ id: 'max-20', title: 'Clips at most 20 s', why: 'Nov 24 study: clips under 20 s beat the streamer median 54% vs ~33% for longer. Now up to 26 s.', change: { maxLen: 20 } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   saveProposals(ps);
 }
