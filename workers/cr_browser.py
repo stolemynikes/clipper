@@ -12,6 +12,7 @@ Output is one JSON object on stdout.
 """
 import json
 import os
+import random
 import re
 import socket
 import subprocess
@@ -76,6 +77,47 @@ def with_page(fn):
             return fn(page)  # the tab stays open for the next run
 
 
+def pause(lo: float = 0.4, hi: float = 1.2) -> None:
+    """A person's think time between actions: never two clicks in the same instant."""
+    time.sleep(random.uniform(lo, hi))
+
+
+def move_to(page, x: float, y: float) -> None:
+    """Moves the pointer in a slightly curved path with many small steps, like a hand on a mouse."""
+    sx, sy = getattr(page, "_cr_xy", (random.uniform(200, 900), random.uniform(150, 600)))
+    mx, my = (sx + x) / 2 + random.uniform(-80, 80), (sy + y) / 2 + random.uniform(-60, 60)
+    n = random.randint(14, 28)
+    for i in range(1, n + 1):
+        t = i / n
+        page.mouse.move((1 - t) ** 2 * sx + 2 * (1 - t) * t * mx + t * t * x, (1 - t) ** 2 * sy + 2 * (1 - t) * t * my + t * t * y)
+        time.sleep(random.uniform(0.006, 0.02))
+    page._cr_xy = (x, y)
+
+
+def human_click(page, el, timeout: int = 15_000) -> None:
+    """Scrolls el into view, glides the pointer to a random spot inside it, hovers a moment, then clicks."""
+    el.scroll_into_view_if_needed(timeout=timeout)
+    box = el.bounding_box(timeout=timeout)
+    if not box:
+        el.click(timeout=timeout)
+        return
+    move_to(page, box["x"] + box["width"] * random.uniform(0.3, 0.7), box["y"] + box["height"] * random.uniform(0.3, 0.7))
+    pause(0.15, 0.5)
+    el.click(timeout=timeout, position={"x": box["width"] * random.uniform(0.35, 0.65), "y": box["height"] * random.uniform(0.35, 0.65)})
+    pause()
+
+
+def scroll(page, total: int = 1600) -> None:
+    """Scrolls total pixels in a few uneven wheel turns with short reading pauses."""
+    done = 0
+    while done < total:
+        step = random.randint(220, 520)
+        page.mouse.wheel(0, step)
+        done += step
+        time.sleep(random.uniform(0.15, 0.6))
+    pause(0.6, 1.6)
+
+
 def settle(page) -> None:
     page.wait_for_load_state("networkidle", timeout=60_000)
     page.wait_for_timeout(1500)
@@ -89,7 +131,7 @@ def nav(page, label: str) -> None:
             links.nth(i).click(timeout=3000, trial=True)
         except Exception:
             continue
-        links.nth(i).click(timeout=15_000)
+        human_click(page, links.nth(i))
         return settle(page)
     raise SystemExit(json.dumps({"error": f"no clickable sidebar link: {label}"}))
 
@@ -111,15 +153,14 @@ def go(page, target: str) -> None:
         card = page.locator(f'a[href*="/campaigns/{cid}"]')
         for _ in range(15):  # cards load while scrolling
             if card.count():
-                card.first.click(timeout=15_000)
+                human_click(page, card.first)
                 return settle(page)
-            page.mouse.wheel(0, 4000)
-            page.wait_for_timeout(1200)
+            scroll(page, random.randint(1200, 2200))
         if section == "Campaigns":  # joined cards are "Preview <name>" buttons, not links: open each until the id matches
             names = [b.get_attribute("aria-label") for b in page.locator('button[aria-label^="Preview "]').all()]
             for name in names:
                 nav(page, "Campaigns")
-                page.locator(f'button[aria-label="{name}"]').first.click(timeout=15_000)
+                human_click(page, page.locator(f'button[aria-label="{name}"]').first)
                 settle(page)
                 if cid in page.url:
                     return
@@ -130,9 +171,8 @@ def click_label(page, label: str) -> None:
     for role in ("button", "tab", "link", "menuitem"):
         el = page.get_by_role(role, name=label, exact=True)
         if el.count():
-            el.first.click(timeout=15_000)
-            return
-    page.get_by_text(label, exact=True).first.click(timeout=15_000)
+            return human_click(page, el.first)
+    human_click(page, page.get_by_text(label, exact=True).first)
 
 
 def dump(target: str) -> dict:
@@ -171,23 +211,31 @@ def click(target: str, label: str, shot: str = "") -> dict:
 
 def discover() -> dict:
     """All campaigns the Discover page loads, from CR's own JSON responses (the site's fetches; ours get 'Failed to fetch').
-    shortcut: only what the page loads on open (~100 campaigns, no scrolling for more pages), fine while that covers the GTA/streamer rows."""
+    Scrolls down like a person reading until no new campaigns load (the list pages in while scrolling)."""
     def run(page):
         seen = []
         if "/c/discover" in page.url:
             nav(page, "Campaigns")  # leave first, so clicking Discover loads the list fresh
         page.on("response", lambda r: seen.append(r) if "/api/campaign/campaigns/discover" in r.url else None)
         nav(page, "Discover")
-        out = {}
-        for r in seen:
-            try:
-                data = r.json().get("data")
-            except Exception:
-                continue
-            rows = data if isinstance(data, list) else (data or {}).get("campaigns") if isinstance(data, dict) else None
-            for c in rows or []:
-                if isinstance(c, dict) and c.get("id") and c.get("name"):
-                    out[c["id"]] = c
+        out, read, still = {}, 0, 0
+        for _ in range(40):  # at most ~40 scroll rounds; stops once three rounds bring nothing new
+            for r in seen[read:]:
+                try:
+                    data = r.json().get("data")
+                except Exception:
+                    continue
+                rows = data if isinstance(data, list) else (data or {}).get("campaigns") if isinstance(data, dict) else None
+                for c in rows or []:
+                    if isinstance(c, dict) and c.get("id") and c.get("name"):
+                        out[c["id"]] = c
+            before, read = len(out), len(seen)
+            move_to(page, random.uniform(400, 1100), random.uniform(250, 650))
+            scroll(page, random.randint(1400, 2600))
+            page.wait_for_timeout(random.randint(800, 1800))
+            still = still + 1 if len(seen) == read and len(out) == before else 0
+            if still >= 3:
+                break
         return {"campaigns": list(out.values())}
     return with_page(run)
 
@@ -202,20 +250,20 @@ def read_docs(page) -> str:
     for href in list(dict.fromkeys(h for h in hrefs if any(d in h for d in DOC_HOSTS)))[:3]:
         try:
             with page.context.expect_page(timeout=15_000) as info:
-                page.locator(f'a[href="{href}"]').first.click(timeout=15_000)
+                human_click(page, page.locator(f'a[href="{href}"]').first)
             doc = info.value
             doc.wait_for_load_state("domcontentloaded")
-            doc.mouse.move(640, 400)  # Notion scrolls an inner panel: the wheel only reaches it with the pointer over the page
+            move_to(doc, random.uniform(500, 800), random.uniform(300, 500))  # Notion scrolls an inner panel: the wheel only reaches it with the pointer over the page
             text, same = "", 0
             for _ in range(16):  # JS docs (Notion) fill in while scrolling: stop once the text stops growing twice in a row
-                doc.mouse.wheel(0, 3000)
-                doc.wait_for_timeout(2000)
+                scroll(doc, random.randint(1800, 3000))
                 now = doc.inner_text("body")
                 same = same + 1 if len(now) > 200 and len(now) == len(text) else 0
                 if same >= 2:
                     break
                 text = now
             out.append(now[:12000])
+            pause(1, 3)
             doc.close()  # only the tab this click opened
         except Exception as e:
             out.append(f"(could not read {href.split('?')[0]}: {type(e).__name__})")
@@ -227,12 +275,13 @@ def join(target: str) -> dict:
     def run(page):
         go(page, target)
         if "Joined" not in page.inner_text("body"):
-            page.get_by_role("button", name="Join Campaign").first.click(timeout=15_000)
+            scroll(page, random.randint(300, 900))  # read the card before joining
+            human_click(page, page.get_by_role("button", name="Join Campaign").first)
             page.wait_for_timeout(4000)
             settle(page)
         more = page.get_by_role("button", name="Show more")
         if more.count():
-            more.first.click(timeout=15_000)
+            human_click(page, more.first)
             page.wait_for_timeout(800)
         text = page.inner_text("body")
         return {"joined": "Joined" in text, "text": text[:20000], "docs": read_docs(page)}

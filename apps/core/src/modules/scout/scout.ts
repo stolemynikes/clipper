@@ -1,6 +1,7 @@
 // Scout: finds Content Rewards campaigns for Twitch streamers, joins them in the owner's CR Chrome (workers/cr_browser.py),
 // reads the brief and saves them to streamers.yaml in the study stage. Making clips stays a manual switch on /campaigns.
 // Numbers (rate, pool, budget, platforms) come from CR's own API data; the local model only reads tag, hashtags and account rules.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { campaignOpen, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
@@ -30,13 +31,24 @@ export const twitchOf = (c: CrCampaign) =>
 /** Platforms where views pay: pool counts all listed, rate campaigns only those with a rate above 0. */
 const paying = (c: CrCampaign) => c.payouts.filter((p) => PAYING.includes(p.platform) && (p.payoutType === 'pool' || (p.rateCents ?? 0) > 0)).map((p) => p.platform);
 
+/** Why a campaign can't be joined (plain words for the dashboard), or null when it can. */
+export function whyNot(c: CrCampaign, saved: StreamerConfig[]): string | null {
+  const text = [c.name, c.description, c.organizationName].join(' ');
+  if (c.status !== 'active') return 'Not running';
+  if (c.private) return 'Private';
+  if (c.requiresApplication) return 'Needs an application';
+  if (isGambling(text)) return 'Gambling';
+  if (DRUGS.test(text)) return 'Drugs or vapes';
+  if (!paying(c).length) return 'Pays on no platform we post to';
+  const ch = twitchOf(c);
+  if (!ch) return 'No Twitch streamer';
+  if (saved.some((s) => s.channel === ch || s.campaign?.url === PAGE + c.id)) return 'Already joined';
+  return null;
+}
+
 /** Campaigns worth joining: open, a Twitch streamer, paying on our platforms, no gambling, not saved yet. Biggest budget first. */
 export function pickCampaigns(list: CrCampaign[], saved: StreamerConfig[], max = 3): CrCampaign[] {
-  const urls = new Set(saved.map((s) => s.campaign?.url).filter(Boolean)), channels = new Set(saved.map((s) => s.channel));
-  return list.filter((c) => c.status === 'active' && !c.private && !c.requiresApplication && paying(c).length
-    && !isGambling([c.name, c.description, c.organizationName].join(' ')) && !DRUGS.test([c.name, c.description, c.organizationName].join(' '))
-    && twitchOf(c) && !channels.has(twitchOf(c)!) && !urls.has(PAGE + c.id))
-    .sort((a, b) => b.budgetCents - a.budgetCents).slice(0, max);
+  return list.filter((c) => !whyNot(c, saved)).sort((a, b) => b.budgetCents - a.budgetCents).slice(0, max);
 }
 
 /** The form fields toEntry validates, from CR's data. Text-only fields (tag, hashtags, rules) come from the brief. */
@@ -74,26 +86,56 @@ async function rulesDocs(c: CrCampaign): Promise<string> {
   return out.join('\n');
 }
 
-export async function scoutOnce(db: Db) {
+const DISCOVER_FILE = join(paths.dataDir, 'cr-discover.json');
+
+/** Reads every campaign on CR's Discover page and caches the list for the dashboard. */
+export async function discoverAll(): Promise<CrCampaign[]> {
   const { campaigns } = await cr('discover') as { campaigns: CrCampaign[] };
+  writeFileSync(DISCOVER_FILE, JSON.stringify({ at: new Date().toISOString(), campaigns }));
+  return campaigns;
+}
+
+export const cachedDiscover = (): { at: string | null; campaigns: CrCampaign[] } =>
+  existsSync(DISCOVER_FILE) ? JSON.parse(readFileSync(DISCOVER_FILE, 'utf8')) : { at: null, campaigns: [] };
+
+/** Joins one campaign on CR, reads the brief, saves it and starts the study. Returns the saved name, or why it stopped. */
+export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: string; reason?: string }> {
+  const page = await cr('join', PAGE + c.id) as { joined: boolean; text: string; docs?: string };
+  if (!page.joined) return { reason: 'CR did not confirm the join' };
+  const text = [c.name, c.description, page.text, page.docs ?? '', await rulesDocs(c)].join('\n');
+  const { fields } = await extract(text, PAGE + c.id);
+  if (fields.gambling || isGambling(text)) return { reason: 'The brief is about gambling' };
+  const tag = fields.tag && text.toLowerCase().includes(fields.tag.replace(/^@/, '').toLowerCase()) ? fields.tag : ''; // only a tag written in the brief
+  const entry = toEntry(formOf(c, { ...fields, tag }));
+  if (!campaignOpen(entry.campaign!)) return { reason: 'Budget or time is used up' };
+  entry.enabled = true;
+  if (!datedEnd(fields.endsAt)) entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
+  update(entry.name, entry, true);
+  enqueue(db, 'campaign.study', { name: entry.name }, { maxAttempts: 2 });
+  log.info(`joined and saved ${entry.name} (${c.name})`);
+  return { name: entry.name };
+}
+
+/** Job campaign.join {id}: joins a campaign from the cached Discover list (dashboard button). */
+export async function joinJob(db: Db, { id }: { id: string }) {
+  const c = cachedDiscover().campaigns.find((x) => x.id === id);
+  if (!c) throw new Error(`campaign ${id} not in the Discover list`);
+  const why = whyNot(c, allStreamers());
+  if (why) throw new Error(`can't join: ${why}`);
+  const r = await joinCampaign(db, c);
+  if (!r.name) throw new Error(r.reason);
+}
+
+export async function scoutOnce(db: Db) {
+  const campaigns = await discoverAll();
   const picks = pickCampaigns(campaigns, allStreamers());
   log.info(`${campaigns.length} campaigns, ${picks.length} new`);
   for (const c of picks) {
     try {
-      const page = await cr('join', PAGE + c.id) as { joined: boolean; text: string; docs?: string };
-      if (!page.joined) { log.warn(`could not join ${c.name}`); continue; }
-      const text = [c.name, c.description, page.text, page.docs ?? '', await rulesDocs(c)].join('\n');
-      const { fields } = await extract(text, PAGE + c.id);
-      if (fields.gambling || isGambling(text)) { log.warn(`${c.name} skipped: gambling`); continue; }
-      const tag = fields.tag && text.toLowerCase().includes(fields.tag.replace(/^@/, '').toLowerCase()) ? fields.tag : ''; // only a tag written in the brief
-      const entry = toEntry(formOf(c, { ...fields, tag }));
-      if (!campaignOpen(entry.campaign!)) continue;
-      entry.enabled = true;
-      if (!datedEnd(fields.endsAt)) entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
-      update(entry.name, entry, true);
-      enqueue(db, 'campaign.study', { name: entry.name }, { maxAttempts: 2 });
-      log.info(`joined and saved ${entry.name} (${c.name})`);
-      await bark(`New campaign · ${entry.name}`, `Joined "${c.name}". Studying top clips now; switch on clips at /campaigns.`, { url: PAGE + c.id, level: 'passive' });
+      const r = await joinCampaign(db, c);
+      if (!r.name) { log.warn(`${c.name} skipped: ${r.reason}`); continue; }
+      await bark(`New campaign · ${r.name}`, `Joined "${c.name}". Studying top clips now; switch on clips at /campaigns.`, { url: PAGE + c.id, level: 'passive' });
     } catch (e) { log.error(`${c.name} failed`, { error: String(e) }); }
+    await new Promise((r) => setTimeout(r, 30_000 + Math.random() * 90_000)); // one at a time with a person's gap, not all at once
   }
 }

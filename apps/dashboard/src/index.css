@@ -63,13 +63,6 @@ a { color: inherit; }
   .bar > i { display: block; height: 100%; border-radius: 2px; background: var(--color-a); }
 }
 
-/* Mockups are drawn at 1440x900. On big screens scale the whole UI so text and cards keep that size. */
-@media (min-width: 1900px) { :root { --z: 1.1; } }
-@media (min-width: 2300px) { :root { --z: 1.25; } }
-#root { zoom: var(--z, 1); height: calc(100% / var(--z, 1)); }
-@media (min-width: 48rem) { .md\:h-screen, .h-screen { height: calc(100vh / var(--z, 1)) !important; } }
-.min-h-screen { min-height: calc(100vh / var(--z, 1)) !important; }
-
 @keyframes sp { to { transform: rotate(360deg); } }
 @keyframes sh { to { background-position: -200% 0; } }
 

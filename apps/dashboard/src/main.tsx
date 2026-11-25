@@ -10,10 +10,11 @@ import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Proposals } from './pages/Proposals.tsx';
+import { Discover } from './pages/Discover.tsx';
 import { Accounts, Earnings, History } from './pages/Money.tsx';
 import './index.css';
 
-// Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/earnings, #/history, #/accounts, #/settings
+// Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/discover, #/earnings, #/history, #/accounts, #/settings
 // Old Bark/Discord links end in #clip-<id>; send those to that clip in Review.
 const read = () => { const h = location.hash.slice(1) || '/'; return /^clip-\d+$/.test(h) ? `/review/${h.slice(5)}` : h; };
 const useRoute = () => {
@@ -34,7 +35,7 @@ const BOTTOM: [string, string, string][] = [['/accounts', 'Accounts', 'user'], [
 
 function Side({ route }: { route: string }) {
   const { data } = useOverview();
-  const cur = (p: string) => (p === '/' ? route === '/' : route.startsWith(p)) ? 'page' : undefined;
+  const cur = (p: string) => (p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover')) ? 'page' : undefined;
   const link = ([p, label, icon]: [string, string, string, string?]) => (
     <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}>
       {cur(p) ? <motion.span layoutId="side-ind" className="absolute inset-0 -z-10 rounded-[12px] bg-r" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
@@ -63,7 +64,7 @@ function Tabs({ route }: { route: string }) {
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 h-20 pb-4 bg-bg/95 backdrop-blur border-t border-line grid grid-cols-5" aria-label="Main">
       {tabs.map(([p, label, icon]) => {
-        const on = p === '/' ? route === '/' : route.startsWith(p);
+        const on = p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover');
         return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline ${on ? 'text-t' : 'text-f'}`}>
           {on ? <motion.span layoutId="tab-ind" className="absolute top-0 inset-x-5 h-[3px] rounded-b-full bg-a" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
           <motion.span animate={{ scale: on ? 1.08 : 1, y: on ? -1 : 0 }} transition={{ duration: 0.18 }} className="flex"><Icon name={icon} size={22} /></motion.span>{label}
@@ -83,6 +84,7 @@ function App() {
     : route.startsWith('/review') ? <Review focus={Number(route.split('/')[2]) || undefined} />
     : camp ? <CampaignPage name={camp[1]} />
     : route.startsWith('/campaigns') ? <Campaigns />
+    : route === '/discover' ? <Discover />
     : route === '/earnings' ? <Earnings />
     : route === '/history' ? <History />
     : route === '/accounts' ? <Accounts />

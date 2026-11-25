@@ -1,7 +1,5 @@
-// Accounts page: platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
+// Accounts setup (dashboard Accounts tab): platform app keys (once per platform), social accounts per campaign, "Connect" via OAuth, views and earnings.
 // Secrets go straight into .env and are never rendered back or logged. The page only says "saved".
-import { activeStreamers } from '../config.ts';
-import { campaignNotes, viewsToPay } from '../modules/compliance/campaign-notes.ts';
 import { styleStats, styleWinner } from '../modules/learner/title-style.ts';
 import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
@@ -12,7 +10,6 @@ import type { Db } from '../db/client.ts';
 import { accounts, posts, streamers } from '../db/schema.ts';
 import { paths } from '../env.ts';
 import { logger } from '../log.ts';
-import { CSS, esc } from './style.ts';
 
 const log = logger('setup');
 export type Platform = 'youtube' | 'tiktok'; // platforms with our own OAuth app
@@ -94,131 +91,30 @@ export function accountStats(db: Db) {
 // OAuth state: random, single use, 10 minutes. Stops a forged callback from attaching someone else's account.
 const pending = new Map<string, { accountId: number; platform: Platform; at: number }>();
 
-const fmt = (n: number) => n.toLocaleString('en-US');
-const money = (n: number) => `$${n.toFixed(2)}`;
-
 /** Plain-words result of the title A/B test, empty until there is a winner. */
 function titleTest(db: Db) {
   const st = styleStats(db), w = styleWinner(st);
   if (!w) return '';
   const [a, b] = w === 'bold' ? [st[1], st[0]] : [st[0], st[1]];
-  return `<p class="sub">Title test: ${w === 'bold' ? 'bold, curious' : 'calm'} titles get ${Math.round((a.median / Math.max(b.median, 1) - 1) * 100)}% more views. New clips now use them more often.</p>`;
+  return `Title test: ${w === 'bold' ? 'bold, curious' : 'calm'} titles get ${Math.round((a.median / Math.max(b.median, 1) - 1) * 100)}% more views. New clips now use them more often.`;
 }
 
-/** Running campaigns with facts and warnings in plain words. */
-function campaignsHtml() {
-  const list = activeStreamers();
-  if (!list.length) return '<p class="empty">No running campaigns. Clips are only made for streamers with one.</p>';
-  // most profitable first, so the owner joins the best one first
-  return [...list].sort((a, b) => viewsToPay(a.campaign!) - viewsToPay(b.campaign!)).map((s) => {
-    const { facts, warnings } = campaignNotes(s.campaign!);
-    return `<article class="pad"><div class="head"><h2>${esc(s.name)}</h2><span class="pill ${warnings.length ? 'warn' : 'on'}">${warnings.length ? 'Check' : 'Good'}</span></div>
-<ul class="facts">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-${warnings.map((w) => `<p class="warn" role="note">${esc(w)}</p>`).join('')}
-<details><summary>How to join</summary><ol class="facts"><li>Open the campaign page and press Join.</li><li>Link the accounts you post from there (the same ones as below).</li><li>Approve clips here. After a post goes live you get a reminder to submit the link within 30 minutes.</li></ol></details>
-${s.campaign!.url ? `<div class="actions"><a class="btn ok" href="${esc(s.campaign!.url)}" target="_blank" rel="noopener">Open campaign page</a></div>` : ''}</article>`;
-  }).join('\n');
-}
+export const keysSet = (p: Platform) => Boolean(process.env[APPS[p].idKey] && process.env[APPS[p].secretKey]);
 
-function page(db: Db, msg: string | null) {
-  const list = accountStats(db);
-  const camps = db.select().from(streamers).all().filter((s) => (s.config as { campaign?: unknown } | null)?.campaign);
-  const views = list.reduce((a, r) => a + r.views, 0), earned = list.reduce((a, r) => a + r.earned, 0);
-  const keysSet = (p: Platform) => Boolean(process.env[APPS[p].idKey] && process.env[APPS[p].secretKey]);
-  const app = (p: Platform) => {
-    const a = APPS[p];
-    return `<article class="pad"><div class="head"><h2>${a.label}</h2><span class="pill ${keysSet(p) ? 'on' : ''}">${keysSet(p) ? 'Ready' : 'Not set up'}</span></div>
-<details${keysSet(p) ? '' : ' open'}><summary>How to set up (one time)</summary><ol>${a.steps.map((s) => `<li>${s}</li>`).join('')}</ol></details>
-<form onsubmit="return saveApp(event,'${p}')">${a.fields.map(([k, l, secret]) => `<label>${l}<input name="${k}" type="${secret ? 'password' : 'text'}" autocomplete="off" spellcheck="false"
- placeholder="${process.env[k] ? 'Saved. Paste to replace' : 'Paste here'}"></label>`).join('')}<button class="ok">Save</button></form></article>`;
+/** How an account posts: via PostPeer, needs PostPeer first (Instagram), or our own OAuth app. */
+export const accountVia = (platform: string) =>
+  platform === 'instagram' && !hasPostpeer() ? 'needs_postpeer' : platform !== 'youtube' && hasPostpeer() ? 'postpeer' : 'oauth';
+// YouTube's redirect is loopback: the whole login must run in a browser on the PC itself.
+export const connectUrl = (a: { id: number; platform: string }) => a.platform === 'youtube' ? `http://127.0.0.1:${port()}/connect/${a.id}` : `/connect/${a.id}`;
+
+/** Accounts tab setup data: which app keys are saved (never the values), campaigns to link an account to. */
+export function setupInfo(db: Db) {
+  return {
+    hasPostpeer: hasPostpeer(), canCheckNames: Boolean(process.env.YOUTUBE_API_KEY), titleTest: titleTest(db),
+    apps: (Object.keys(APPS) as Platform[]).map((p) => ({ platform: p, label: APPS[p].label, ready: keysSet(p), steps: APPS[p].steps,
+      fields: APPS[p].fields.map(([key, label, secret]) => ({ key, label, secret, saved: Boolean(process.env[key]) })) })),
+    campaigns: db.select().from(streamers).all().filter((s) => (s.config as { campaign?: unknown } | null)?.campaign).map((s) => ({ id: s.id, name: s.name })),
   };
-  const acc = (r: (typeof list)[number]) => {
-    const linked = Boolean(process.env[tokenKey(r.id)]);
-    if (r.platform === 'instagram' && !hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill">Needs PostPeer</span></div>
-<p class="sub">${LABEL[r.platform]} posts go through PostPeer. Add its key to .env first.</p>
-<div class="actions"><button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div></article>`;
-    if (r.platform !== 'youtube' && hasPostpeer()) return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill on">Via PostPeer</span></div>
-<p class="sub">${LABEL[r.platform]} · ${r.streamer ? `campaign: ${esc(r.streamer)}` : 'no campaign'} · connect or change it on postpeer.dev</p>
-<div class="actions"><button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div></article>`;
-    if (r.platform === 'instagram') return ''; // unreachable: handled above; narrows the type
-    // YouTube's redirect is loopback: the whole login must run in a browser on the PC itself.
-    const connect = r.platform === 'youtube' ? `http://127.0.0.1:${port()}/connect/${r.id}` : `/connect/${r.id}`;
-    return `<article class="pad"><div class="head"><h2>${esc(r.name)}</h2><span class="pill ${linked ? 'on' : ''}">${linked ? 'Connected' : 'Not connected'}</span></div>
-<p class="sub">${APPS[r.platform].label} · ${r.streamer ? `campaign: ${esc(r.streamer)}` : 'no campaign'}</p>
-<div class="tiles"><div class="tile"><b>${fmt(r.posts)}</b><span>Posts</span></div><div class="tile"><b>${fmt(r.views)}</b><span>Views</span></div>
-<div class="tile"><b>${r.pool ? 'Pool' : money(r.earned)}</b><span>${r.pool ? 'Paid at the end' : 'Earned'}</span></div></div>
-<div class="actions"><a class="btn ok${keysSet(r.platform) ? '' : ' off'}" href="${connect}">${linked ? 'Connect again' : 'Connect account'}</a>
-<button class="no" onclick="removeAcc(${r.id},this)">Remove</button></div>
-${!keysSet(r.platform) ? `<p class="sub">Set up the ${APPS[r.platform].label} app below first.</p>`
-    : r.platform === 'youtube' && !linked ? '<p class="sub">Press Connect on the PC itself, not on your phone.</p>' : ''}</article>`;
-  };
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Accounts</title>
-<style>${CSS}
-main{max-width:480px;margin:0 auto}h2{font-size:18px;margin:0}.pad{padding:16px}.pad .tiles{margin:12px 0 0}.pad .actions{padding:12px 0 0}
-section>h2{margin:24px 0 8px;font-size:20px}
-.pill{font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}.pill.on{border-color:var(--ok);color:var(--ok)}
-details{margin:8px 0}summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}ol{padding-left:20px;margin:0}li{margin:0 0 6px}
-code{background:var(--bg);padding:1px 6px;border-radius:6px;font-size:14px}
-label{display:block;font-size:14px;color:var(--muted);margin:8px 0}input,select{display:block;width:100%;margin-top:4px;min-height:48px;padding:0 12px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px}
-input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
-form .ok{width:100%;margin-top:8px}.btn{display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:12px;font-weight:600;text-decoration:none}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}.chips .idea{display:flex;align-items:center;gap:2px}.chips .taken{opacity:.45}.chips .taken button{text-decoration:line-through}.chips a.free{color:#4ade80;font-weight:600}.chips a{min-height:44px;display:flex;align-items:center;padding:0 8px;font-size:14px}.chips button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:14px}
-.pill.warn{border-color:#f59e0b;color:#f59e0b}.facts{margin:8px 0 0;padding-left:20px}.facts li{margin:0 0 4px}p.warn{margin:8px 0 0;padding:8px 12px;border-left:3px solid #f59e0b;background:var(--bg);border-radius:8px}
-.btn.off{opacity:.4;pointer-events:none}.msg{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;margin:8px 0}
-</style></head><body>
-<header><h1>Accounts</h1><a href="/">Back to review</a><a href="/campaigns">Campaigns</a>
-<div class="tiles"><div class="tile"><b>${list.length}</b><span>Accounts</span></div><div class="tile"><b>${fmt(views)}</b><span>Views</span></div><div class="tile"><b>${money(earned)}</b><span>Earned</span></div></div>${titleTest(db)}</header>
-<main>${msg ? `<p class="msg" role="status">${esc(msg)}</p>` : ''}
-<section><h2>Campaigns</h2>${campaignsHtml()}</section>
-<section><h2>Your accounts</h2>${list.map(acc).join('\n') || '<p class="empty">No accounts yet. Add one below.</p>'}
-<article class="pad"><h2>Add an account</h2><form id="add" onsubmit="return addAcc(event)" onchange="ideas()">
-<label>Platform<select name="platform"><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option><option value="instagram">Instagram Reels (via PostPeer)</option></select></label>
-<label>Campaign<select name="streamerId">${camps.map((s) => `<option value="${s.id}" data-name="${esc(s.name)}">${esc(s.name)}</option>`).join('')}<option value="" data-name="">None</option></select></label>
-<label>Name (only for you)<input name="name" required maxlength="60"></label>
-<p class="sub">Username ideas (tap to copy). YouTube names are checked for you. For TikTok, tap Check: if the page says the account does not exist, the name is free. Pick one that says it is a clip page, not the streamer.</p>
-<div class="chips" id="ideas"></div>
-<button class="ok">Add</button></form></article></section>
-<section><h2>Platform apps</h2><p class="sub">Needed once per platform, before you can connect accounts.</p>${(['tiktok', 'youtube'] as const).map(app).join('\n')}</section></main>
-<div id="toast" role="status" aria-live="polite"></div>
-<script>
-const send = (u, body) => fetch(u, { method: 'POST', headers: { 'x-clipper': '1', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
-let tid;
-function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tid); tid = setTimeout(() => t.classList.remove('show'), 3000); }
-async function done(r, okMsg) { if (r && r.ok) { toast(okMsg); setTimeout(() => location.replace('/setup'), 700); } else toast(r ? await r.text() : 'That did not work. Is the PC on?'); }
-async function saveApp(e, p) {
-  e.preventDefault(); const body = {};
-  for (const i of e.target.querySelectorAll('input')) if (i.value.trim()) body[i.name] = i.value.trim();
-  if (!Object.keys(body).length) { toast('Paste at least one value.'); return false; }
-  done(await send('/setup/app/' + p, body).catch(() => null), 'Saved.'); return false;
-}
-// Fan/clip page names: platforms ban accounts that pose as the streamer, so every idea says "clips".
-function ideas() {
-  const f = document.getElementById('add'), o = f.streamerId.selectedOptions[0], n = (o && o.dataset.name || 'stream').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const plat = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram' }[f.platform.value];
-  if (!f.name.dataset.touched) f.name.value = (o && o.dataset.name ? o.dataset.name.charAt(0).toUpperCase() + o.dataset.name.slice(1) + ' clips ' : 'Clips ') + plat;
-  // Less common combos first: short ones like "<name>clips" are usually taken already.
-  const list = [n + '.clips.hq', n + 'clipzone', n + '.moments.tv', 'daily' + n + 'clips', n + 'clips.vault', n + '_highlights_hq'];
-  const prof = { youtube: 'https://www.youtube.com/@', tiktok: 'https://www.tiktok.com/@', instagram: 'https://www.instagram.com/' }[f.platform.value];
-  document.getElementById('ideas').replaceChildren(...list.map((t) => {
-    const w = document.createElement('span'); w.className = 'idea';
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + t;
-    // clipboard API only exists on https/localhost: over the Tailscale IP the toast shows the name instead.
-    b.onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied ' + t), () => toast(t));
-    // No official API says if a handle is free, and scraping is not allowed: the user opens the profile page and looks.
-    const a = document.createElement('a'); a.href = prof + t; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Check';
-    a.setAttribute('aria-label', 'Check if @' + t + ' is free');
-    w.append(b, a);
-    if (f.platform.value === 'youtube') fetch('/setup/handle/' + encodeURIComponent(t)).then((r) => r.json()).then((j) => {
-      if (j.free === true) { a.textContent = 'Free'; a.className = 'free'; }
-      if (j.free === false) { w.classList.add('taken'); b.disabled = true; a.textContent = 'Taken'; }
-    }, () => {});
-    return w; }));
-}
-document.addEventListener('DOMContentLoaded', () => { const f = document.getElementById('add'); f.name.oninput = () => { f.name.dataset.touched = '1'; }; ideas(); });
-async function addAcc(e) { e.preventDefault(); done(await send('/setup/account', Object.fromEntries(new FormData(e.target))).catch(() => null), 'Account added.'); return false; }
-async function removeAcc(id, btn) { if (!confirm('Remove this account? Its posts stay counted.')) return; done(await send('/setup/account/' + id + '/delete').catch(() => null), 'Removed.'); }
-</script></body></html>`;
 }
 
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -227,7 +123,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   return s ? JSON.parse(s) : {};
 }
 const text = (res: ServerResponse, code: number, msg: string) => res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' }).end(msg);
-const back = (res: ServerResponse, msg: string) => res.writeHead(302, { location: `/setup?msg=${encodeURIComponent(msg)}` }).end();
+const back = (res: ServerResponse, msg: string) => res.writeHead(302, { location: `/app/?msg=${encodeURIComponent(msg)}#/accounts` }).end();
 
 /** Handles /setup, /connect/:id, /oauth/:platform. Returns false if the path is not ours. */
 export const validHandle = (h: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(h);
@@ -244,7 +140,7 @@ export async function handleFree(h: string): Promise<boolean | null> {
 export async function setupRoute(db: Db, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   const p = url.pathname;
   if (req.method === 'GET' && p === '/setup') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(page(db, url.searchParams.get('msg')));
+    res.writeHead(302, { location: '/app/#/accounts' }).end(); // the Accounts tab replaced this page
     return true;
   }
 

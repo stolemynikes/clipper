@@ -24,6 +24,10 @@ const P: Record<string, string> = {
   next: 'M9 18l6-6-6-6',
   pause: 'M6 4h4v16H6zM14 4h4v16h-4z',
   up: 'M18 15l-6-6-6 6',
+  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  plus: 'M12 5v14M5 12h14',
+  trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
+  key: 'M15 7a4 4 0 1 1-3.9 5H9v2H7v2H4v-3l6.1-6.1A4 4 0 0 1 15 7z',
   download: 'M12 3v12m0 0-4-4m4 4 4-4M4 19h16',
 };
 export const Icon = ({ name, size = 18, label, className = '' }: { name: keyof typeof P | string; size?: number; label?: string; className?: string }) => (

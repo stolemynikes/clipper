@@ -34,9 +34,9 @@ const get = async <T,>(path: string): Promise<T> => {
 };
 
 /** Same header the old review page sends; the server refuses POSTs without it. */
-export const post = async (path: string) => {
-  const r = await fetch(path, { method: 'POST', headers: { 'x-clipper': '1' } });
-  if (!r.ok && r.status !== 204) throw new Error((r.status === 400 && await r.text()) || `${r.status}`);
+export const post = async (path: string, body?: object) => {
+  const r = await fetch(path, { method: 'POST', headers: { 'x-clipper': '1', ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok && r.status !== 204) throw new Error(((r.status === 400 || r.status === 409) && await r.text()) || `${r.status}`);
 };
 
 const live = { refetchInterval: 15_000 };
@@ -79,10 +79,19 @@ export interface Earnings { estimated: number; paid: number; pending: number; pa
 export interface HistoryRow extends PostRow { streamer: string }
 export interface Month { month: string; clips: number; views: number; earned: number; paid: number; campaigns: number }
 export interface History { months: Month[]; ended: { name: string; endsAt: string; earned: number; posts: number; paid: number }[]; posts: HistoryRow[] }
-export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean; today: number }
-export interface Accounts { limit: number; hours: (number | null)[][]; accounts: Account[] }
+export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean; today: number;
+  via: 'oauth' | 'postpeer' | 'needs_postpeer'; connectUrl: string }
+export interface AppSetup { platform: string; label: string; ready: boolean; steps: string[]; fields: { key: string; label: string; secret: boolean; saved: boolean }[] }
+export interface Accounts { limit: number; hours: (number | null)[][]; accounts: Account[]; apps: AppSetup[]; campaigns: { id: number; name: string }[];
+  hasPostpeer: boolean; canCheckNames: boolean; titleTest: string }
 export const useEarnings = () => useQuery({ queryKey: ['earnings'], queryFn: () => get<Earnings>('/api/earnings'), ...live });
 export const useHistory = () => useQuery({ queryKey: ['history'], queryFn: () => get<History>('/api/history'), ...live });
+export type DiscoverCampaign = { id: string; name: string; org: string; streamer: string | null; pool: boolean; budget: number; left: number;
+  pays: { platform: string; ratePer1k: number; maxPerClip: number }[]; why: string | null; joining: boolean; joinError: string | null };
+export type Discover = { at: string | null; scanning: boolean; scanError: string | null; campaigns: DiscoverCampaign[] };
+/** Polls every 3s while a scan or join runs, else the normal 15s. */
+export const useDiscover = () => useQuery({ queryKey: ['discover'], queryFn: () => get<Discover>('/api/discover'),
+  refetchInterval: (q) => (q.state.data?.scanning || q.state.data?.campaigns.some((c) => c.joining) ? 3_000 : 15_000) });
 export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => get<Accounts>('/api/accounts'), ...live });
 export interface SettingField {
   key: string; group: string; label: string; help: string; type: 'number' | 'bool' | 'choice';

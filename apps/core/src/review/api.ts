@@ -9,8 +9,9 @@ import { accountWarnings, allStreamers, campaignStatus, expectedPerClip } from '
 import { bestScores, isOff, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
 import { isPractice } from '../modules/practice/practice.ts';
-import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
+import { accountStats, accountVia, connectUrl, earn, LABEL, setupInfo, tokenKey } from './setup.ts';
 import { getSettings } from './settings.ts';
+import { cachedDiscover, twitchOf, whyNot } from '../modules/scout/scout.ts';
 
 const DAY = 86_400_000;
 type Post = { id: number; clip: number; account: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
@@ -154,7 +155,8 @@ function accounts(db: Db) {
   for (const p of posts) if (p.postedAt && p.postedAt >= Date.now() - 30 * DAY) { const d = new Date(p.postedAt), h = hours[(d.getDay() + 6) % 7][d.getHours()]; h.views += p.views ?? 0; h.posts++; }
   return {
     limit: loadSettings().limits.maxPostsPerAccountPerDay, hours: hours.map((d) => d.map((h) => (h.posts ? Math.round(h.views / h.posts) : null))),
-    accounts: accountStats(db).map((a) => ({ ...a, label: LABEL[a.platform], connected: Boolean(process.env[tokenKey(a.id)]), today: today(a.id) })),
+    accounts: accountStats(db).map((a) => ({ ...a, label: LABEL[a.platform], connected: Boolean(process.env[tokenKey(a.id)]), today: today(a.id), via: accountVia(a.platform), connectUrl: connectUrl(a) })),
+    ...setupInfo(db),
   };
 }
 
@@ -168,6 +170,28 @@ async function usdRate() {
   return (rate = { eurPerUsd: 1 / usd, date, at: Date.now() });
 }
 
+/** Discover tab: every CR campaign from the last scan, with plain reasons for the ones we can't join, and running scan/join jobs. */
+function discover(db: Db) {
+  const { at, campaigns } = cachedDiscover(), saved = allStreamers();
+  const jobs = db.$client.prepare(`select type, payload, status, error, created_at t from jobs where type in ('campaign.discover','campaign.join') and created_at > ? order by id`)
+    .all(Date.now() - DAY) as { type: string; payload: string; status: string; error: string | null; t: number }[];
+  const live = (j: { status: string }) => j.status === 'queued' || j.status === 'running';
+  const joinOf = (id: string) => jobs.filter((j) => j.type === 'campaign.join' && JSON.parse(j.payload).id === id).at(-1);
+  const scan = jobs.filter((j) => j.type === 'campaign.discover').at(-1);
+  return {
+    at, scanning: Boolean(scan && live(scan)), scanError: scan?.status === 'failed' ? scan.error : null,
+    campaigns: campaigns.map((c) => {
+      const j = joinOf(c.id);
+      return {
+        id: c.id, name: c.name, org: c.organizationName ?? '', streamer: twitchOf(c), pool: c.payoutType === 'pool',
+        budget: c.budgetCents / 100, left: Math.max(0, c.budgetCents - (c.metrics?.budgetSpentCents ?? 0)) / 100,
+        pays: c.payouts.filter((p) => p.payoutType === 'pool' || (p.rateCents ?? 0) > 0).map((p) => ({ platform: p.platform, ratePer1k: (p.rateCents ?? 0) / 100, maxPerClip: (p.maxPayoutCents ?? 0) / 100 })),
+        why: whyNot(c, saved), joining: Boolean(j && live(j)), joinError: j?.status === 'failed' ? j.error : null,
+      };
+    }).sort((a, b) => Number(Boolean(a.why)) - Number(Boolean(b.why)) || b.left - a.left),
+  };
+}
+
 const json = (res: ServerResponse, body: unknown) => res.writeHead(body === null ? 404 : 200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
 /** GET /api/*: true if handled. */
@@ -176,6 +200,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/overview') return json(res, overview(db)), true;
   if (url.pathname === '/api/review') return json(res, review(db)), true;
   if (url.pathname === '/api/campaigns') return json(res, allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, allPosts(db)))), true;
+  if (url.pathname === '/api/discover') return json(res, discover(db)), true;
   if (url.pathname === '/api/earnings') return json(res, earnings(db)), true;
   if (url.pathname === '/api/history') return json(res, history(db)), true;
   if (url.pathname === '/api/settings') return json(res, getSettings()), true;

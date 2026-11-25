@@ -76,7 +76,7 @@ export function Proposals() {
   const copy = async () => { try { await navigator.clipboard.writeText(summary(ps)); toast({ text: 'Summary copied', tone: 'up' }); } catch { toast({ text: 'Copy failed', tone: 'info' }); } };
   return (
     <Page kicker="Learned from practice clips at night" title="Proposals" right={ps.length ? <button className="btn" onClick={copy}>Copy summary</button> : undefined}>
-      {ps.length ? <div className="flex flex-col gap-4 max-w-[960px]">{ps.map((p) => <Card key={p.id} p={p} />)}</div>
+      {ps.length ? <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="grid 2xl:grid-cols-2 gap-4 content-start pb-6">{ps.map((p) => <Card key={p.id} p={p} />)}</div></div>
         : <Empty icon="smile" title="No proposals yet" text="Turn on Practice at night in Settings. Proposals show up here the next morning." />}
     </Page>
   );

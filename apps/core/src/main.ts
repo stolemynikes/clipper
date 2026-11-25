@@ -18,7 +18,7 @@ import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
 import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
 import { enqueue, recoverStale } from './queue/queue.ts';
-import { scoutOnce } from './modules/scout/scout.ts';
+import { discoverAll, joinJob, scoutOnce } from './modules/scout/scout.ts';
 import { isPractice, liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
@@ -75,5 +75,7 @@ await Promise.all([
   runWorker(db, { 'practice.analyze': tracked((p: any) => analyzeVod(db, p)), 'practice.render': tracked((p: any) => renderClip(db, p)), 'practice.judge': tracked((p: any) => judgeClip(db, p)) },
     { signal: ac.signal, paused: () => practiceHeld() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
+  // Owner's Discover/Join buttons on the dashboard: run even while Snip is paused (one CR tab, one command at a time).
+  runWorker(db, { 'campaign.discover': async () => { await discoverAll(); }, 'campaign.join': (p) => joinJob(db, p as { id: string }) }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);

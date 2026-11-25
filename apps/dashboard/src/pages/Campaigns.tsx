@@ -17,7 +17,7 @@ export function Campaigns() {
   const running = n(1), join = n(2);
 
   return (
-    <Page kicker={`${running} running · ${join} to join`} title="Campaigns">
+    <Page kicker={`${running} running · ${join} to join`} title="Campaigns" right={<a href="#/discover" className="btn btn-1 no-underline"><Icon name="search" size={16} />Discover campaigns</a>}>
       <div className="flex flex-wrap gap-3 items-center shrink-0">
         <input className="field w-[280px] max-w-full" type="search" placeholder="Search streamers" aria-label="Search streamers" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="segs" role="group" aria-label="Filter">{FILTERS.map(([l], i) => <button key={l} className="seg" aria-pressed={f === i} onClick={() => setF(i)}>{l} <span className="num text-f">{data ? n(i) : ''}</span></button>)}</div>

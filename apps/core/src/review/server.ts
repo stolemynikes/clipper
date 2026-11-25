@@ -13,6 +13,7 @@ import { saveSetting } from './settings.ts';
 import { CSS, esc } from './style.ts';
 import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setOff, setPaused, status, type Toggle } from './review.ts';
 import { isPractice, setPractice } from '../modules/practice/practice.ts';
+import { enqueue } from '../queue/queue.ts';
 
 const log = logger('review');
 
@@ -135,6 +136,10 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
   if (pa) return res.writeHead(decideProposal(pa[1], pa[2] === 'approve') ? 204 : 404).end();
   const act = /^\/clip\/(\d+)\/(approve|reject)$/.exec(url.pathname);
   if (act) return res.writeHead(decide(db, Number(act[1]), act[2] === 'approve') ? 204 : 409).end();
+  // Discover tab: scan CR and join run as jobs (Chrome clicks take minutes); the page polls /api/discover.
+  if (url.pathname === '/discover/scan') { enqueue(db, 'campaign.discover', {}, { maxAttempts: 1 }); return res.writeHead(204).end(); }
+  const dj = /^\/discover\/([0-9a-f-]{36})\/join$/.exec(url.pathname);
+  if (dj) { enqueue(db, 'campaign.join', { id: dj[1] }, { maxAttempts: 1 }); return res.writeHead(204).end(); }
   if (url.pathname === '/pause' || url.pathname === '/resume') { setPaused(url.pathname === '/pause'); return res.writeHead(204).end(); }
   if (url.pathname === '/settings') {
     try { saveSetting(url.searchParams.get('key') ?? '', url.searchParams.get('value') ?? ''); return res.writeHead(204).end(); }

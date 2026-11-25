@@ -50,3 +50,13 @@ test('pool campaign: pool from budget, no rate', () => {
   assert.equal(f.ratePer1k, 0);
   assert.equal(toEntry(f).tag, '@lacy');
 });
+
+test('whyNot gives a plain reason per blocked campaign', async () => {
+  const { whyNot } = await import('./scout.ts');
+  const base = { id: 'x', name: 'Clip', status: 'active', private: false, requiresApplication: false, budgetCents: 100_00, payoutType: 'rate', platforms: ['tiktok'],
+    payouts: [{ platform: 'tiktok', payoutType: 'rate', rateCents: 100 }], referenceMaterials: [{ url: 'https://twitch.tv/somebody' }] } as CrCampaign;
+  assert.equal(whyNot(base, []), null);
+  assert.equal(whyNot({ ...base, name: 'Stake casino clips' }, []), 'Gambling');
+  assert.equal(whyNot({ ...base, referenceMaterials: [] }, []), 'No Twitch streamer');
+  assert.equal(whyNot(base, [{ name: 'somebody', channel: 'somebody' } as never]), 'Already joined');
+});
