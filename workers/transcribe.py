@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 
 import numpy as np
 
@@ -83,7 +84,8 @@ def main() -> None:
         try:
             out = handle(json.loads(line))
         except Exception as e:  # one bad clip must not kill the server
-            out = {"error": f"{type(e).__name__}: {e}"}
+            where = " < ".join(f"{os.path.basename(f.filename)}:{f.lineno}" for f in reversed(traceback.extract_tb(e.__traceback__)[-3:]))
+            out = {"error": f"{type(e).__name__}: {e} (at {where})"}
         print(json.dumps(out), flush=True)
 
 

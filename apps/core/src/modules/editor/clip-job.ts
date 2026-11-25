@@ -94,7 +94,8 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const src = join(dir, 'src.mp4'); // already there for a re-test or a study clip
   if (!existsSync(src) || statSync(src).size === 0) await downloadSection(source.url, moment.startSec, moment.endSec, src);
 
-  const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null });
+  // a broken download fails here every retry; dropping it makes the next attempt download it again
+  const t = await transcribe({ input: src, model: hw?.whisperModelVod ?? 'medium', language: null }).catch((e) => { rmSync(src, { force: true }); throw e; });
   const { peakDb } = t;
   // Keep only build-up + peak + reaction: start on a sentence, end after the reaction sentence.
   const sc = settings.scoring;
