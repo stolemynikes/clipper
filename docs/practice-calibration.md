@@ -1,0 +1,22 @@
+# Judge calibration (night practice)
+
+Claude scores a sample of practice clips blind and compares with gemma4:12b (docs/practice-plan.md).
+
+## 2026-11-25, clips 126-141 (lacy, kaicenat)
+
+**Speech (talk score):** Claude scored the 15 transcripts with speech blind, then compared.
+- Within 0.2 of gemma: 14 of 15 (93%). Above the 65% bar: A/B scores are trusted.
+- The one miss: #140 ("Oh, she's so hot..."): gemma 0.8, Claude 0.4. Gemma is a bit generous on loud
+  reactions without a joke.
+
+**Layout penalty:** -2 or -3 on all 16 clips. Checked frames by eye: the judge is mostly **right**.
+- lacy: the stream's own chat overlay sits inside the gameplay crop (top-left of the game panel).
+  Our caption sometimes lands on top of it. This is a crop problem, not a judge problem.
+- kaicenat (no cam layout): "top of the head cut off" in several frames.
+
+## Proposals for the owner (morning, not changed at night)
+
+1. **Gameplay crop per streamer without the chat overlay** (lacy): move or narrow the game crop in
+   `config/streamers.yaml` so the overlay is outside. Can be an A/B proposal once a `gameCrop` knob exists.
+2. **No-cam framing** (kaicenat): keep more headroom when the face tracker centers the face.
+3. **Judge prompt:** keep as is. Optional: ask "is there a joke or surprise?" so loud talk alone scores lower.
