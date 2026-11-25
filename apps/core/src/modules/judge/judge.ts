@@ -60,8 +60,8 @@ export async function ask(model: string, gpu: boolean, prompt: string, images?: 
 }
 
 const BROKEN = { type: 'object', required: ['broken'], properties: { broken: { type: 'array', items: { type: 'object', required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
-export async function askLayout(model: string, gpu: boolean, rules: Rule[], images: string[]) {
-  const j = await askJson(model, gpu, layoutPrompt(rules), BROKEN, images);
+export async function askLayout(model: string, gpu: boolean, rules: Rule[], images: string[], transcript = '') {
+  const j = await askJson(model, gpu, layoutPrompt(rules, transcript), BROKEN, images);
   return layoutResult((Array.isArray(j.broken) ? j.broken : []).map((b: { id?: unknown; why?: unknown }) => ({ id: String(b.id ?? ''), why: String(b.why ?? '').slice(0, 160) })), rules);
 }
 
@@ -180,7 +180,7 @@ function saveCalibration(clipId: number, frame: string | undefined, transcript: 
 const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
 
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
-export const JUDGE_VERSION = 1;
+export const JUDGE_VERSION = 2; // 2: brief content notes + transcript in the layout check
 
 /** Job: judge one clip, store the signals on its moment, add the proven part to the score, then ask for review. */
 export async function judgeClip(db: Db, { clipId, notify = true, retest }: { clipId: number; notify?: boolean; retest?: boolean }) {
@@ -213,7 +213,7 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
       const vis = await frames(clip.filePath, clip.durationSec ?? 20); shot = vis[1];
       const b = await ask(model, gpu, VISUAL_PROMPT, vis);
       fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
-      const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540));
+      const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540), clip.transcript ?? '');
       fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
     }

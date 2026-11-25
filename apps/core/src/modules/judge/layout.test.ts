@@ -30,3 +30,10 @@ test('rating: layout penalty lowers it, never below 1', () => {
   assert.equal(rating(10, 10, 3), 7);
   assert.equal(rating(2, 10, 5), 1);
 });
+
+test('brief notes: content notes become rules, posting/paying notes are skipped', () => {
+  const c = { ...camp, rules: { notes: ['JasonTheWeen must be the main focus of the clip', 'No logos, no negative or hate-farm clips', 'Submit within 30 minutes of posting'] } };
+  const r = layoutRules(c, presets).filter((x) => x.id.startsWith('note-'));
+  assert.deepEqual(r.map((x) => x.check), ['JasonTheWeen must be the main focus of the clip', 'No logos, no negative or hate-farm clips']);
+  assert.equal(r[0].penalty, 2);
+});

@@ -9,16 +9,25 @@ import { paths } from '../../env.ts';
 export type Rule = { id: string; penalty: number; check: string };
 export const LAYOUT_PREFIX = 'Layout: '; // marks our warnings, so a re-judge replaces them instead of adding twice
 
-/** base + the campaign's platform preset + the brief's own rules (penalty 1 each). */
+const PROCESS = /\b(submit|within \d+ ?(min|hour)|account|payout|views?)\b/i; // brief notes about posting/paying, not about what is in the clip
+/** Content notes from the brief ("X must be the main focus", "No logos, no hate clips") as checkable rules. */
+export const briefRules = (campaign: StreamerConfig['campaign']): Rule[] => {
+  const notes = campaign?.rules?.notes;
+  return (Array.isArray(notes) ? notes.map(String) : []).filter((n) => !PROCESS.test(n)).map((check, i) => ({ id: `note-${i + 1}`, penalty: 2, check }));
+};
+
+/** base + the campaign's platform preset + the brief's own rules (penalty 1 each) + the brief's content notes (penalty 2). */
 export function layoutRules(campaign: StreamerConfig['campaign'], presets: Record<string, Rule[]> = parse(readFileSync(join(paths.configDir, 'judge-rules.yaml'), 'utf8')).presets): Rule[] {
   const preset = campaign ? (campaign.rulePreset ?? 'content-rewards') : null;
   const extra = (campaign?.judgeRules ?? []).map((check, i) => ({ id: `brief-${i + 1}`, penalty: 1, check }));
-  return [...presets.base, ...(preset ? presets[preset] ?? [] : []), ...extra];
+  return [...presets.base, ...(preset ? presets[preset] ?? [] : []), ...extra, ...briefRules(campaign)];
 }
 
-export const layoutPrompt = (rules: Rule[]) =>
+export const layoutPrompt = (rules: Rule[], transcript = '') =>
   `These are frames from a vertical 9:16 short made from a stream: webcam panel on top, game or screen below, on a blurred background.
-Captions, a chat box, an @tag and #AD are added on purpose. Check each rule. A rule about something that is not in the frames passes.
+Captions, a chat box, an @tag and #AD are added on purpose. Check each rule against the frames${transcript ? ' and what is said' : ''}. A rule about something that is not in the clip passes.
+${transcript ? `What is said: "${transcript.slice(0, 1500)}"
+` : ''}Rules:
 ${rules.map((r) => `- ${r.id}: ${r.check}`).join('\n')}
 Only list a rule as broken when you clearly see it in a frame.
 Return JSON: "broken": list of {"id", "why"} with "why" one short plain sentence a non-technical person understands. Empty list if all is fine.`;
