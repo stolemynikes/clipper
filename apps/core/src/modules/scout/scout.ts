@@ -40,7 +40,7 @@ export function pickCampaigns(list: CrCampaign[], saved: StreamerConfig[], max =
 }
 
 /** The form fields toEntry validates, from CR's data. Text-only fields (tag, hashtags, rules) come from the brief. */
-export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; minViews?: number; }, now = new Date()) {
+export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; minViews?: number; totalViews?: number; endsAt?: string }, now = new Date()) {
   const pays = c.payouts.filter((p) => paying(c).includes(p.platform));
   const pool = c.payoutType === 'pool';
   const left = c.budgetCents - (c.metrics?.budgetSpentCents ?? 0);
@@ -49,18 +49,23 @@ export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]
     ratePer1k: pool ? 0 : Math.max(...pays.map((p) => p.rateCents ?? 0)) / 100,
     maxPerClip: pool ? 0 : Math.max(0, ...pays.map((p) => p.maxPayoutCents ?? 0)) / 100,
     pool: pool ? c.budgetCents / 100 : 0, budgetLeft: left > 0 && left < c.budgetCents ? left / 100 : 0,
-    endsAt: new Date(now.getTime() + ASSUMED_DAYS * 86_400_000).toISOString().slice(0, 10),
-    tag: brief.tag ?? '', hashtags: brief.hashtags ?? [], accountNote: brief.accountNote ?? '', minViews: brief.minViews ?? 0,
+    endsAt: datedEnd(brief.endsAt, now) ?? new Date(now.getTime() + ASSUMED_DAYS * 86_400_000).toISOString().slice(0, 10),
+    tag: brief.tag ?? '', hashtags: brief.hashtags ?? [], accountNote: brief.accountNote ?? '', minViews: brief.minViews ?? 0, totalViews: brief.totalViews ?? 0,
     disclosure: true, // Content Rewards requires #ad on every post (FTC page), whatever the brief says
   };
 }
 
 const cr = async (...args: string[]) => JSON.parse(await runCmd(paths.pythonBin, ['-I', join(paths.rootDir, 'workers', 'cr_browser.py'), ...args]));
 
-/** Text of public Google Docs rules pages linked from the campaign. */
+/** End date written in the brief (YYYY-MM-DD), only when it is a real date that has not passed. */
+export const datedEnd = (d: string | undefined, now = new Date()) =>
+  d && /^\d{4}-\d{2}-\d{2}$/.test(d) && Date.parse(d) + 86_400_000 > now.getTime() ? d : undefined;
+
+const SOCIAL = /^https:\/\/([\w-]+\.)?(twitch\.tv|youtube\.com|youtu\.be|tiktok\.com|instagram\.com|x\.com|twitter\.com|kick\.com|snapchat\.com|discord\.(gg|com))\//i;
+/** Text of the rules pages linked from the campaign (Google Docs, a "Rules & Requirements" site), not the streamer's social links. */
 async function rulesDocs(c: CrCampaign): Promise<string> {
   const links = [...new Set([...(c.referenceMaterials ?? []).map((r) => r.url), ...(c.description ?? '').match(/https:\/\/docs\.google\.com\/\S+/g) ?? []]
-    .filter((u) => u.startsWith('https://docs.google.com/')))].slice(0, 3);
+    .filter((u) => u.startsWith('https://') && !SOCIAL.test(u)))].slice(0, 3);
   const out: string[] = [];
   for (const u of links) {
     const r = await fetch(u, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
@@ -84,7 +89,7 @@ export async function scoutOnce(db: Db) {
       const entry = toEntry(formOf(c, { ...fields, tag }));
       if (!campaignOpen(entry.campaign!)) continue;
       entry.enabled = true;
-      entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
+      if (!datedEnd(fields.endsAt)) entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
       update(entry.name, entry, true);
       enqueue(db, 'campaign.study', { name: entry.name }, { maxAttempts: 2 });
       log.info(`joined and saved ${entry.name} (${c.name})`);

@@ -1,7 +1,7 @@
 // JSON for the dashboard (apps/dashboard). Read-only GETs; actions reuse the existing POST routes.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { aaBias, proposals, score } from '../modules/practice/proposals.ts';
-import { campaignOpen, type StreamerConfig } from '../config.ts';
+import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
 import { readProgress } from '../modules/learner/study.ts';
@@ -12,11 +12,11 @@ import { isPractice } from '../modules/practice/practice.ts';
 import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
 
 const DAY = 86_400_000;
-type Post = { id: number; clip: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
+type Post = { id: number; clip: number; account: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
 
 /** Every post with its latest view count; small table, one query. */
 const allPosts = (db: Db) => db.$client.prepare(`
-  select p.id, p.clip_id clip, c.title, p.platform, p.url, p.posted_at postedAt, p.submitted, s.name streamer,
+  select p.id, p.clip_id clip, p.account_id account, c.title, p.platform, p.url, p.posted_at postedAt, p.submitted, s.name streamer,
     (select views from stats st where st.post_id = p.id order by measured_at desc limit 1) views
   from posts p join clips c on c.id = p.clip_id join moments m on m.id = c.moment_id join sources so on so.id = m.source_id
   join streamers s on s.id = so.streamer_id order by p.posted_at desc`).all() as Post[];
@@ -38,11 +38,28 @@ function campaignRow(s: StreamerConfig, posts: Post[]) {
   };
 }
 
+/** Views and estimated earnings at time t, from the stats history (latest measurement at or before t). */
+function timeline(db: Db, posts: Post[]) {
+  const camps = new Map(allStreamers().map((s) => [s.name, s.campaign]));
+  const rows = db.$client.prepare('select post_id p, views v, measured_at t from stats order by measured_at').all() as { p: number; v: number; t: number }[];
+  const of = new Map(posts.map((p) => [p.id, p]));
+  return (t: number) => {
+    const last = new Map<number, number>();
+    for (const r of rows) if (r.t <= t) last.set(r.p, r.v);
+    let views = 0, earned = 0;
+    for (const [id, v] of last) { const c = camps.get(of.get(id)?.streamer ?? ''); views += v; if (c) earned += earn(v, c.ratePer1k, c.maxPerClip); }
+    return { views, earned };
+  };
+}
+
 const sum = (rows: { status: string; n: number }[], ...want: string[]) => rows.filter((r) => want.includes(r.status)).reduce((a, r) => a + r.n, 0);
 
 function overview(db: Db) {
   const st = status(db), posts = allPosts(db), camps = allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, posts));
-  const week = Date.now() - 7 * DAY;
+  const now = Date.now(), week = now - 7 * DAY, at = timeline(db, posts), wk = at(week), wk2 = at(now - 14 * DAY);
+  const end = new Date(); end.setHours(24, 0, 0, 0); // end of today
+  const earnedSeries = Array.from({ length: 30 }, (_, i) => at(end.getTime() - (29 - i) * DAY).earned);
+  const views = posts.reduce((t, p) => t + (p.views ?? 0), 0), earned = camps.reduce((t, c) => t + c.earned, 0), pending = pendingClips(db);
   const recentClips = db.$client.prepare(`select c.id, c.status, c.created_at at, s.name streamer from clips c join moments m on m.id = c.moment_id
     join sources so on so.id = m.source_id join streamers s on s.id = so.streamer_id where c.status != 'practice' order by c.created_at desc limit 30`).all() as { id: number; status: string; at: number; streamer: string }[];
   const activity = [
@@ -53,8 +70,9 @@ function overview(db: Db) {
     paused: st.paused, study: !isOff('study'), learning: !isOff('learn'), practice: isPractice(), claude: !isOff('claude'), working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
     toReview: sum(st.clips, 'pending_review'), kept: sum(st.clips, 'approved', 'posted'), skipped: sum(st.clips, 'rejected'),
     posted: posts.length, postedThisWeek: posts.filter((p) => (p.postedAt ?? 0) >= week).length,
-    views: posts.reduce((t, p) => t + (p.views ?? 0), 0), earned: camps.reduce((t, c) => t + c.earned, 0),
-    reviewFrom: [...new Set(pendingClips(db).map((r) => r.streamer.name))],
+    views, earned, earnedSeries, earnedWeek: earned - wk.earned, viewsWeek: views - wk.views, viewsPrevWeek: wk.views - wk2.views,
+    reviewFrom: [...new Set(pending.map((r) => r.streamer.name))], reviewIds: pending.slice(0, 3).map((r) => r.clip.id),
+    sites: [...new Set(camps.map((c) => c.site))],
     campaigns: camps.filter((c) => c.on), endingSoon: camps.filter((c) => c.open && c.daysLeft <= 7).sort((a, b) => a.daysLeft - b.daysLeft),
     canJoin: camps.filter((c) => c.open && !c.on).length, activity,
   };
@@ -94,20 +112,60 @@ export function earnings(db: Db) {
   const total = (st: string) => payouts.filter((p) => p.status === st).reduce((t, p) => t + p.amount, 0);
   return {
     estimated: camps.reduce((t, c) => t + c.earned, 0), paid: total('paid'), pending: total('pending'), payouts,
-    campaigns: camps.filter((c) => c.posts || payouts.some((p) => p.campaign === c.name)).map((c) => ({ name: c.name, views: c.views, posts: c.posts, earned: c.earned, pool: c.pool,
+    campaigns: camps.filter((c) => c.on || c.posts || payouts.some((p) => p.campaign === c.name)).map((c) => ({ name: c.name, site: c.site, status: c.status, open: c.open,
+      endsAt: c.endsAt, daysLeft: c.daysLeft, views: c.views, posts: c.posts, earned: c.earned, pool: c.pool,
       paid: payouts.filter((p) => p.campaign === c.name && p.status === 'paid').reduce((t, p) => t + p.amount, 0) })),
+    platforms: byPlatform(posts),
   };
 }
 
-/** Every post, newest first, with its estimated earnings. */
+/** Views and posts per platform, with each platform's share of all views. */
+function byPlatform(posts: Post[]) {
+  const m = new Map<string, { platform: string; views: number; posts: number }>();
+  for (const p of posts) { const r = m.get(p.platform) ?? { platform: p.platform, views: 0, posts: 0 }; r.views += p.views ?? 0; r.posts++; m.set(p.platform, r); }
+  const all = posts.reduce((t, p) => t + (p.views ?? 0), 0);
+  return [...m.values()].map((r) => ({ ...r, label: LABEL[r.platform as keyof typeof LABEL] ?? r.platform, share: all ? r.views / all : 0 })).sort((a, b) => b.views - a.views);
+}
+
+/** Per month totals, ended campaigns, and every post newest first with its estimated earnings. */
 function history(db: Db) {
-  const camps = new Map(allStreamers().map((s) => [s.name, s.campaign]));
-  return allPosts(db).map((p) => { const c = camps.get(p.streamer); return { id: p.id, clip: p.clip, title: p.title, streamer: p.streamer, platform: LABEL[p.platform as keyof typeof LABEL] ?? p.platform,
+  const all = allPosts(db), camps = new Map(allStreamers().map((s) => [s.name, s.campaign]));
+  const posts = all.map((p) => { const c = camps.get(p.streamer); return { id: p.id, clip: p.clip, title: p.title, streamer: p.streamer, platform: LABEL[p.platform as keyof typeof LABEL] ?? p.platform,
     url: p.url, postedAt: p.postedAt, submitted: Boolean(p.submitted), views: p.views ?? 0, earned: c ? earn(p.views ?? 0, c.ratePer1k, c.maxPerClip) : 0 }; });
+  const paid = db.$client.prepare("select campaign, amount, coalesce(paid_at, created_at) at from payouts where status = 'paid'").all() as { campaign: string; amount: number; at: number }[];
+  const month = (t: number) => new Date(t).toISOString().slice(0, 7);
+  const months = new Map<string, { month: string; streamers: Set<string>; clips: number; views: number; earned: number; paid: number }>();
+  const get = (k: string) => months.get(k) ?? months.set(k, { month: k, streamers: new Set(), clips: 0, views: 0, earned: 0, paid: 0 }).get(k)!;
+  for (const p of posts) if (p.postedAt) { const m = get(month(p.postedAt)); m.streamers.add(p.streamer); m.clips++; m.views += p.views; m.earned += p.earned; }
+  for (const p of paid) get(month(p.at)).paid += p.amount;
+  const ended = allStreamers().filter((s) => s.campaign && !campaignOpen(s.campaign)).map((s) => campaignRow(s, all))
+    .map((c) => ({ name: c.name, endsAt: c.endsAt, earned: c.earned, posts: c.posts, paid: paid.filter((p) => p.campaign === c.name).reduce((t, p) => t + p.amount, 0) }))
+    .sort((a, b) => b.endsAt.localeCompare(a.endsAt));
+  return { months: [...months.values()].map(({ streamers, ...m }) => ({ ...m, campaigns: streamers.size })).sort((a, b) => b.month.localeCompare(a.month)), ended, posts };
 }
 
 /** Accounts with totals; only whether a token exists, never the token. */
-const accounts = (db: Db) => accountStats(db).map((a) => ({ ...a, label: LABEL[a.platform], connected: Boolean(process.env[tokenKey(a.id)]) }));
+function accounts(db: Db) {
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const posts = allPosts(db), today = (id: number) => posts.filter((p) => p.account === id && (p.postedAt ?? 0) >= day.getTime()).length;
+  // Best times: average views per post by weekday (0 = Monday) and hour posted, last 30 days.
+  const hours = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ views: 0, posts: 0 })));
+  for (const p of posts) if (p.postedAt && p.postedAt >= Date.now() - 30 * DAY) { const d = new Date(p.postedAt), h = hours[(d.getDay() + 6) % 7][d.getHours()]; h.views += p.views ?? 0; h.posts++; }
+  return {
+    limit: loadSettings().limits.maxPostsPerAccountPerDay, hours: hours.map((d) => d.map((h) => (h.posts ? Math.round(h.views / h.posts) : null))),
+    accounts: accountStats(db).map((a) => ({ ...a, label: LABEL[a.platform], connected: Boolean(process.env[tokenKey(a.id)]), today: today(a.id) })),
+  };
+}
+
+// USD to EUR from the ECB daily reference rates (public file, no personal data), cached 12 hours.
+let rate: { eurPerUsd: number; date: string; at: number } | null = null;
+async function usdRate() {
+  if (rate && Date.now() - rate.at < 12 * 3_600_000) return rate;
+  const xml = await (await fetch('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml', { signal: AbortSignal.timeout(10_000) })).text();
+  const usd = Number(/currency='USD' rate='([\d.]+)'/.exec(xml)?.[1]), date = /time='([\d-]+)'/.exec(xml)?.[1] ?? '';
+  if (!(usd > 0)) throw new Error('no USD rate in ECB file');
+  return (rate = { eurPerUsd: 1 / usd, date, at: Date.now() });
+}
 
 const json = (res: ServerResponse, body: unknown) => res.writeHead(body === null ? 404 : 200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
@@ -120,6 +178,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/earnings') return json(res, earnings(db)), true;
   if (url.pathname === '/api/history') return json(res, history(db)), true;
   if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
+  if (url.pathname === '/api/rate') return usdRate().then((r) => json(res, r), () => json(res, rate ?? { eurPerUsd: null, date: '', at: 0 })), true;
   if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
   if (m) return json(res, detail(db, m[1])), true;

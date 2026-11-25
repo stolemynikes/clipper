@@ -12,6 +12,7 @@ export interface Activity { kind: 'new' | 'kept' | 'skipped' | 'posted'; text: s
 export interface Overview {
   paused: boolean; study: boolean; learning: boolean; practice: boolean; claude: boolean; working: number; failed: number; toReview: number; kept: number; skipped: number; posted: number; postedThisWeek: number;
   views: number; earned: number; reviewFrom: string[]; campaigns: Campaign[]; endingSoon: Campaign[]; canJoin: number; activity: Activity[];
+  earnedSeries: number[]; earnedWeek: number; viewsWeek: number; viewsPrevWeek: number; reviewIds: number[]; sites: string[];
 }
 export interface ReviewClip {
   id: number; streamer: string; seconds: number; at: number; title: string | null; hook: string | null; strength: number;
@@ -46,7 +47,19 @@ export const useCampaign = (name: string) => useQuery({ queryKey: ['campaign', n
 
 export const useProposals = () => useQuery({ queryKey: ['proposals'], queryFn: () => get<Proposal[]>('/api/proposals'), ...live });
 
-export const money = (n: number) => { const d = n >= 1000 || n === 0 ? 0 : 2; return `$${n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}`; };
+// Client-only settings (localStorage): currency, payout fee %, app name. Nothing is invented: no fee unless the owner sets one.
+export const pref = (k: string, d = '') => localStorage.getItem(`snip.${k}`) ?? d;
+export const setPref = (k: string, v: string) => { localStorage.setItem(`snip.${k}`, v); window.dispatchEvent(new Event('snip-pref')); };
+let eurPerUsd: number | null = null;
+export const setRate = (r: number | null) => { eurPerUsd = r; };
+/** USD amounts shown in EUR when the owner picked EUR and the ECB rate is known. */
+export const isEur = () => pref('currency') === 'eur' && eurPerUsd != null;
+export const fee = () => Math.min(50, Math.max(0, Number(pref('fee', '0')) || 0));
+export const money = (n: number, cents = false) => {
+  const v = isEur() ? n * eurPerUsd! : n, d = cents || (v < 1000 && v !== 0) ? 2 : 0;
+  return `${isEur() ? '€' : '$'}${v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+};
+export const short = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : count(n));
 export const count = (n: number) => n.toLocaleString('en-US');
 export const PLATFORM: Record<string, string> = { tiktok: 'TikTok', youtube: 'YouTube Shorts', instagram: 'Instagram Reels', x: 'X' };
 
@@ -61,9 +74,14 @@ export function ago(ms: number, now = Date.now()) {
 }
 
 export interface Payout { id: number; campaign: string; amount: number; status: 'pending' | 'paid'; note: string | null; paidAt: number | null; at: number }
-export interface Earnings { estimated: number; paid: number; pending: number; payouts: Payout[]; campaigns: { name: string; views: number; posts: number; earned: number; pool: number | null; paid: number }[] }
+export interface EarnCampaign { name: string; site: string; status: string; open: boolean; endsAt: string; daysLeft: number; views: number; posts: number; earned: number; pool: number | null; paid: number }
+export interface Earnings { estimated: number; paid: number; pending: number; payouts: Payout[]; campaigns: EarnCampaign[]; platforms: { platform: string; label: string; views: number; posts: number; share: number }[] }
 export interface HistoryRow extends PostRow { streamer: string }
-export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean }
+export interface Month { month: string; clips: number; views: number; earned: number; paid: number; campaigns: number }
+export interface History { months: Month[]; ended: { name: string; endsAt: string; earned: number; posts: number; paid: number }[]; posts: HistoryRow[] }
+export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean; today: number }
+export interface Accounts { limit: number; hours: (number | null)[][]; accounts: Account[] }
 export const useEarnings = () => useQuery({ queryKey: ['earnings'], queryFn: () => get<Earnings>('/api/earnings'), ...live });
-export const useHistory = () => useQuery({ queryKey: ['history'], queryFn: () => get<HistoryRow[]>('/api/history'), ...live });
-export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => get<Account[]>('/api/accounts'), ...live });
+export const useHistory = () => useQuery({ queryKey: ['history'], queryFn: () => get<History>('/api/history'), ...live });
+export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => get<Accounts>('/api/accounts'), ...live });
+export const useRate = () => useQuery({ queryKey: ['rate'], queryFn: () => get<{ eurPerUsd: number | null; date: string }>('/api/rate'), staleTime: 3_600_000 });

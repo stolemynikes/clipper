@@ -6,7 +6,7 @@ import { accountWarnings, expectedPerClip, isGambling, numbersIn, toEntry, unver
 const brief = `Silky clipping campaign. Earn $1.50 per 1,000 views, max $750 per clip. Budget left: $7.5K.
 Clips need 10K views before they pay, min payout $5. Ends Dec 15. Views count on TikTok and YouTube Shorts.
 Tag @Silky and use #Silky. Watch twitch.tv/silky.`;
-const base: Extract = { name: 'silky', channel: 'silky', tag: '@Silky', ratePer1k: 1.5, maxPerClip: 750, pool: 0, minViews: 10000, minPayout: 5,
+const base: Extract = { name: 'silky', channel: 'silky', tag: '@Silky', ratePer1k: 1.5, maxPerClip: 750, pool: 0, minViews: 10000, totalViews: 0, minPayout: 5,
   budgetLeft: 7500, endsAt: '2026-12-15', platforms: ['tiktok', 'youtube'], hashtags: ['#Silky'], accountNote: '', disclosure: true, gambling: false };
 
 test('numbers with commas, decimals and K are found', () => {

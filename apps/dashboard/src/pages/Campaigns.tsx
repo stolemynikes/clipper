@@ -114,7 +114,7 @@ export function CampaignPage({ name }: { name: string }) {
             <h2 className="text-[17px] font-semibold m-0">Rules</h2>
             <div className="flex flex-wrap gap-2">{c.platforms.map((p) => <span key={p} className="pill">{PLATFORM[p] ?? p}</span>)}</div>
             <Rule ok text={`Tag ${c.tag}`} />
-            {c.disclosure ? <Rule ok text="#ad on every clip" /> : null}
+            {c.disclosure ? <Rule ok text="#ad on every clip: Content Rewards rule (FTC), not from this brief" /> : null}
             {c.hashtags.length ? <Rule ok text={`Hashtags: ${c.hashtags.join(' ')}`} /> : null}
             {c.facts.map((f) => <Rule key={f} ok text={f} />)}
             {c.warnings.map((w) => <Rule key={w} text={w} />)}

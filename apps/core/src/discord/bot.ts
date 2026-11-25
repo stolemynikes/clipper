@@ -47,7 +47,7 @@ const fit = (s: string) => (s.length > 1900 ? `${s.slice(0, 1900)}…` : s); // 
 const stamp = () => `_updated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC_`;
 
 const COLOR = { open: 0x22c55e, closed: 0xef4444, off: 0x64748b, new: 0xf59e0b, kept: 0x22c55e, skipped: 0xef4444, posted: 0x5865f2, info: 0x5865f2 };
-const LABELS: [RegExp, string][] = [[/^Pays only after /, 'Pays after'], [/^Counts on: /, 'Platforms'], [/^Audience: /, 'Audience'], [/^Ends /, 'Ends']];
+const LABELS: [RegExp, string][] = [[/^Each clip needs /, 'Per clip'], [/^Get (?=.* views over all)/, 'Total bar'], [/^Counts on: /, 'Platforms'], [/^Audience: /, 'Audience'], [/^Ends /, 'Ends']];
 
 /** Overview card: what the campaign pays, its rules and what to watch for, as embed fields that read at a glance. */
 export function infoEmbed(s: StreamerConfig, now = new Date()): APIEmbed {

@@ -18,7 +18,7 @@ streamers:
       endsAt: 2026-11-30
       rules:
         hashtags: [ "#Clix" ] # caption must mention Clix and use #Clix
-        minViews: 500000
+        totalViews: 500000
         noLogos: true
         noNegative: true
         sourceFrom: 2026-01-01
@@ -42,7 +42,7 @@ streamers:
       endsAt: 2026-11-30 # not on the pages ("when the pool ends"); assumed month end like Clix, check the campaign page
       rules:
         hashtags: [ "#Silky" ] # caption must also mention Silky by name
-        minViews: 250000
+        totalViews: 250000
         noLogos: true
         noNegative: true
         sourceFrom: 2026-11-19 # only his GTA marathon, from Nov 19; Silky must be the main focus
@@ -65,7 +65,7 @@ streamers:
       pool: 10000
       endsAt: 2026-11-30 # not on the page ("when the pool ends"); assumed month end like Clix
       rules:
-        minViews: 750000 # total views to share the pool
+        totalViews: 750000 # total views to share the pool
         hashtags: [ "#KaiCenat" ]
         minClipViews: 1000 # a clip counts only from 1K views
         noNegative: true # assumed, not in the brief
@@ -89,7 +89,7 @@ streamers:
       pool: 12500
       endsAt: 2026-11-30 # assumed month end like Clix
       rules:
-        minViews: 750000
+        totalViews: 750000
         hashtags: [ "#Lacy" ]
         minClipViews: 500
         noLogos: true
@@ -107,17 +107,25 @@ streamers:
       url: https://contentrewards.com/c/campaigns/0b178e3c-fbd3-4294-8ded-394e3da9c62f
       ratePer1k: 0
       maxPerClip: 0
-      endsAt: 2026-12-24
+      endsAt: 2026-11-30
       rules:
         platforms:
           - tiktok
           - instagram
           - youtube
+          - x
         hashtags:
           - "#JasonTheWeen"
         minViews: 500
+        totalViews: 700000
         accountNote: Your caption/text overlay must mention JasonTheWeen's name.
-        endsAtAssumed: true
+        audience: English-speaking, at least 50% from the US, CA, AU, UK, NZ
+        notes:
+          - JasonTheWeen must be the main focus of the clip
+          - No logos, no negative or hate-farm clips, no Japanese captions
+          - Submit within 30 minutes of posting
+        warn:
+          - "Rules page conflicts on AI content: Requirements allow it, Final rules ban it. Avoid AI edits."
       disclosure: true
       pool: 9000
   - name: laurenhamdenn

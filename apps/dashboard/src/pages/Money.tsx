@@ -53,13 +53,13 @@ export function Earnings() {
 
 export function History() {
   const { data, isLoading, error } = useHistory();
-  const more = useMore(data ?? [], 30);
+  const more = useMore(data?.posts ?? [], 30);
   if (error) return <Down title="History" />;
   if (isLoading || !data) return <Loading title="History" />;
   return (
-    <Page kicker={`${count(data.length)} clip${data.length === 1 ? '' : 's'} posted`} title="History">
+    <Page kicker={`${count(data.posts.length)} clip${data.posts.length === 1 ? '' : 's'} posted`} title="History">
       <section className="card !p-0 flex flex-col md:flex-1 md:min-h-0 overflow-hidden">
-        {data.length ? <>
+        {data.posts.length ? <>
           <div className="scroll flex-1 min-h-0">
             <table className="tbl">
               <thead><tr><th>Clip</th><th className="hidden md:table-cell">Campaign</th><th className="hidden md:table-cell">Posted on</th><th className="r">Views</th><th className="r">Earned</th></tr></thead>
@@ -86,13 +86,13 @@ export function Accounts() {
   if (error) return <Down title="Accounts" />;
   if (isLoading || !data) return <Loading title="Accounts" />;
   return (
-    <Page kicker={`${data.filter((a) => a.connected).length} of ${data.length} connected`} title="Accounts" right={<a className="btn" href="/setup"><Icon name="link" size={16} />Manage accounts</a>}>
-      {data.length ? (
+    <Page kicker={`${data.accounts.filter((a) => a.connected).length} of ${data.accounts.length} connected · max ${data.limit} posts a day each`} title="Accounts" right={<a className="btn" href="/setup"><Icon name="link" size={16} />Manage accounts</a>}>
+      {data.accounts.length ? (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 md:scroll md:min-h-0 content-start">
-          {data.map((a) => (
+          {data.accounts.map((a) => (
             <section key={a.id} className="card flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col min-w-0"><span className="font-semibold truncate">{a.name}</span><span className="text-sm text-m">{a.label} · {a.streamer ?? 'no campaign'}</span></div>
+                <div className="flex flex-col min-w-0"><span className="font-semibold truncate">{a.name}</span><span className="text-sm text-m">{a.label} · {a.streamer ?? "no campaign"} · {a.today} of {data.limit} today</span></div>
                 <span className="pill"><span className="dot" style={{ background: a.connected ? 'var(--color-up)' : 'var(--color-warn)' }} />{a.connected ? 'Connected' : 'Not connected'}</span>
               </div>
               <div className="grid grid-cols-3 gap-3 text-sm">

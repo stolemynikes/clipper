@@ -6,8 +6,8 @@ const now = new Date('2026-11-24T12:00:00Z');
 
 test('pool with a high bar warns', () => {
   const r = campaignNotes({ platform: 'content_rewards', ratePer1k: 0, maxPerClip: 0, pool: 5000, endsAt: '2026-11-30',
-    rules: { minViews: 500000, platforms: ['tiktok', 'youtube'] } }, now);
-  assert.deepEqual(r.facts, ['$5,000 pool, split by views when it ends', 'Pays only after 500,000 views in total', 'Counts on: TikTok, YouTube', 'Ends Nov 30']);
+    rules: { totalViews: 500000, platforms: ['tiktok', 'youtube'] } }, now);
+  assert.deepEqual(r.facts, ['$5,000 pool, split by views when it ends', 'Get 500,000 views over all your clips to share the pool', 'Counts on: TikTok, YouTube', 'Ends Nov 30']);
   assert.deepEqual(r.warnings, ['High bar: likely little or no pay']);
 });
 
@@ -25,8 +25,8 @@ test('good campaign has no warnings; ended one says so', () => {
 
 test('profit score: bigger pool and lower bar rank first', () => {
   const base = { platform: 'content_rewards', ratePer1k: 0, maxPerClip: 0, endsAt: '2026-11-30' };
-  const clix = profitScore({ ...base, pool: 5000, rules: { minViews: 500000 } });
-  const silky = profitScore({ ...base, pool: 7500, rules: { minViews: 250000 } });
+  const clix = profitScore({ ...base, pool: 5000, rules: { totalViews: 500000 } });
+  const silky = profitScore({ ...base, pool: 7500, rules: { totalViews: 250000 } });
   assert.equal(clix, 9); // after the 10% fee
   assert.equal(silky, 27);
   assert.equal(profitScore({ ...base, ratePer1k: 1.5 }), 1.35);
@@ -39,6 +39,6 @@ test('views to pay: lowest bar first, min payout and views bar respected', () =>
   assert.equal(viewsToPay({ ...base, ratePer1k: 2 }), 5556); // $10 net = $11.11 gross
   assert.equal(viewsToPay({ ...base, ratePer1k: 2, rules: { minPayout: 20 } }), 10000);
   assert.equal(viewsToPay({ ...base, ratePer1k: 2, rules: { minViews: 50000 } }), 50000);
-  assert.equal(viewsToPay({ ...base, pool: 7500, rules: { minViews: 250000 } }), 250000);
+  assert.equal(viewsToPay({ ...base, pool: 7500, rules: { totalViews: 250000 } }), 250000);
   assert.equal(viewsToPay({ ...base, pool: 1000 }), 100000);
 });

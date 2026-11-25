@@ -25,10 +25,10 @@ const GAMBLING = /\b(casinos?|gambl\w*|betting|bets?|slots?|1win|vavada|stake\.c
 export const isGambling = (text: string) => GAMBLING.test(text);
 
 export type Extract = {
-  name: string; channel: string; tag: string; ratePer1k: number; maxPerClip: number; pool: number; minViews: number; minPayout: number;
+  name: string; channel: string; tag: string; ratePer1k: number; maxPerClip: number; pool: number; minViews: number; totalViews: number; minPayout: number;
   budgetLeft: number; endsAt: string; platforms: string[]; hashtags: string[]; accountNote: string; disclosure: boolean; gambling: boolean;
 };
-const NUMS = ['ratePer1k', 'maxPerClip', 'pool', 'minViews', 'minPayout', 'budgetLeft'] as const;
+const NUMS = ['ratePer1k', 'maxPerClip', 'pool', 'minViews', 'totalViews', 'minPayout', 'budgetLeft'] as const;
 
 /** Every number written in the text ("7,500", "$7.5K", "1M", "0.75"), so model output can be checked against it. */
 export function numbersIn(text: string): Set<number> {
@@ -69,7 +69,7 @@ export async function extract(text: string, url: string): Promise<{ fields: Extr
 - name: the streamer's name, lowercase, no spaces. channel: their Twitch login if written, else the name.
 - tag: the @handle clips must tag, if written.
 - ratePer1k: dollars per 1,000 views (0 for a pool campaign). maxPerClip: max dollars per clip. pool: total pool dollars if it is a pool.
-- minViews: views needed before it pays. minPayout: minimum payout in dollars. budgetLeft: dollars left in the budget if written.
+- minViews: views ONE clip needs before it counts or pays. totalViews: total views a clipper needs over all clips to get any pool share (e.g. "700,000 views to share the pool"). minPayout: minimum payout in dollars. budgetLeft: dollars left in the budget if written.
 - endsAt: end date as YYYY-MM-DD, only if written.
 - tiktok, youtube, instagram, x: true if views on that platform count (YouTube Shorts = youtube).
 - hashtags: the hashtags captions must use, separated by spaces, else "".
@@ -127,7 +127,7 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
   const url = str('url');
   if (url && !/^https:\/\/[^\s"'<>]+$/.test(url)) throw new Error('Campaign link must start with https://');
   const rules: Record<string, unknown> = { platforms, hashtags: list('hashtags').map((h) => (h.startsWith('#') ? h : `#${h}`)) };
-  for (const k of ['minViews', 'minPayout'] as const) if (num(k)) rules[k] = num(k);
+  for (const k of ['minViews', 'totalViews', 'minPayout'] as const) if (num(k)) rules[k] = num(k);
   if (str('accountNote')) rules.accountNote = str('accountNote').slice(0, 200);
   const tag = str('tag') || `@${name}`;
   const campaign: Campaign = { platform: 'content_rewards', ...(url ? { url } : {}), ratePer1k, maxPerClip: num('maxPerClip'), endsAt, rules,
@@ -213,7 +213,7 @@ progress::-webkit-progress-value{background:var(--ok);transition:width .4s}progr
 <div class="row"><label data-k="name">Streamer<input name="name" required></label><label data-k="channel">Twitch channel<input name="channel" required></label></div>
 <div class="row"><label data-k="ratePer1k">$ per 1K views<input name="ratePer1k" type="number" step="0.01" min="0"></label><label data-k="maxPerClip">Max $ per clip<input name="maxPerClip" type="number" step="0.01" min="0"></label></div>
 <div class="row"><label data-k="pool">Pool $<input name="pool" type="number" min="0"></label><label data-k="budgetLeft">Budget left $<input name="budgetLeft" type="number" min="0"></label></div>
-<div class="row"><label data-k="minViews">Views before it pays<input name="minViews" type="number" min="0"></label><label data-k="minPayout">Min payout $<input name="minPayout" type="number" step="0.01" min="0"></label></div>
+<div class="row"><label data-k="minViews">Views per clip to count<input name="minViews" type="number" min="0"></label><label data-k="totalViews">Total views to share pool<input name="totalViews" type="number" min="0"></label><label data-k="minPayout">Min payout $<input name="minPayout" type="number" step="0.01" min="0"></label></div>
 <label data-k="endsAt">Ends on<input name="endsAt" type="date" required></label>
 <fieldset class="checks" style="border:0;padding:0;margin:8px 0"><legend class="sub">Views count on</legend>${PLATFORMS.map((p) => `<label><input type="checkbox" name="platforms" value="${p}">${p}</label>`).join('')}</fieldset>
 <label>Hashtags<input name="hashtags" placeholder="#Name"></label><label>Tag<input name="tag" placeholder="@name"></label>
