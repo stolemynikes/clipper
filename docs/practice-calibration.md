@@ -48,3 +48,13 @@ current height (new 2, old 10 after 12 pairs). That is a valid result, not a bug
    clip. Proposal: judge animated styles on a short frame sequence (or skip them in A/B and measure by views).
 6. **More pairs for "clean":** 24 pairs cannot separate 58% from 50%. Run it another night (about 60 pairs
    needed for a clear answer at this effect size).
+
+## Audio judge (Nov 25): not viable
+
+gemma4:12b lists `audio` and hears content: on an 8 s study clip it quoted "you think I didn't see this?" and laughter, matching Whisper.
+It cannot judge sound quality:
+- Pair test (clean vs. the same clip with loud white noise, both orders, plus A/A): it answered "1" all three times.
+- Single rating 1-10: clean, light noise and loud noise all scored 8, noise "some".
+
+So the sound proposals (`sound-duck-0.3`, `sound-deadair-2`) stay untested by a judge. Real views after posting decide them.
+Audio could still help as a content signal (laughter, shouting) later, not as an A/B judge.
