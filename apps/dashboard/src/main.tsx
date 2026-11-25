@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'motion/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useOverview } from './api.ts';
+import { pref, setRate, useOverview, useRate } from './api.ts';
 import { Icon, Toasts } from './ui.tsx';
 import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
@@ -41,13 +41,14 @@ function Side({ route }: { route: string }) {
   );
   return (
     <aside className="hidden md:flex w-[248px] shrink-0 h-screen flex-col gap-1 py-6 px-4 border-r border-line">
-      <a href="#/" className="flex items-center gap-2 h-12 px-3 mb-4 no-underline"><span className="w-8 h-8 rounded-[10px] bg-p flex items-center justify-center"><Icon name="scissors" size={16} /></span><span className="text-lg font-semibold">Snip</span></a>
+      <a href="#/" className="flex items-center gap-2 h-12 px-3 mb-4 no-underline"><span className="w-8 h-8 rounded-[10px] bg-p flex items-center justify-center"><Icon name="scissors" size={16} /></span><span className="text-lg font-semibold truncate">{pref('appName', 'Snip') || 'Snip'}</span></a>
       {NAV.map((n) => <div key={n[0]}>{n[3] ? <div className="kicker pt-4 px-3 pb-1.5">{n[3]}</div> : null}{link(n)}</div>)}
       <div className="mt-auto flex flex-col gap-1">
         {BOTTOM.map((n) => link(n))}
         <div className="mt-3 p-3 rounded-[14px] bg-s border border-line flex items-center gap-2 text-sm">
           <span className="dot" style={{ background: data?.paused ? 'var(--color-warn)' : 'var(--color-up)' }} />
-          {data ? (data.paused ? 'Paused' : `Running · ${data.working} job${data.working === 1 ? '' : 's'}`) : 'Connecting…'}
+          <span className="flex-1">{data ? (data.paused ? 'Paused' : 'Running') : 'Connecting…'}</span>
+          {data && !data.paused ? <span className="kicker !text-m num">{data.working} job{data.working === 1 ? '' : 's'}</span> : null}
         </div>
       </div>
     </aside>
@@ -71,7 +72,9 @@ function Tabs({ route }: { route: string }) {
 }
 
 function App() {
-  const route = useRoute();
+  const route = useRoute(), rate = useRate().data?.eurPerUsd ?? null, [, bump] = useState(0);
+  setRate(rate); // money() reads it; the page re-renders below when the owner changes currency or fee
+  useEffect(() => { const f = () => bump((n) => n + 1); addEventListener('snip-pref', f); return () => removeEventListener('snip-pref', f); }, []);
   const camp = /^\/campaigns\/([a-z0-9_]+)$/.exec(route);
   const page = route === '/' ? <Home />
     : route.startsWith('/review') ? <Review focus={Number(route.split('/')[2]) || undefined} />

@@ -1,5 +1,6 @@
 import { animate, AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { pref, setPref } from './api.ts';
 
 // Lucide-style 24px stroke icons; decorative unless a label is given.
 const P: Record<string, string> = {
@@ -22,6 +23,8 @@ const P: Record<string, string> = {
   back: 'M15 18l-6-6 6-6',
   next: 'M9 18l6-6-6-6',
   pause: 'M6 4h4v16H6zM14 4h4v16h-4z',
+  up: 'M18 15l-6-6-6 6',
+  download: 'M12 3v12m0 0-4-4m4 4 4-4M4 19h16',
 };
 export const Icon = ({ name, size = 18, label, className = '' }: { name: keyof typeof P | string; size?: number; label?: string; className?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
@@ -120,3 +123,16 @@ export const Page = ({ back, kicker, title, right, children }: { back?: ReactNod
     {children}
   </motion.main>
 );
+
+/** USD/EUR switch from the mockup header. EUR only when the ECB rate loaded (api.ts isEur); otherwise it stays on USD. */
+export function Currency() {
+  const [cur, setCur] = useState(() => pref('currency', 'usd'));
+  useEffect(() => { const f = () => setCur(pref('currency', 'usd')); addEventListener('snip-pref', f); return () => removeEventListener('snip-pref', f); }, []);
+  return (
+    <div role="radiogroup" aria-label="Currency" className="flex p-1 rounded-[14px] bg-s border border-line">
+      {(['usd', 'eur'] as const).map((c) => (
+        <button key={c} role="radio" aria-checked={cur === c} onClick={() => setPref('currency', c)}
+          className={`h-9 px-4 rounded-[10px] text-sm font-medium cursor-pointer transition-colors ${cur === c ? 'bg-r text-t' : 'text-m hover:text-t'}`}>{c.toUpperCase()}</button>))}
+    </div>
+  );
+}

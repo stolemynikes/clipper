@@ -1,5 +1,6 @@
-import { ago, count, money, useAccounts, useEarnings, useHistory } from '../api.ts';
-import { Counter, Empty, Icon, Page, Skeleton, Stat, useMore } from '../ui.tsx';
+import { motion } from 'motion/react';
+import { count, money, useAccounts, useEarnings, useHistory, type Month } from '../api.ts';
+import { Counter, Currency, Empty, Icon, Page, Skeleton, Stat, useMore } from '../ui.tsx';
 
 const Loading = ({ title }: { title: string }) => <Page title={title}><div className="grid grid-cols-2 md:grid-cols-3 gap-4">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div></Page>;
 const Down = ({ title }: { title: string }) => <Page title={title}><div className="card"><Empty icon="alert" title="Can't load this" text="The worker on the PC seems to be off." /></div></Page>;
@@ -51,31 +52,72 @@ export function Earnings() {
   );
 }
 
+const monthName = (m: string, short = false) => new Date(`${m}-15`).toLocaleDateString('en-US', { month: short ? 'short' : 'long' });
+const pct = (now: number, before: number | undefined) => (before ? Math.round(((now - before) / before) * 100) : null);
+
+/** Months as CSV, built in the browser from the same rows the table shows. */
+function exportCsv(months: Month[]) {
+  const rows = [['month', 'campaigns', 'clips', 'views', 'earned_usd', 'paid_usd'], ...months.map((m) => [m.month, m.campaigns, m.clips, m.views, m.earned.toFixed(2), m.paid.toFixed(2)])];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.map((r) => r.join(',')).join('\n')],{ type: 'text/csv' }));
+  a.download = 'snip-history.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
 export function History() {
   const { data, isLoading, error } = useHistory();
-  const more = useMore(data?.posts ?? [], 30);
   if (error) return <Down title="History" />;
   if (isLoading || !data) return <Loading title="History" />;
+  const months = data.months, cur = new Date().toISOString().slice(0, 7), bars = months.slice(0, 6).reverse();
+  const top = Math.max(...bars.map((m) => m.earned), 0.01), total = months.reduce((t, m) => t + m.earned, 0);
+  const first = months.at(-1)?.month;
   return (
-    <Page kicker={`${count(data.posts.length)} clip${data.posts.length === 1 ? '' : 's'} posted`} title="History">
-      <section className="card !p-0 flex flex-col md:flex-1 md:min-h-0 overflow-hidden">
-        {data.posts.length ? <>
+    <Page kicker={first ? `Since ${monthName(first)} ${first.slice(0, 4)} · all platforms` : 'All platforms'} title="History"
+      right={<div className="flex gap-3">{months.length ? <button className="btn" onClick={() => exportCsv(months)}><Icon name="download" size={16} />Export</button> : null}<Currency /></div>}>
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_420px] gap-6 shrink-0">
+        <section className="card flex flex-col gap-4 min-h-[280px]">
+          <div className="flex items-center justify-between"><h2 className="text-[17px] font-semibold m-0">Earned per month</h2><span className="kicker">Total {money(total, true)}</span></div>
+          {bars.length ? <div className="flex-1 flex items-end justify-around gap-4 pt-6">
+            {bars.map((m) => (
+              <div key={m.month} className="flex flex-col items-center gap-2 h-full justify-end w-16">
+                <span className="text-sm font-semibold num">{money(m.earned)}</span>
+                <motion.div initial={{ height: 0 }} animate={{ height: `${Math.max(4, (m.earned / top) * 100)}%` }} transition={{ duration: 0.5, ease: 'easeOut' }}
+                  className={`w-full rounded-lg max-h-[150px] ${m.month === cur ? 'bg-up/40' : 'bg-up'}`} style={{ minHeight: 6 }} />
+                <span className="kicker whitespace-nowrap">{monthName(m.month, true)}{m.month === cur ? ' · so far' : ''}</span>
+              </div>))}
+          </div> : <Empty icon="money" title="Nothing earned yet" text="Each month shows up here once clips get views." />}
+        </section>
+        <section className="card !p-0 flex flex-col min-h-[280px] md:max-h-[320px]">
+          <div className="flex items-center justify-between h-14 px-5 shrink-0"><h2 className="text-[17px] font-semibold m-0">Ended campaigns</h2><span className="kicker num">{data.ended.length}</span></div>
+          <div className="scroll flex-1 min-h-0 px-5">
+            {data.ended.length ? data.ended.map((c) => (
+              <a key={c.name} href={`#/campaigns/${c.name}`} className="flex items-center gap-3 h-14 no-underline border-b border-line last:border-0">
+                <span className="w-8 h-8 rounded-full bg-r flex items-center justify-center text-xs font-semibold uppercase shrink-0">{c.name[0]}</span>
+                <span className="flex-1 min-w-0 flex flex-col"><span className="font-semibold truncate text-sm">{c.name}</span>
+                  <span className="text-xs text-f">Ended {new Date(c.endsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {c.paid > 0 ? 'Paid' : c.posts ? `${c.posts} clip${c.posts === 1 ? '' : 's'}, not paid yet` : 'No clips posted'}</span></span>
+                <span className={`num font-semibold ${c.paid > 0 ? 'text-up' : 'text-m'}`}>{money(c.paid > 0 ? c.paid : c.earned, true)}</span>
+              </a>)) : <Empty icon="flag" title="No ended campaigns" text="Campaigns move here when they end." />}
+          </div>
+        </section>
+      </div>
+      <section className={`card !p-0 flex flex-col overflow-hidden ${months.length ? 'md:flex-1 md:min-h-0' : ''}`}>
+        {months.length ? <>
           <div className="scroll flex-1 min-h-0">
             <table className="tbl">
-              <thead><tr><th>Clip</th><th className="hidden md:table-cell">Campaign</th><th className="hidden md:table-cell">Posted on</th><th className="r">Views</th><th className="r">Earned</th></tr></thead>
-              <tbody>{more.shown.map((p) => (
-                <tr key={p.id}>
-                  <td><div className="flex flex-col gap-1 min-w-0"><span className="font-medium truncate">{p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="no-underline">{p.title ?? 'Untitled'}</a> : p.title ?? 'Untitled'}</span><span className="text-xs text-f">{p.postedAt ? ago(p.postedAt) : 'Not posted yet'}{p.submitted ? ' · sent to the campaign' : ''}</span></div></td>
-                  <td className="hidden md:table-cell"><a href={`#/campaigns/${p.streamer}`} className="no-underline text-m">{p.streamer}</a></td>
-                  <td className="hidden md:table-cell text-m">{p.platform}</td>
-                  <td className="r num">{count(p.views)}</td>
-                  <td className={`r num font-semibold ${p.earned > 0 ? 'text-up' : 'text-m'}`}>{money(p.earned)}</td>
-                </tr>))}
+              <thead><tr><th>Month</th><th className="r">Campaigns</th><th className="r">Clips</th><th className="r hidden md:table-cell">Views</th><th className="r">Earned</th><th className="r hidden md:table-cell">Paid out</th><th className="r hidden md:table-cell">vs last month</th></tr></thead>
+              <tbody>{months.map((m, i) => { const d = pct(m.earned, months[i + 1]?.earned); return (
+                <tr key={m.month}>
+                  <td><span className="font-semibold">{monthName(m.month)}</span>{m.month === cur ? <span className="pill ml-3 !h-7"><span className="dot" style={{ background: 'var(--color-a)' }} />In progress</span> : null}</td>
+                  <td className="r num">{count(m.campaigns)}</td>
+                  <td className="r num">{count(m.clips)}</td>
+                  <td className="r num hidden md:table-cell">{count(m.views)}</td>
+                  <td className={`r num font-semibold ${m.earned > 0 ? 'text-up' : 'text-m'}`}>{money(m.earned, true)}</td>
+                  <td className="r num hidden md:table-cell">{m.paid > 0 ? money(m.paid, true) : <span className="text-f">—</span>}</td>
+                  <td className={`r num hidden md:table-cell font-semibold ${d == null ? 'text-f' : d >= 0 ? 'text-up' : 'text-down'}`}>{d == null ? '—' : `${d >= 0 ? '+' : ''}${d}%`}</td>
+                </tr>); })}
               </tbody>
             </table>
-            {more.sentinel}
-          </div>{more.footer}</>
-          : <Empty icon="clock" title="Nothing posted yet" text="Every clip that goes out shows up here with its views." />}
+          </div><div className="more"><span>Showing <b className="text-t">{months.length}</b> of <b className="text-t">{months.length}</b></span><span>All shown</span></div></>
+          : <Empty icon="clock" title="Nothing posted yet" text="Every month with posted clips shows up here." />}
       </section>
     </Page>
   );
