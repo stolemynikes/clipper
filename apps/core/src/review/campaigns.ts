@@ -134,7 +134,7 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
   if (notes.length) rules.notes = notes; // per-streamer content rules the judge checks
   const tag = str('tag') || `@${name}`;
   const campaign: Campaign = { platform: 'content_rewards', ...(url ? { url } : {}), ratePer1k, maxPerClip: num('maxPerClip'), endsAt, rules,
-    disclosure: b.disclosure === true || b.disclosure === 'true' }; // off unless the brief asks for #ad
+    ...(b.disclosure === true || b.disclosure === 'true' ? { disclosure: true } : {}) }; // unset: needsDisclosure decides (CR FTC Terms)
   if (pool) campaign.pool = pool;
   if (num('budgetLeft')) campaign.budgetLeft = num('budgetLeft');
   return { name, platform: 'twitch', channel, tag: tag.startsWith('@') ? tag : `@${tag}`, stage: 'study', enabled: false, campaign } as StreamerConfig;

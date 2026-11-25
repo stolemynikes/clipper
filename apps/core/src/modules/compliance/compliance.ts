@@ -1,6 +1,11 @@
 // Checks a clip against the campaign brief and the hard rules (CLAUDE.md). A clip with a block never reaches review.
 // Reasons are plain words: they show up in the review page and logs for non-tech users.
 
+/** #ad needed? The campaign's own setting wins; Content Rewards' FTC Terms (3.2, contentrewards.com/ftc-compliance)
+ *  make every CR campaign post a paid endorsement, so CR campaigns need it even when the brief is silent. */
+export const needsDisclosure = (c: { platform?: string; disclosure?: boolean } | null | undefined, fallback: boolean) =>
+  c?.disclosure ?? (c?.platform === 'content_rewards' || fallback);
+
 export interface Music { musicRatio: number; vocalRatio: number }
 
 export interface ComplianceInput {

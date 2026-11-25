@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkClip, type ComplianceInput } from './compliance.ts';
+import { checkClip, needsDisclosure, type ComplianceInput } from './compliance.ts';
 
 const base: ComplianceInput = {
   campaign: { endsAt: '2026-11-30', rules: { sourceFrom: '2026-01-01' } },
@@ -62,4 +62,11 @@ test('audience rule shows as a warning, not a block', () => {
   const r = check({ campaign: { endsAt: '2026-11-30', rules: { audience: '40% of views from US/UK/CA/AU' } } });
   assert.equal(r.ok, true);
   assert.match(r.warnings[0], /40% of views/);
+});
+
+test('needsDisclosure: CR FTC Terms need #ad, others follow the campaign or the default', () => {
+  assert.equal(needsDisclosure({ platform: 'content_rewards' }, false), true);
+  assert.equal(needsDisclosure({ platform: 'whop' }, false), false);
+  assert.equal(needsDisclosure({ platform: 'whop', disclosure: true }, false), true);
+  assert.equal(needsDisclosure(undefined, false), false);
 });

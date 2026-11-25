@@ -13,7 +13,7 @@ import { sourceContext } from '../vod-clipper/analyze.ts';
 import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
 import { trimWindow } from './trim.ts';
 import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts';
-import { checkClip, type Music } from '../compliance/compliance.ts';
+import { checkClip, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
 import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
@@ -92,13 +92,13 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   }
 
   const durationSec = cut - lead;
-  const disclosure = (cfg.campaign?.disclosure ?? settings.clip.disclosure) ? settings.clip.disclosureText : null;
+  const disclosure = needsDisclosure(cfg.campaign, settings.clip.disclosure) ? settings.clip.disclosureText : null;
   const transcript = words.map((w) => w.w).join(' ');
   const music = await detectMusic(src);
   const used = accountStats(db).filter((a) => a.streamer === cfg.name).reduce((n, a) => n + a.earned, 0);
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
-    disclosureRequired: cfg.campaign?.disclosure ?? settings.clip.disclosure, disclosure, music,
+    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music,
     transcript, duplicateOf: source.streamerId && !old ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly

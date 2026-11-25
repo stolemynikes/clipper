@@ -13,6 +13,7 @@ import { tweaks } from '../practice/proposals.ts';
 import { discordPosted } from '../../discord/bot.ts';
 import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
+import { needsDisclosure } from '../compliance/compliance.ts';
 
 const log = logger('publisher');
 const TIKTOK_MAX_ONE_CHUNK = 64 * 1024 * 1024;
@@ -154,7 +155,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const { cfg } = sourceContext(db, moment.sourceId);
   if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
   if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
-  const paid = cfg.campaign?.disclosure ?? settings.clip.disclosure;
+  const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure);
   const text = postText(account.platform as AccountPlatform, {
     title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags, hashtags: (Array.isArray(cfg.campaign?.rules?.hashtags) ? cfg.campaign.rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
   const pp = viaPostpeer(account.platform);

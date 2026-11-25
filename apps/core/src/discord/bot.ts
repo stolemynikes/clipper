@@ -18,6 +18,7 @@ import type { Db } from '../db/client.ts';
 import { paths } from '../env.ts';
 import { logger } from '../log.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
+import { needsDisclosure } from '../modules/compliance/compliance.ts';
 import { accountWarnings, allStreamers, update } from '../review/campaigns.ts';
 import { decide, isPaused, reviewUrl, setPaused, status } from '../review/review.ts';
 import { reasons } from '../review/server.ts';
@@ -224,7 +225,7 @@ export async function discordReview(o: { clipId: number; streamer: string; file:
   if (!forum) return false;
   const cfg = allStreamers().find((x) => x.name === o.streamer), clip = loadSettings().clip;
   const title = o.title ?? `${o.streamer} moment`;
-  const paid = (cfg?.campaign?.disclosure ?? clip.disclosure) && clip.disclosureInText;
+  const paid = needsDisclosure(cfg?.campaign, clip.disclosure) && clip.disclosureInText;
   const caption = postText('tiktok', { title, streamer: o.streamer, tag: cfg?.tag ?? '', disclosure: paid ? clip.disclosureText : null }).title;
   const video = await preview(o.file, o.seconds).catch((e) => (log.warn('preview failed', { error: String(e) }), null));
   const name = `clip-${o.clipId}.mp4`;
