@@ -21,7 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
-import { activeProposal, type Change, tweaks } from '../practice/proposals.ts';
+import { activeProposals, type Change, tweaks } from '../practice/proposals.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
@@ -162,11 +162,10 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   };
   await encode('clip.mp4', live);
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
-  const prop = practice ? activeProposal() : undefined;
-  if (prop) {
-    await encode('clip-b.mp4', { ...live, ...prop.change });
-    writeFileSync(join(dir, 'proposal.txt'), prop.id);
-  }
+  // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
+  const props = practice ? activeProposals() : [];
+  for (const p of props) await encode(`clip-${p.id}.mp4`, { ...live, ...p.change });
+  if (props.length) writeFileSync(join(dir, 'proposals.txt'), props.map((p) => p.id).join('\n'));
   for (const f of [src, join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },

@@ -24,7 +24,8 @@ export function proposals(): Proposal[] {
   try { return JSON.parse(readFileSync(file(), 'utf8')); } catch { return []; }
 }
 export const saveProposals = (ps: Proposal[]) => writeFileSync(file(), JSON.stringify(ps, null, 1));
-export const activeProposal = () => proposals().find((p) => p.status === 'testing');
+/** Proposals tested on the next practice clip: all of them at once (one render of the moment, one encode per variant). */
+export const activeProposals = (max = 6) => proposals().filter((p) => p.status === 'testing' && !p.untested).sort((a, b) => a.created - b.created).slice(0, max);
 
 /** Approved changes in approval order; later ones win. The live render uses only these. */
 export const tweaks = (ps = proposals()): Change =>

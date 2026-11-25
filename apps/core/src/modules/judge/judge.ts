@@ -14,7 +14,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { learnedWeights } from '../learner/weights.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
-import { proposalDir, proposals, recordPair } from '../practice/proposals.ts';
+import { type Proposal, proposalDir, proposals, recordPair } from '../practice/proposals.ts';
 import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules, type Rule } from './layout.ts';
 
 const log = logger('judge');
@@ -100,7 +100,7 @@ If you see no real difference, answer 0. Do not guess.
 Return JSON: "pick" 1, 2 or 0, "why" one short sentence.`;
 const PICK = { type: 'object', properties: { pick: { type: 'integer' }, why: { type: 'string' } }, required: ['pick', 'why'] };
 
-/** Practice A/B: pairwise judge on clip.mp4 (current) vs clip-b.mp4 (proposal), random order; ~1 in 5 is an A/A control. */
+/** Practice A/B: pairwise judge on clip.mp4 (current) vs clip-<id>.mp4 per proposal, random order; ~1 in 5 is an A/A control. */
 /** Mid-points of 4 caption events spread over the clip (from the burned-in .ass). */
 export function captionTimes(ass: string): number[] {
   if (!existsSync(ass)) return [];
@@ -110,19 +110,28 @@ export function captionTimes(ass: string): number[] {
 }
 
 async function judgePair(model: string, gpu: boolean, clipId: number, dir: string, dur: number) {
-  const idFile = join(dir, 'proposal.txt'), b = join(dir, 'clip-b.mp4'), a = join(dir, 'clip.mp4');
-  if (!existsSync(idFile) || !existsSync(b)) return;
-  const id = readFileSync(idFile, 'utf8').trim(), p = proposals().find((x) => x.id === id);
-  if (!p || p.status !== 'testing') return;
+  const idFile = join(dir, 'proposals.txt'), a = join(dir, 'clip.mp4');
+  if (!existsSync(idFile)) return;
   // Frames where a caption is on screen: a frame without one looks the same in both edits and invites a guess.
   const at = captionTimes(join(dir, 'clip.ass'));
   if (at.length < 2) return 'no captions';
-  const [fa, fb] = [await frames(a, dur, 540, at), await frames(b, dur, 540, at)];
+  const fa = await frames(a, dur, 540, at), out: string[] = [];
+  for (const id of readFileSync(idFile, 'utf8').split('\n').map((x) => x.trim()).filter(Boolean)) {
+    const b = join(dir, `clip-${id}.mp4`), p = proposals().find((x) => x.id === id);
+    if (!p || p.status !== 'testing' || !existsSync(b)) continue;
+    try { out.push(await judgeOne(model, gpu, clipId, p, fa, await frames(b, dur, 540, at))); }
+    catch (e) { out.push(`${id} failed`); log.warn(`clip ${clipId}: pair ${id} failed: ${(e as Error).message}`); }
+  }
+  return out.join(', ');
+}
+
+async function judgeOne(model: string, gpu: boolean, clipId: number, p: Proposal, fa: string[], fb: string[]) {
+  const id = p.id;
   if (Math.random() < 0.2) { // A/A: same video twice; the right answer is 0, a 1/2 lean shows position bias
     const j = await askJson(model, gpu, PAIR_PROMPT, PICK, [...fa, ...fa]);
     const pick = ([0, 1, 2].includes(Number(j.pick)) ? Number(j.pick) : 0) as 0 | 1 | 2;
     recordPair(id, { aa: pick });
-    return `A/A ${pick}`;
+    return `${id} A/A ${pick}`;
   }
   const newFirst = Math.random() < 0.5;
   const j = await askJson(model, gpu, PAIR_PROMPT, PICK, newFirst ? [...fb, ...fa] : [...fa, ...fb]);
