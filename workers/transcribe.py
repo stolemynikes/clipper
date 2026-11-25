@@ -61,6 +61,8 @@ def join_words(raw):
 def handle(args: dict) -> dict:
     audio = load_audio(args["input"])
     name, lang = args.get("model", "large-v3"), args.get("language")
+    if not audio.size:  # no decoded samples: VAD crashes on empty input; peakDb -120 makes the editor skip it as silent
+        return {"language": lang, "words": [], "peakDb": -120.0}
     try:
         result = transcribe(audio, name, lang, "cuda", "float16")
     except Exception as e:  # no usable CUDA libs (cublas/cudnn): slower, but still works
