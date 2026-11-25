@@ -68,6 +68,7 @@ export function pickVod(vods: Vod[], known: Set<string>, now: number): Vod | und
 }
 
 /** One tick (every minute): disk guard, morning summary, and queue the next VOD when practice is idle. */
+let lastNoVod = 0; // tick runs every minute: say it at most once an hour
 export async function practiceTick(db: Db, now = new Date()) {
   morning(db, now);
   { const style = loadSettings().clip.captionStyle ?? 'bold'; seedProposals({ per: STYLES[style].per, style, weeklyPer: weeklyInsights().wordsPerLine }); } // idempotent by id: new seeds (e.g. length) join an existing proposals.json
@@ -87,7 +88,7 @@ export async function practiceTick(db: Db, now = new Date()) {
       if (v && (!best || (v.view_count ?? 0) > (best.vod.view_count ?? 0))) best = { vod: v, streamerId: ensureStreamer(db, cfg, userId).id };
     } catch (e) { log.warn(`practice: ${cfg.name} VOD list failed: ${String(e).slice(0, 200)}`); }
   }
-  if (!best) return;
+  if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-14 days old, not done yet)'); } return; }
   const row = db.insert(sources).values({ url: best.vod.url, streamerId: best.streamerId, durationSec: parseDuration(best.vod.duration) }).onConflictDoNothing().returning().get();
   if (!row) return;
   enqueue(db, 'practice.analyze', { sourceId: row.id, vodId: best.vod.id, practice: true }, { maxAttempts: 2 });
