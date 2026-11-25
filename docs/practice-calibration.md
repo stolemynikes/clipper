@@ -28,3 +28,18 @@ Claude scores a sample of practice clips blind and compares with gemma4:12b (doc
 
 The render is correct: captions sit 150 px lower, fully on screen, not behind the tag. The judge prefers the
 current height (new 2, old 10 after 12 pairs). That is a valid result, not a bug.
+
+## Night results (08:06, all four proposals at 24 pairs)
+
+| Proposal | New wins | Likely range | A/A check | Read |
+|---|---|---|---|---|
+| 2 words per line | 11 of 24 (46%) | 28-65% | ok | unclear, keep 3 |
+| Captions 150 px lower | 8 of 24 (33%) | 18-53% | ok | leans worse, keep current |
+| Style "pop" | 12 of 24 (50%) | 31-69% | **biased** (8 of 10 first) | not trusted |
+| Style "clean" | 14 of 24 (58%) | 38-75% | ok | leans better, not proven |
+
+5. **Style "pop" cannot be judged from still frames:** in the frames pop looks almost the same as bold; the
+   difference is mostly the word animation. The judge then has nothing to compare and falls back on the first
+   clip. Proposal: judge animated styles on a short frame sequence (or skip them in A/B and measure by views).
+6. **More pairs for "clean":** 24 pairs cannot separate 58% from 50%. Run it another night (about 60 pairs
+   needed for a clear answer at this effect size).
