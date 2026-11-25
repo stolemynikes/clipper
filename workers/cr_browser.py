@@ -115,6 +115,14 @@ def go(page, target: str) -> None:
                 return settle(page)
             page.mouse.wheel(0, 4000)
             page.wait_for_timeout(1200)
+        if section == "Campaigns":  # joined cards are "Preview <name>" buttons, not links: open each until the id matches
+            names = [b.get_attribute("aria-label") for b in page.locator('button[aria-label^="Preview "]').all()]
+            for name in names:
+                nav(page, "Campaigns")
+                page.locator(f'button[aria-label="{name}"]').first.click(timeout=15_000)
+                settle(page)
+                if cid in page.url:
+                    return
     raise SystemExit(json.dumps({"error": f"campaign card not found: {cid}"}))
 
 
@@ -184,6 +192,36 @@ def discover() -> dict:
     return with_page(run)
 
 
+DOC_HOSTS = ("notion.so", "notion.site", "notion.com", "docs.google.com", "reachclipping.com")
+
+
+def read_docs(page) -> str:
+    """Text of the brief's rules docs (Notion, Google Docs), opened by clicking their links; they render in JS, so fetch() sees nothing."""
+    hrefs = page.eval_on_selector_all("a[href]", "as => as.map(a => a.href)")
+    out = []
+    for href in list(dict.fromkeys(h for h in hrefs if any(d in h for d in DOC_HOSTS)))[:3]:
+        try:
+            with page.context.expect_page(timeout=15_000) as info:
+                page.locator(f'a[href="{href}"]').first.click(timeout=15_000)
+            doc = info.value
+            doc.wait_for_load_state("domcontentloaded")
+            doc.mouse.move(640, 400)  # Notion scrolls an inner panel: the wheel only reaches it with the pointer over the page
+            text, same = "", 0
+            for _ in range(16):  # JS docs (Notion) fill in while scrolling: stop once the text stops growing twice in a row
+                doc.mouse.wheel(0, 3000)
+                doc.wait_for_timeout(2000)
+                now = doc.inner_text("body")
+                same = same + 1 if len(now) > 200 and len(now) == len(text) else 0
+                if same >= 2:
+                    break
+                text = now
+            out.append(now[:12000])
+            doc.close()  # only the tab this click opened
+        except Exception as e:
+            out.append(f"(could not read {href.split('?')[0]}: {type(e).__name__})")
+    return "\n".join(out)
+
+
 def join(target: str) -> dict:
     """Joins a campaign (owner allowed this) and returns the page text, which shows the brief only after joining."""
     def run(page):
@@ -192,8 +230,12 @@ def join(target: str) -> dict:
             page.get_by_role("button", name="Join Campaign").first.click(timeout=15_000)
             page.wait_for_timeout(4000)
             settle(page)
+        more = page.get_by_role("button", name="Show more")
+        if more.count():
+            more.first.click(timeout=15_000)
+            page.wait_for_timeout(800)
         text = page.inner_text("body")
-        return {"joined": "Joined" in text, "text": text[:20000]}
+        return {"joined": "Joined" in text, "text": text[:20000], "docs": read_docs(page)}
     return with_page(run)
 
 

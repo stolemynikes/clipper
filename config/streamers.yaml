@@ -68,13 +68,21 @@ streamers:
         totalViews: 750000 # total views to share the pool
         hashtags: [ "#KaiCenat" ]
         minClipViews: 1000 # a clip counts only from 1K views
-        noNegative: true # assumed, not in the brief
-        sourceFrom: 2026-11-19 # GTA 6 marathon only; start date assumed, Kai must be the main focus
+        noNegative: true
+        sourceFrom: 2026-11-18 # brief: GTA marathon "beginning November 18th, 2026"
         platforms: [ tiktok, instagram, youtube, x ]
+        notes: # from the brief + rule sheet, read 2026-11-25
+          - Kai Cenat must be the main focus and in the actual edit, not only the intro
+          - Only footage from Kai Cenat's GTA 6 marathon
+          - Caption or text overlay must mention Kai Cenat by name
+          - No negative portrayal of Kai Cenat, no hate farming
+          - No logos of any kind
+          - No Japanese captions or descriptions; the thumbnail must match the content
+          - Never re-upload Shorts from Kai Cenat's own YouTube channels; cut it from stream footage
 
   # Content Rewards "$12,500 LACY GTA VI Marathon Pool Campaign" (Reach), joined 2026-11-24.
   # Brief: caption must include #Lacy. Creator requirement: "LACY/STREAMER CLIPPERS".
-  # Reach rules page (link on the campaign page) not read yet; noLogos/noNegative copied from Reach's Clix/Silky briefs.
+  # Reach rules page read 2026-11-25 (notes below). Submissions closed on CR that day.
   # Campaign page: https://contentrewards.com/c/campaigns/a5c63fad-cd53-4b81-9305-4a2d1696872a
   - name: lacy
     platform: twitch
@@ -94,8 +102,16 @@ streamers:
         minClipViews: 500
         noLogos: true
         noNegative: true
-        sourceFrom: 2026-11-19 # GTA VI marathon only; start date assumed
+        sourceFrom: 2026-11-18 # brief: GTA marathon "beginning November 18th, 2026"
         platforms: [ tiktok, instagram, youtube, x ]
+        notes:
+          - LACY must be the main focus and in the actual edit, not only the intro
+          - Only footage from LACY's GTA marathon
+          - Caption or text overlay must mention LACY by name
+          - No negative portrayal of LACY, no hate farming
+          - No logos of any kind
+          - No Japanese captions or descriptions; the thumbnail must match the content
+          - No AI-generated content
   - name: jasontheween
     platform: twitch
     channel: jasontheween
@@ -123,7 +139,8 @@ streamers:
         notes:
           - JasonTheWeen must be the main focus of the clip
           - No logos, no negative or hate-farm clips, no Japanese captions
-          - Submit within 30 minutes of posting
+          - The thumbnail must match the content
+          - No AI-generated content
         warn:
           - "Rules page conflicts on AI content: Requirements allow it, Final rules ban it. Avoid AI edits."
       disclosure: true
@@ -131,7 +148,7 @@ streamers:
   - name: laurenhamdenn
     platform: twitch
     channel: laurenhamdenn
-    tag: "@laurenhamdenn"
+    tag: "@LaurenHamden" # brief: captions use #LaurenHamden while tagging @LaurenHamden
     stage: study
     enabled: true
     campaign:
@@ -143,8 +160,16 @@ streamers:
       rules:
         platforms:
           - instagram
-        hashtags: []
+        hashtags:
+          - "#LaurenHamden"
         accountNote: Content to post on a dedicated account.
+        notes:
+          - Only footage from Lauren Hamden's GTA 6 livestream playthrough
+          - Funny moments, memorable quotes or reactions from the GTA 6 playthrough
+          - No negative portrayal of Lauren Hamden
+          - No logos of any kind
+          - No AI-generated content
+          - English captions and on-screen text only
         endsAtAssumed: true
       disclosure: true
       budgetLeft: 4185.12
@@ -167,6 +192,16 @@ streamers:
           - youtube
         hashtags: []
         accountNote: account may only post GTA 6 content
+        notes:
+          - Only recent GTA 6 footage from Boeshi's Twitch VODs
+          - Funny reactions, police chases, unexpected encounters or chaotic gameplay
+          - Jokes about his voice and his mewing are welcome
+          - Title and captions must match what happens; no misleading context or clickbait
+          - Clean, readable subtitles
+          - Strong hook and pacing, no low-effort edit
+          - Must not be a 1:1 copy of another clipper's clip
+        warn:
+          - "Brief requires its TWITCH OVERLAY asset on screen for the whole clip; Snip does not add it yet."
         endsAtAssumed: true
       disclosure: true
       budgetLeft: 1617.88

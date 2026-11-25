@@ -80,9 +80,9 @@ export async function scoutOnce(db: Db) {
   log.info(`${campaigns.length} campaigns, ${picks.length} new`);
   for (const c of picks) {
     try {
-      const page = await cr('join', PAGE + c.id) as { joined: boolean; text: string };
+      const page = await cr('join', PAGE + c.id) as { joined: boolean; text: string; docs?: string };
       if (!page.joined) { log.warn(`could not join ${c.name}`); continue; }
-      const text = [c.name, c.description, page.text, await rulesDocs(c)].join('\n');
+      const text = [c.name, c.description, page.text, page.docs ?? '', await rulesDocs(c)].join('\n');
       const { fields } = await extract(text, PAGE + c.id);
       if (fields.gambling || isGambling(text)) { log.warn(`${c.name} skipped: gambling`); continue; }
       const tag = fields.tag && text.toLowerCase().includes(fields.tag.replace(/^@/, '').toLowerCase()) ? fields.tag : ''; // only a tag written in the brief
