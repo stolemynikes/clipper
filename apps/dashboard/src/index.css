@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0A0A0B;
+  --color-s: #131315;
+  --color-r: #1C1C1F;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-t: #F4F4F5;
+  --color-m: #A1A1AA;
+  --color-f: #71717A;
+  --color-p: #2563EB;
+  --color-a: #60A5FA;
+  --color-up: #4ADE80;
+  --color-down: #F87171;
+  --color-warn: #FBBF24;
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--color-bg); color: var(--color-t); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--color-a); outline-offset: 2px; }
+
+@layer components {
+  .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-f); }
+  .num { font-variant-numeric: tabular-nums; }
+  .card { background: var(--color-s); border: 1px solid var(--color-line); border-radius: 20px; padding: 20px; min-height: 0; }
+  .btn { height: 48px; padding: 0 20px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 600; border: 1px solid var(--color-line); background: var(--color-r); color: var(--color-t); cursor: pointer; text-decoration: none; transition: background .15s, transform .1s, opacity .15s; white-space: nowrap; }
+  .btn:hover { background: #26262a; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn-1 { background: var(--color-p); border-color: transparent; color: #fff; }
+  .btn-1:hover { background: #1d4ed8; }
+  .btn.big { height: 56px; font-size: 16px; }
+  .nav { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 10px; color: var(--color-m); font-size: 14px; font-weight: 500; text-decoration: none; transition: background .15s, color .15s; }
+  .nav:hover { background: var(--color-r); color: var(--color-t); }
+  .nav[aria-current="page"] { background: var(--color-r); color: var(--color-t); }
+  .badge { margin-left: auto; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--color-p); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+  .pill { height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--color-line); display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--color-m); white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 3px; display: inline-block; }
+  .scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tbl th { text-align: left; font-weight: 500; color: var(--color-f); font-size: 12px; padding: 12px 16px; border-bottom: 1px solid var(--color-line); position: sticky; top: 0; background: var(--color-s); z-index: 1; }
+  .tbl td { padding: 14px 16px; border-bottom: 1px solid var(--color-line); }
+  .tbl .r { text-align: right; }
+  .tbl tbody tr { transition: background .15s; }
+  .tbl tbody tr:hover { background: rgba(255,255,255,.02); }
+  .more { height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; border-top: 1px solid var(--color-line); font-size: 13px; color: var(--color-f); flex-shrink: 0; }
+  .spin { width: 12px; height: 12px; border-radius: 6px; border: 2px solid rgba(255,255,255,.16); border-top-color: var(--color-a); animation: sp 1s linear infinite; box-sizing: border-box; }
+  .seg { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--color-m); background: transparent; border: 0; cursor: pointer; }
+  .seg[aria-pressed="true"] { background: var(--color-r); color: var(--color-t); }
+  .kbd { font-family: var(--font-mono); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.16); color: inherit; opacity: .8; }
+  .skel { background: linear-gradient(90deg, var(--color-r), #232327, var(--color-r)); background-size: 200% 100%; animation: sh 1.2s ease-in-out infinite; border-radius: 12px; }
+}
+
+@keyframes sp { to { transform: rotate(360deg); } }
+@keyframes sh { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

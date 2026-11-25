@@ -1,6 +1,8 @@
 // Review page over Tailscale: plain node:http, no framework needed for a handful of routes.
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Db } from '../db/client.ts';
 import { logger } from '../log.ts';
 import { setupRoute } from './setup.ts';
@@ -96,9 +98,25 @@ async function act(id, a, btn) {
 </script></body></html>`;
 }
 
+const DIST = fileURLToPath(new URL('../../../dashboard/dist/', import.meta.url));
+const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+/** The React dashboard (npm run dashboard:build). Hashed assets cache forever, index.html never. */
+function sendApp(res: ServerResponse, pathname: string) {
+  const rel = pathname.replace(/^\/app\/?/, '') || 'index.html';
+  const file = join(DIST, rel);
+  if (!file.startsWith(DIST) || !existsSync(file) || !statSync(file).isFile()) return res.writeHead(404).end();
+  const asset = rel.startsWith('assets/');
+  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': asset ? 'public, max-age=31536000, immutable' : 'no-store' });
+  createReadStream(file).pipe(res);
+}
+
 function route(db: Db, req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', 'http://x');
-  if (req.method === 'GET' && url.pathname === '/') return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(page(db));
+  if (req.method === 'GET' && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) return sendApp(res, url.pathname);
+  // The dashboard replaces the old page once built; /classic keeps the old one reachable.
+  if (req.method === 'GET' && url.pathname === '/' && existsSync(join(DIST, 'index.html'))) return res.writeHead(302, { location: '/app/' }).end();
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/classic')) return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(page(db));
   const video = /^\/clip\/(\d+)\.mp4$/.exec(url.pathname);
   if (req.method === 'GET' && video) {
     const clip = getClip(db, Number(video[1]));

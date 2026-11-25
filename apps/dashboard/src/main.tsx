@@ -1,0 +1,95 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
+import { StrictMode, useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { useOverview } from './api.ts';
+import { Icon, Toasts } from './ui.tsx';
+import { Home } from './pages/Home.tsx';
+import { Review } from './pages/Review.tsx';
+import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
+import { Later } from './pages/Later.tsx';
+import './index.css';
+
+// Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/earnings, #/history, #/accounts, #/settings
+// Old Bark/Discord links end in #clip-<id>; send those to that clip in Review.
+const read = () => { const h = location.hash.slice(1) || '/'; return /^clip-\d+$/.test(h) ? `/review/${h.slice(5)}` : h; };
+const useRoute = () => {
+  const [h, setH] = useState(read);
+  useEffect(() => { const f = () => setH(read()); addEventListener('hashchange', f); return () => removeEventListener('hashchange', f); }, []);
+  return h;
+};
+
+const NAV: [string, string, string, string?][] = [
+  ['/', 'Home', 'home'],
+  ['/review', 'Review', 'play', 'Clips'],
+  ['/campaigns', 'Campaigns', 'flag', 'Money'],
+  ['/earnings', 'Earnings', 'money'],
+  ['/history', 'History', 'clock'],
+];
+const BOTTOM: [string, string, string][] = [['/accounts', 'Accounts', 'user'], ['/settings', 'Settings', 'gear']];
+
+function Side({ route }: { route: string }) {
+  const { data } = useOverview();
+  const cur = (p: string) => (p === '/' ? route === '/' : route.startsWith(p)) ? 'page' : undefined;
+  const link = ([p, label, icon]: [string, string, string, string?]) => (
+    <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}><Icon name={icon} />{label}
+      {p === '/review' && data?.toReview ? <span className="badge num">{data.toReview}</span> : null}</a>
+  );
+  return (
+    <aside className="hidden md:flex w-[248px] shrink-0 h-screen flex-col gap-1 p-4 border-r border-line">
+      <a href="#/" className="flex items-center gap-2 h-12 px-3 mb-4 no-underline"><span className="w-8 h-8 rounded-xl bg-p flex items-center justify-center"><Icon name="scissors" size={16} /></span><span className="text-lg font-semibold">Snip</span></a>
+      {NAV.map((n) => <div key={n[0]}>{n[3] ? <div className="kicker px-3 pt-4 pb-2">{n[3]}</div> : null}{link(n)}</div>)}
+      <div className="mt-auto flex flex-col gap-1">
+        {BOTTOM.map((n) => link(n))}
+        <div className="mt-3 p-3 rounded-xl bg-s border border-line flex items-center gap-2 text-sm">
+          <span className="dot" style={{ background: data?.paused ? 'var(--color-warn)' : 'var(--color-up)' }} />
+          {data ? (data.paused ? 'Paused' : `Running · ${data.working} job${data.working === 1 ? '' : 's'}`) : 'Connecting…'}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function Tabs({ route }: { route: string }) {
+  const { data } = useOverview();
+  const tabs: [string, string, string][] = [['/', 'Home', 'home'], ['/review', 'Review', 'play'], ['/campaigns', 'Campaigns', 'flag'], ['/earnings', 'Earnings', 'money'], ['/settings', 'Settings', 'gear']];
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 h-20 pb-4 bg-bg/95 backdrop-blur border-t border-line grid grid-cols-5" aria-label="Main">
+      {tabs.map(([p, label, icon]) => {
+        const on = p === '/' ? route === '/' : route.startsWith(p);
+        return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline ${on ? 'text-t' : 'text-f'}`}>
+          <Icon name={icon} size={22} />{label}
+          {p === '/review' && data?.toReview ? <span className="badge num absolute top-1 left-1/2 ml-1 h-[18px] min-w-[18px] text-[11px]">{data.toReview}</span> : null}
+        </a>;
+      })}
+    </nav>
+  );
+}
+
+function App() {
+  const route = useRoute();
+  const camp = /^\/campaigns\/([a-z0-9_]+)$/.exec(route);
+  const page = route === '/' ? <Home />
+    : route.startsWith('/review') ? <Review focus={Number(route.split('/')[2]) || undefined} />
+    : camp ? <CampaignPage name={camp[1]} />
+    : route.startsWith('/campaigns') ? <Campaigns />
+    : <Later what={route.slice(1)} />;
+  return (
+    <div className="flex min-h-screen md:h-screen">
+      <Side route={route} />
+      {page}
+      <Tabs route={route} />
+    </div>
+  );
+}
+
+const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={qc}>
+      <MotionConfig reducedMotion="user">
+        <Toasts><App /></Toasts>
+      </MotionConfig>
+    </QueryClientProvider>
+  </StrictMode>,
+);

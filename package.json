@@ -15,6 +15,8 @@
     "hardware": "npm run hardware -w @clip/core",
     "db:generate": "npm run db:generate -w @clip/core",
     "test": "npm test -w @clip/core",
-    "typecheck": "npm run typecheck -w @clip/core"
+    "typecheck": "npm run typecheck -w @clip/core",
+    "dashboard:dev": "npm run dev -w @clip/dashboard",
+    "dashboard:build": "npm run build -w @clip/dashboard"
   }
 }
