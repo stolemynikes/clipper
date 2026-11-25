@@ -1,7 +1,7 @@
 // "Is it fun to watch?" signals per rendered clip, on top of chat and viewer clips (loud != funny):
 // laughMax/cheerMax (YAMNet peak score, from music_detect; the share-of-frames ratio was ~always 0 under speech), speech (local LLM reads the transcript),
 // visual (same LLM looks at 4 frames). They only change the score once the learner has proven them (weights start at 0).
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { loadSettings } from '../../config.ts';
@@ -14,6 +14,7 @@ import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { learnedWeights } from '../learner/weights.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
+import { proposalDir, proposals, recordPair } from '../practice/proposals.ts';
 import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules, type Rule } from './layout.ts';
 
 const log = logger('judge');
@@ -92,6 +93,47 @@ export async function frames(file: string, dur: number, width = 360): Promise<st
   return out;
 }
 
+export const PAIR_PROMPT = `Two edits of a short stream clip for TikTok/Shorts. Images 1-4 are edit 1, images 5-8 are edit 2, each in time order.
+They may differ only in the captions (size, words per line, position, style), or not at all.
+Which edit is easier to read on a phone and more fun to watch? Look at the captions and whether they hide faces or action.
+If you see no real difference, answer 0. Do not guess.
+Return JSON: "pick" 1, 2 or 0, "why" one short sentence.`;
+const PICK = { type: 'object', properties: { pick: { type: 'integer' }, why: { type: 'string' } }, required: ['pick', 'why'] };
+
+/** Practice A/B: pairwise judge on clip.mp4 (current) vs clip-b.mp4 (proposal), random order; ~1 in 5 is an A/A control. */
+async function judgePair(model: string, gpu: boolean, clipId: number, dir: string, dur: number) {
+  const idFile = join(dir, 'proposal.txt'), b = join(dir, 'clip-b.mp4'), a = join(dir, 'clip.mp4');
+  if (!existsSync(idFile) || !existsSync(b)) return;
+  const id = readFileSync(idFile, 'utf8').trim(), p = proposals().find((x) => x.id === id);
+  if (!p || p.status !== 'testing') return;
+  const [fa, fb] = [await frames(a, dur, 540), await frames(b, dur, 540)];
+  if (Math.random() < 0.2) { // A/A: same video twice; the right answer is 0, a 1/2 lean shows position bias
+    const j = await askJson(model, gpu, PAIR_PROMPT, PICK, [...fa, ...fa]);
+    const pick = ([0, 1, 2].includes(Number(j.pick)) ? Number(j.pick) : 0) as 0 | 1 | 2;
+    recordPair(id, { aa: pick });
+    return `A/A ${pick}`;
+  }
+  const newFirst = Math.random() < 0.5;
+  const j = await askJson(model, gpu, PAIR_PROMPT, PICK, newFirst ? [...fb, ...fa] : [...fa, ...fb]);
+  const n = Number(j.pick), pick = n === 0 || ![1, 2].includes(n) ? 'same' : (n === 1) === newFirst ? 'new' : 'old';
+  const keep = p.frames.length < 6; // a few old/new frames for the report page
+  if (keep) {
+    mkdirSync(proposalDir(id), { recursive: true });
+    writeFileSync(join(proposalDir(id), `${clipId}-old.jpg`), Buffer.from(fa[1], 'base64'));
+    writeFileSync(join(proposalDir(id), `${clipId}-new.jpg`), Buffer.from(fb[1], 'base64'));
+  }
+  recordPair(id, { pair: { clipId, newFirst, pick, why: String(j.why ?? '').slice(0, 160), at: Date.now() }, ...(keep && { frames: { clipId, old: `${clipId}-old.jpg`, new: `${clipId}-new.jpg` } }) });
+  return `${id} ${pick}`;
+}
+
+/** Calibration sheet: one frame + transcript + gemma's scores per practice clip, so Claude can score a sample and compare. */
+function saveCalibration(clipId: number, frame: string | undefined, transcript: string | null, fun: object) {
+  const d = join(paths.dataDir, 'practice-frames');
+  mkdirSync(d, { recursive: true });
+  if (frame) writeFileSync(join(d, `${clipId}.jpg`), Buffer.from(frame, 'base64'));
+  appendFileSync(join(d, 'index.jsonl'), JSON.stringify({ clipId, transcript: (transcript ?? '').slice(0, 1500), ...fun }) + '\n');
+}
+
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
 export const JUDGE_VERSION = 1;
 
@@ -116,12 +158,19 @@ export async function judgeClip(db: Db, { clipId, notify = true }: { clipId: num
       const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name)));
       fun.speech = a.score / 10; why.push(`talk ${a.score}: ${a.why}`);
     }
+    let shot: string | undefined;
     if (existsSync(clip.filePath)) {
-      const b = await ask(model, gpu, VISUAL_PROMPT, await frames(clip.filePath, clip.durationSec ?? 20));
+      const vis = await frames(clip.filePath, clip.durationSec ?? 20); shot = vis[1];
+      const b = await ask(model, gpu, VISUAL_PROMPT, vis);
       fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
       const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540));
       fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
+    }
+    if (clip.status === 'practice') {
+      try { const r = await judgePair(model, gpu, clipId, dirname(clip.filePath), clip.durationSec ?? 20); if (r) why.push(`pair ${r}`); }
+      catch (e) { log.warn(`clip ${clipId}: pair judge failed: ${(e as Error).message}`); }
+      saveCalibration(clipId, shot, clip.transcript, { speech: fun.speech, visual: fun.visual, layoutPenalty: fun.layoutPenalty });
     }
     log.info(`clip ${clipId} judged on ${gpu ? 'GPU' : 'CPU'} in ${Date.now() - t0} ms: ${why.join(' | ')}`);
     Object.assign(fun, { judgeVersion: JUDGE_VERSION, judgeGpu: gpu ? 1 : 0, judgeWhy: why.join(' | ') });

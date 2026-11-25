@@ -21,7 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
-import { weeklyInsights } from '../learner/weekly.ts';
+import { activeProposal, type Change, tweaks } from '../practice/proposals.ts';
 
 const log = logger('editor');
 const fwd = (p: string) => p.replaceAll('\\', '/');
@@ -138,24 +138,35 @@ export async function renderClip(db: Db, { momentId, practice }: { momentId: num
   const dy = stackTop(layout);
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
-  writeFileSync(join(dir, 'subs.ass'), buildAss({
-    words, durationSec, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
-    // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
-    disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
-    style: cfg.captionStyle ?? settings.clip.captionStyle,
-    wordsPerChunk: weeklyInsights().wordsPerLine ?? undefined, // what top Shorts use this week; style default until the weekly study ran
-    censor,
-    // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
-    // stack: everything moves down with the centered block; chat sits on the game's bottom edge.
-    captionY: layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300, chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
-  }));
-
-  // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
-  const graph = filterGraph(layout, 'subs.ass', fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-    twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
-  await runCmd('ffmpeg', ffmpegArgs('src.mp4', 'clip.mp4', graph, hw?.encoder ?? 'libx264', lead,
-    duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
-    twitchChat?.file ?? null), { cwd: dir });
+  const live = tweaks(); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
+  const encode = async (out: string, ch: Change) => {
+    const subs = out.replace('.mp4', '.ass');
+    const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
+    writeFileSync(join(dir, subs), buildAss({
+      words, durationSec, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
+      // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
+      disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
+      style: ch.captionStyle ?? cfg.captionStyle ?? settings.clip.captionStyle,
+      wordsPerChunk: ch.wordsPerChunk, // style default unless an approved proposal sets it
+      censor,
+      // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
+      // stack: everything moves down with the centered block; chat sits on the game's bottom edge. Shift capped above the app buttons.
+      captionY: Math.min(1560, base + (ch.captionShift ?? 0)), chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
+    }));
+    // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
+    const graph = filterGraph(layout, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
+      twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
+    await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead,
+      duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words)), durationSec,
+      twitchChat?.file ?? null), { cwd: dir });
+  };
+  await encode('clip.mp4', live);
+  // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
+  const prop = practice ? activeProposal() : undefined;
+  if (prop) {
+    await encode('clip-b.mp4', { ...live, ...prop.change });
+    writeFileSync(join(dir, 'proposal.txt'), prop.id);
+  }
   for (const f of [src, join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   const clip = db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },

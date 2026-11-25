@@ -1,5 +1,6 @@
 // Review page over Tailscale: plain node:http, no framework needed for a handful of routes.
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { decide as decideProposal, proposalDir } from '../modules/practice/proposals.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -123,7 +124,14 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
     const clip = getClip(db, Number(video[1]));
     return clip && existsSync(clip.filePath) ? sendVideo(req, res, clip.filePath) : res.writeHead(404).end();
   }
+  const pf = /^\/proposal-frame\/([a-z0-9-]{1,40})\/(\d+-(?:old|new)\.jpg)$/.exec(url.pathname);
+  if (req.method === 'GET' && pf) {
+    const f = join(proposalDir(pf[1]), pf[2]);
+    return existsSync(f) ? res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' }).end(readFileSync(f)) : res.writeHead(404).end();
+  }
   if (req.method !== 'POST' || req.headers['x-clipper'] !== '1') return res.writeHead(404).end();
+  const pa = /^\/proposals\/([a-z0-9-]{1,40})\/(approve|reject)$/.exec(url.pathname);
+  if (pa) return res.writeHead(decideProposal(pa[1], pa[2] === 'approve') ? 204 : 404).end();
   const act = /^\/clip\/(\d+)\/(approve|reject)$/.exec(url.pathname);
   if (act) return res.writeHead(decide(db, Number(act[1]), act[2] === 'approve') ? 204 : 409).end();
   if (url.pathname === '/pause' || url.pathname === '/resume') { setPaused(url.pathname === '/pause'); return res.writeHead(204).end(); }

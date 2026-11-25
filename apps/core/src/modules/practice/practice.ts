@@ -2,7 +2,10 @@
 // Runs while data/practice exists, also when Snip itself is paused. Heals itself without Claude.
 import { existsSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { clipStreamers } from '../../config.ts';
+import { clipStreamers, loadSettings } from '../../config.ts';
+import { STYLES } from '../editor/subtitles.ts';
+import { weeklyInsights } from '../learner/weekly.ts';
+import { hasProposals, seedProposals } from './proposals.ts';
 import type { Db } from '../../db/client.ts';
 import { sources } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -67,6 +70,7 @@ export function pickVod(vods: Vod[], known: Set<string>, now: number): Vod | und
 /** One tick (every minute): disk guard, morning summary, and queue the next VOD when practice is idle. */
 export async function practiceTick(db: Db, now = new Date()) {
   morning(db, now);
+  if (!hasProposals()) { const style = loadSettings().clip.captionStyle ?? 'bold'; seedProposals({ per: STYLES[style].per, style, weeklyPer: weeklyInsights().wordsPerLine }); }
   if (practiceHeld() || busy(db, "'practice.analyze','practice.render','practice.judge'")) return;
   if (freeGb() < 100) {
     setPractice(false);

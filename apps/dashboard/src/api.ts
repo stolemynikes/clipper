@@ -18,6 +18,13 @@ export interface ReviewClip {
   reasons: string[]; warnings: string[]; source: string; platforms: string[]; tag: string | null; maxSec: number | null;
 }
 
+export interface Proposal {
+  id: string; title: string; why: string; status: 'testing' | 'ready' | 'approved' | 'rejected'; allPairs: number;
+  score: { wins: number; n: number; share: number; low: number; high: number } | null;
+  aa: { n: number; biased: boolean; firstShare: number | null; sameShare: number | null };
+  frames: { clipId: number; old: string; new: string }[];
+}
+
 const get = async <T,>(path: string): Promise<T> => {
   const r = await fetch(path, { cache: 'no-store' });
   if (!r.ok) throw new Error(`${r.status}`);
@@ -35,6 +42,8 @@ export const useOverview = () => useQuery({ queryKey: ['overview'], queryFn: () 
 export const useReview = () => useQuery({ queryKey: ['review'], queryFn: () => get<ReviewClip[]>('/api/review'), ...live });
 export const useCampaigns = () => useQuery({ queryKey: ['campaigns'], queryFn: () => get<Campaign[]>('/api/campaigns'), ...live });
 export const useCampaign = (name: string) => useQuery({ queryKey: ['campaign', name], queryFn: () => get<CampaignDetail>(`/api/campaigns/${name}`), ...live });
+
+export const useProposals = () => useQuery({ queryKey: ['proposals'], queryFn: () => get<Proposal[]>('/api/proposals'), ...live });
 
 export const money = (n: number) => { const d = n >= 1000 || n === 0 ? 0 : 2; return `$${n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}`; };
 export const count = (n: number) => n.toLocaleString('en-US');

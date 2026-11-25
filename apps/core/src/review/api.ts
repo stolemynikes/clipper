@@ -1,5 +1,6 @@
 // JSON for the dashboard (apps/dashboard). Read-only GETs; actions reuse the existing POST routes.
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { aaBias, proposals, score } from '../modules/practice/proposals.ts';
 import { campaignOpen, type StreamerConfig } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
@@ -119,6 +120,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/earnings') return json(res, earnings(db)), true;
   if (url.pathname === '/api/history') return json(res, history(db)), true;
   if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
+  if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
   if (m) return json(res, detail(db, m[1])), true;
   return false;
