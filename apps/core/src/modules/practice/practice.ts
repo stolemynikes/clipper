@@ -2,7 +2,7 @@
 // Runs while data/practice exists, also when Snip itself is paused. Heals itself without Claude.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { activeStreamers, clipStreamers, loadSettings } from '../../config.ts';
+import { activeStreamers, loadSettings } from '../../config.ts';
 import { STYLES } from '../editor/subtitles.ts';
 import { weeklyInsights } from '../learner/weekly.ts';
 import { activeProposals, isLength, seedProposals, seedStudy } from './proposals.ts';
@@ -63,7 +63,7 @@ export const practiceHeld = () => !isPractice() || Date.now() < readState().paus
 
 /** Best practice VOD: 3-14 days old (newer ones belong to the watcher), not seen before, most views first. */
 export function pickVod(vods: Vod[], known: Set<string>, now: number): Vod | undefined {
-  return vods.filter((v) => { const age = now - new Date(v.created_at).getTime(); return age >= 3 * DAY && age <= 14 * DAY && !known.has(v.url); })
+  return vods.filter((v) => { const age = now - new Date(v.created_at).getTime(); return age >= 3 * DAY && age <= 30 * DAY && !known.has(v.url); })
     .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))[0];
 }
 
@@ -135,7 +135,7 @@ export async function practiceTick(db: Db, now = new Date()) {
   const known = new Set(db.select({ url: sources.url }).from(sources).all().map((r) => r.url));
   let best: { vod: Vod; streamerId: number } | undefined;
   const ids = new Map<string, number>(); // streamer name -> id, for study clips
-  for (const cfg of clipStreamers(now).filter((s) => s.platform === 'twitch')) {
+  for (const cfg of activeStreamers(now).filter((s) => s.platform === 'twitch')) { // study-stage too: practice never posts
     try {
       const userId = await getUserId(cfg.channel);
       const streamerId = ensureStreamer(db, cfg, userId).id;
@@ -145,7 +145,7 @@ export async function practiceTick(db: Db, now = new Date()) {
     } catch (e) { log.warn(`practice: ${cfg.name} VOD list failed: ${String(e).slice(0, 200)}`); }
   }
   if (!best && fallback(db, known, ids)) return;
-  if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-14 days old, not done yet)'); } return; }
+  if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-30 days old, not done yet)'); } return; }
   const row = db.insert(sources).values({ url: best.vod.url, streamerId: best.streamerId, durationSec: parseDuration(best.vod.duration) }).onConflictDoNothing().returning().get();
   if (!row) return;
   enqueue(db, 'practice.analyze', { sourceId: row.id, vodId: best.vod.id, practice: true }, { maxAttempts: 2 });
