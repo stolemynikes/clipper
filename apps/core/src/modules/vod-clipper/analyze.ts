@@ -18,6 +18,31 @@ export function parseChat(json: { comments?: { content_offset_seconds: number; c
   return (json.comments ?? []).map((c) => ({ t: c.content_offset_seconds, text: c.message?.body ?? '', user: c.commenter?.display_name ?? '' }));
 }
 
+/** Silent stretches of at least minGap seconds (also before the first and after the last message), as [from, to]. */
+export function chatGaps(times: number[], durationSec: number, minGap = 600): [number, number][] {
+  const t = [0, ...[...times].sort((a, b) => a - b), durationSec], gaps: [number, number][] = [];
+  for (let i = 1; i < t.length; i++) if (t[i] - t[i - 1] >= minGap) gaps.push([Math.floor(t[i - 1]), Math.ceil(t[i])]);
+  return gaps;
+}
+
+/** Whole-VOD chat. A full download of a very long VOD can silently miss hours (seen: 90k-98k s of a 47 h stream),
+ *  so silent stretches are fetched again on their own and merged. */
+async function downloadChat(vodId: string, dir: string, durationSec: number): Promise<ChatMessage[]> {
+  const exe = join(paths.toolsDir, 'TwitchDownloaderCLI.exe'), file = join(dir, 'chat.json');
+  const get = async (range: string[], timeoutMs: number) => {
+    await runCmd(exe, ['chatdownload', '--id', vodId, ...range, '-o', file, '--compression', 'None', '--collision', 'Overwrite', '--temp-path', process.env.TEMP ?? dir], { timeoutMs });
+    try { return parseChat(JSON.parse(readFileSync(file, 'utf8'))); } finally { rmSync(file, { force: true }); }
+  };
+  const chat = await get([], 90 * 60_000);
+  const gaps = chat.length ? chatGaps(chat.map((c) => c.t), durationSec).slice(0, 30) : [];
+  for (const [from, to] of gaps) {
+    const more = (await get(['-b', `${from}s`, '-e', `${to}s`], 30 * 60_000)).filter((c) => c.t > from && c.t < to);
+    if (more.length) log.warn(`chat gap ${from}-${to}s refilled with ${more.length} messages`);
+    chat.push(...more);
+  }
+  return chat.sort((a, b) => a.t - b.t);
+}
+
 export function sourceContext(db: Db, sourceId: number) {
   const source = db.select().from(sources).where(eq(sources.id, sourceId)).get();
   if (!source) throw new Error(`source ${sourceId} not found`);
@@ -35,12 +60,8 @@ export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { source
   mkdirSync(dir, { recursive: true });
 
   const vod = await getVod(vodId);
-  const chatFile = join(dir, 'chat.json');
-  await runCmd(join(paths.toolsDir, 'TwitchDownloaderCLI.exe'),
-    ['chatdownload', '--id', vodId, '-o', chatFile, '--compression', 'None', '--collision', 'Overwrite', '--temp-path', process.env.TEMP ?? dir]);
-  const chat = parseChat(JSON.parse(readFileSync(chatFile, 'utf8')));
+  const chat = await downloadChat(vodId, dir, source.durationSec ?? 0);
   const viewerClips = (await getVodClips(vod)).map((c) => ({ offset: c.vod_offset!, duration: c.duration }));
-  rmSync(chatFile, { force: true });
 
   const limits = { minSec: settings.clip.minSec, maxSec: Math.min(settings.clip.maxSec, cfg.campaign?.maxSec ?? Infinity) };
   // shortcut: audioPeak not computed yet (needs the full audio track); weight has no effect until it is.
