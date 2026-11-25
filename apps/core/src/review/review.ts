@@ -15,6 +15,11 @@ const log = logger('review');
 const pauseFile = join(paths.dataDir, 'paused');
 export const isPaused = () => existsSync(pauseFile);
 export const setPaused = (on: boolean) => (on ? writeFileSync(pauseFile, new Date().toISOString()) : rmSync(pauseFile, { force: true }));
+/** Owner switches (dashboard Settings): a file in data/ means that part is off. */
+export type Toggle = 'study' | 'learn';
+const offFile = (k: Toggle) => join(paths.dataDir, `off-${k}`);
+export const isOff = (k: Toggle) => existsSync(offFile(k));
+export const setOff = (k: Toggle, off: boolean) => (off ? writeFileSync(offFile(k), new Date().toISOString()) : rmSync(offFile(k), { force: true }));
 export const reviewUrl = () => process.env.REVIEW_URL || `http://localhost:${process.env.REVIEW_PORT || 8787}`;
 
 /** Push via Bark (iOS). group "clipper" keeps these apart from other apps on the same key. */

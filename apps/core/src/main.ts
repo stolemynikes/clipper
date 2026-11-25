@@ -10,7 +10,7 @@ import { trackOnce } from './modules/tracker/track.ts';
 import { analyzeVod } from './modules/vod-clipper/analyze.ts';
 import { watchOnce } from './modules/watcher/watcher.ts';
 import { runWorker } from './queue/worker.ts';
-import { alertFailure, bark, isPaused, notifyReview } from './review/review.ts';
+import { alertFailure, bark, isOff, isPaused, notifyReview } from './review/review.ts';
 import { judgeClip } from './modules/judge/judge.ts';
 import { learnDue, learnOnce } from './modules/learner/weights.ts';
 import { startReviewServer } from './review/server.ts';
@@ -34,7 +34,7 @@ const timer = setInterval(watch, loadSettings().watcher.pollMinutes * 60_000);
 const track = () => trackOnce(db).then(() => syncDiscord(db)).catch((e) => log.error('tracker failed', { error: String(e) })); // stats tabs follow the new views
 const trackTimer = setInterval(track, 60 * 60_000); // hourly: views move slowly, API quotas are small
 const learn = () => {
-  if (!learnDue()) return;
+  if (isOff('learn') || !learnDue()) return;
   try {
     const { next, changes } = learnOnce(db);
     log.info(`learner: ${next.n} clips, label ${next.label}, auc ${JSON.stringify(next.auc)}`);
@@ -51,7 +51,9 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abo
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
 await Promise.all([
-  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'campaign.study': (p) => studyJob(p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
+  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
+  // Own loop so the Settings switch can hold study jobs queued without blocking clips.
+  runWorker(db, { 'campaign.study': (p) => studyJob(p) }, { ...opts, paused: () => isPaused() || isOff('study') }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);

@@ -5,7 +5,7 @@ import type { Db } from '../db/client.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
 import { readProgress } from '../modules/learner/study.ts';
 import { accountWarnings, allStreamers, campaignStatus, expectedPerClip } from './campaigns.ts';
-import { bestScores, pendingClips, rating, status } from './review.ts';
+import { bestScores, isOff, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
 import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
 
@@ -48,7 +48,7 @@ function overview(db: Db) {
     ...posts.filter((p) => p.postedAt).slice(0, 30).map((p) => ({ kind: 'posted', text: `Posted ${p.streamer} clip to ${LABEL[p.platform as keyof typeof LABEL] ?? p.platform}`, at: p.postedAt! })),
   ].sort((a, b) => b.at - a.at).slice(0, 40);
   return {
-    paused: st.paused, working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
+    paused: st.paused, study: !isOff('study'), learning: !isOff('learn'), working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
     toReview: sum(st.clips, 'pending_review'), kept: sum(st.clips, 'approved', 'posted'), skipped: sum(st.clips, 'rejected'),
     posted: posts.length, postedThisWeek: posts.filter((p) => (p.postedAt ?? 0) >= week).length,
     views: posts.reduce((t, p) => t + (p.views ?? 0), 0), earned: camps.reduce((t, c) => t + c.earned, 0),

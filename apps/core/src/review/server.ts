@@ -9,7 +9,7 @@ import { setupRoute } from './setup.ts';
 import { campaignsRoute } from './campaigns.ts';
 import { apiRoute } from './api.ts';
 import { CSS, esc } from './style.ts';
-import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setPaused, status } from './review.ts';
+import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setOff, setPaused, status } from './review.ts';
 
 const log = logger('review');
 
@@ -126,6 +126,8 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
   const act = /^\/clip\/(\d+)\/(approve|reject)$/.exec(url.pathname);
   if (act) return res.writeHead(decide(db, Number(act[1]), act[2] === 'approve') ? 204 : 409).end();
   if (url.pathname === '/pause' || url.pathname === '/resume') { setPaused(url.pathname === '/pause'); return res.writeHead(204).end(); }
+  const tog = /^\/toggle\/(study|learn)\/(on|off)$/.exec(url.pathname);
+  if (tog) { setOff(tog[1] as 'study' | 'learn', tog[2] === 'off'); return res.writeHead(204).end(); }
   res.writeHead(404).end();
 }
 

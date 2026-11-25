@@ -8,6 +8,7 @@ import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
+import { Settings } from './pages/Settings.tsx';
 import { Accounts, Earnings, History } from './pages/Money.tsx';
 import './index.css';
 
@@ -77,6 +78,7 @@ function App() {
     : route === '/earnings' ? <Earnings />
     : route === '/history' ? <History />
     : route === '/accounts' ? <Accounts />
+    : route === '/settings' ? <Settings />
     : <Later what={route.slice(1)} />;
   return (
     <div className="flex min-h-screen md:h-screen">
