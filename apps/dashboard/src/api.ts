@@ -49,3 +49,11 @@ export function ago(ms: number, now = Date.now()) {
   const d = Math.round(h / 24);
   return d === 1 ? 'Yesterday' : `${d} days ago`;
 }
+
+export interface Payout { id: number; campaign: string; amount: number; status: 'pending' | 'paid'; note: string | null; paidAt: number | null; at: number }
+export interface Earnings { estimated: number; paid: number; pending: number; payouts: Payout[]; campaigns: { name: string; views: number; posts: number; earned: number; pool: number | null; paid: number }[] }
+export interface HistoryRow extends PostRow { streamer: string }
+export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean }
+export const useEarnings = () => useQuery({ queryKey: ['earnings'], queryFn: () => get<Earnings>('/api/earnings'), ...live });
+export const useHistory = () => useQuery({ queryKey: ['history'], queryFn: () => get<HistoryRow[]>('/api/history'), ...live });
+export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => get<Account[]>('/api/accounts'), ...live });

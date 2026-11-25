@@ -106,3 +106,14 @@ export const jobs = sqliteTable(
   },
   (t) => [index('jobs_claim_idx').on(t.status, t.runAt)],
 );
+
+// Money a campaign actually paid out (or announced). Estimates from views live in the API; this is the real number.
+export const payouts = sqliteTable('payouts', {
+  id: id(),
+  campaign: text('campaign').notNull(), // streamer name; campaigns live in streamers.yaml
+  amount: real('amount').notNull(), // USD
+  status: text('status', { enum: ['pending', 'paid'] }).notNull().default('pending'),
+  note: text('note'),
+  paidAt: integer('paid_at', { mode: 'timestamp_ms' }),
+  createdAt: createdAt(),
+});

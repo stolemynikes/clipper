@@ -8,6 +8,7 @@ import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
+import { Accounts, Earnings, History } from './pages/Money.tsx';
 import './index.css';
 
 // Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/earnings, #/history, #/accounts, #/settings
@@ -73,6 +74,9 @@ function App() {
     : route.startsWith('/review') ? <Review focus={Number(route.split('/')[2]) || undefined} />
     : camp ? <CampaignPage name={camp[1]} />
     : route.startsWith('/campaigns') ? <Campaigns />
+    : route === '/earnings' ? <Earnings />
+    : route === '/history' ? <History />
+    : route === '/accounts' ? <Accounts />
     : <Later what={route.slice(1)} />;
   return (
     <div className="flex min-h-screen md:h-screen">

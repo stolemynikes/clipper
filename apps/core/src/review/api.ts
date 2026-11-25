@@ -7,7 +7,7 @@ import { readProgress } from '../modules/learner/study.ts';
 import { accountWarnings, allStreamers, campaignStatus, expectedPerClip } from './campaigns.ts';
 import { bestScores, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
-import { earn, LABEL } from './setup.ts';
+import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
 
 const DAY = 86_400_000;
 type Post = { id: number; clip: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
@@ -83,6 +83,30 @@ function detail(db: Db, name: string) {
   };
 }
 
+type Payout = { id: number; campaign: string; amount: number; status: 'pending' | 'paid'; note: string | null; paidAt: number | null; at: number };
+
+/** Estimated earnings per campaign from views, next to what campaigns really paid (payouts table). */
+export function earnings(db: Db) {
+  const posts = allPosts(db), camps = allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, posts));
+  const payouts = db.$client.prepare('select id, campaign, amount, status, note, paid_at paidAt, created_at at from payouts order by created_at desc').all() as Payout[];
+  const total = (st: string) => payouts.filter((p) => p.status === st).reduce((t, p) => t + p.amount, 0);
+  return {
+    estimated: camps.reduce((t, c) => t + c.earned, 0), paid: total('paid'), pending: total('pending'), payouts,
+    campaigns: camps.filter((c) => c.posts || payouts.some((p) => p.campaign === c.name)).map((c) => ({ name: c.name, views: c.views, posts: c.posts, earned: c.earned, pool: c.pool,
+      paid: payouts.filter((p) => p.campaign === c.name && p.status === 'paid').reduce((t, p) => t + p.amount, 0) })),
+  };
+}
+
+/** Every post, newest first, with its estimated earnings. */
+function history(db: Db) {
+  const camps = new Map(allStreamers().map((s) => [s.name, s.campaign]));
+  return allPosts(db).map((p) => { const c = camps.get(p.streamer); return { id: p.id, clip: p.clip, title: p.title, streamer: p.streamer, platform: LABEL[p.platform as keyof typeof LABEL] ?? p.platform,
+    url: p.url, postedAt: p.postedAt, submitted: Boolean(p.submitted), views: p.views ?? 0, earned: c ? earn(p.views ?? 0, c.ratePer1k, c.maxPerClip) : 0 }; });
+}
+
+/** Accounts with totals; only whether a token exists, never the token. */
+const accounts = (db: Db) => accountStats(db).map((a) => ({ ...a, label: LABEL[a.platform], connected: Boolean(process.env[tokenKey(a.id)]) }));
+
 const json = (res: ServerResponse, body: unknown) => res.writeHead(body === null ? 404 : 200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
 /** GET /api/*: true if handled. */
@@ -91,6 +115,9 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/overview') return json(res, overview(db)), true;
   if (url.pathname === '/api/review') return json(res, review(db)), true;
   if (url.pathname === '/api/campaigns') return json(res, allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, allPosts(db)))), true;
+  if (url.pathname === '/api/earnings') return json(res, earnings(db)), true;
+  if (url.pathname === '/api/history') return json(res, history(db)), true;
+  if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
   if (m) return json(res, detail(db, m[1])), true;
   return false;
