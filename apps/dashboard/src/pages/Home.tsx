@@ -9,7 +9,7 @@ const day = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 's
 
 function ListCard({ title, right, children, footer }: { title: string; right?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
-    <section className="card !p-0 flex flex-col min-h-[280px] md:min-h-0">
+    <section className="card !p-0 flex flex-col min-h-[280px] max-h-[460px] md:max-h-none md:min-h-0">
       <div className="flex items-center justify-between h-14 px-5 shrink-0"><h2 className="text-[17px] font-semibold m-0">{title}</h2>{right}</div>
       <div className="scroll flex-1 min-h-0 flex flex-col px-5">{children}</div>
       {footer}
@@ -63,8 +63,8 @@ export function Home() {
             {d.earnedWeek > 0 ? <span className="pill !text-up !border-up/30 bg-up/10"><Icon name="up" size={14} />+{money(d.earnedWeek)} this week</span> : null}
           </div>
           <Spark series={d.earnedSeries} />
-          <div className="grid grid-cols-3 gap-4">
-            <a className="btn btn-1" href="#/review"><Icon name="play" />Review {d.toReview} clip{d.toReview === 1 ? '' : 's'}</a>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <a className="btn btn-1 col-span-2 sm:col-span-1" href="#/review"><Icon name="play" />Review {d.toReview} clip{d.toReview === 1 ? '' : 's'}</a>
             <a className="btn" href="#/campaigns"><Icon name="flag" />Campaigns</a>
             <a className="btn" href="#/history"><Icon name="clock" />History</a>
           </div>

@@ -10,6 +10,7 @@ import { bestScores, isOff, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
 import { isPractice } from '../modules/practice/practice.ts';
 import { accountStats, earn, LABEL, tokenKey } from './setup.ts';
+import { getSettings } from './settings.ts';
 
 const DAY = 86_400_000;
 type Post = { id: number; clip: number; account: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
@@ -79,14 +80,14 @@ function overview(db: Db) {
 }
 
 function review(db: Db) {
-  const best = bestScores(db), camps = new Map(allStreamers().map((s) => [s.name, s]));
+  const best = bestScores(db), camps = new Map(allStreamers().map((s) => [s.name, s])), on = loadSettings().platforms;
   return pendingClips(db).map(({ clip, moment, source, streamer }) => {
     const sig = (moment.signals ?? {}) as Record<string, number>, c = camps.get(streamer.name)?.campaign;
     return {
       id: clip.id, streamer: streamer.name, seconds: Math.round(clip.durationSec ?? 0), at: clip.createdAt.getTime(), title: clip.title, hook: clip.hook,
       strength: rating(moment.score, best.get(source.id) ?? 0, sig.layoutPenalty ?? 0), reasons: reasons(sig),
       warnings: (clip.compliance?.warnings ?? []) as string[], source: `${source.url}?t=${Math.floor(moment.startSec)}s`,
-      platforms: (Array.isArray(c?.rules?.platforms) ? c.rules.platforms : []).map(String), tag: camps.get(streamer.name)?.tag ?? null, maxSec: c?.maxSec ?? null,
+      platforms: (Array.isArray(c?.rules?.platforms) ? c.rules.platforms : []).map(String).filter((p) => on[p as keyof typeof on]), tag: camps.get(streamer.name)?.tag ?? null, maxSec: c?.maxSec ?? null, // platforms: only where the publisher posts
     };
   });
 }
@@ -177,6 +178,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/campaigns') return json(res, allStreamers().filter((s) => s.campaign).map((s) => campaignRow(s, allPosts(db)))), true;
   if (url.pathname === '/api/earnings') return json(res, earnings(db)), true;
   if (url.pathname === '/api/history') return json(res, history(db)), true;
+  if (url.pathname === '/api/settings') return json(res, getSettings()), true;
   if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
   if (url.pathname === '/api/rate') return usdRate().then((r) => json(res, r), () => json(res, rate ?? { eurPerUsd: null, date: '', at: 0 })), true;
   if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;

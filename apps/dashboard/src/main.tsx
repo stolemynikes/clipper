@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { pref, setRate, useOverview, useRate } from './api.ts';
@@ -36,7 +36,9 @@ function Side({ route }: { route: string }) {
   const { data } = useOverview();
   const cur = (p: string) => (p === '/' ? route === '/' : route.startsWith(p)) ? 'page' : undefined;
   const link = ([p, label, icon]: [string, string, string, string?]) => (
-    <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}><Icon name={icon} />{label}
+    <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}>
+      {cur(p) ? <motion.span layoutId="side-ind" className="absolute inset-0 -z-10 rounded-[12px] bg-r" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
+      <Icon name={icon} />{label}
       {p === '/review' && data?.toReview ? <span className="badge num">{data.toReview}</span> : null}</a>
   );
   return (
@@ -63,7 +65,8 @@ function Tabs({ route }: { route: string }) {
       {tabs.map(([p, label, icon]) => {
         const on = p === '/' ? route === '/' : route.startsWith(p);
         return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline ${on ? 'text-t' : 'text-f'}`}>
-          <Icon name={icon} size={22} />{label}
+          {on ? <motion.span layoutId="tab-ind" className="absolute top-0 inset-x-5 h-[3px] rounded-b-full bg-a" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
+          <motion.span animate={{ scale: on ? 1.08 : 1, y: on ? -1 : 0 }} transition={{ duration: 0.18 }} className="flex"><Icon name={icon} size={22} /></motion.span>{label}
           {p === '/review' && data?.toReview ? <span className="badge num absolute top-1 left-1/2 ml-1 h-[18px] min-w-[18px] text-[11px]">{data.toReview}</span> : null}
         </a>;
       })}

@@ -27,7 +27,8 @@ clip:
   disclosureInVideo: true # owner 2026-11-24: CR FTC page needs it in the first 10s; small, above the tag
   disclosureInText: true # owner 2026-11-24: CR FTC page needs written #ad; caption is short so it stays visible (CR rejects #ad at the end of a long caption)
   captionStyle: bold # bold | pop | clean; streamers.yaml can override per streamer
-  censor: # caption masking (audio untouched); applied to every clip while any listed platform is on
+  # caption masking (audio untouched); applied to every clip while any listed platform is on
+  censor:
     platforms: [tiktok]
     words: [fuck, shit, bitch, cunt, nigg, fag, retard]
 

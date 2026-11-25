@@ -36,7 +36,7 @@ const get = async <T,>(path: string): Promise<T> => {
 /** Same header the old review page sends; the server refuses POSTs without it. */
 export const post = async (path: string) => {
   const r = await fetch(path, { method: 'POST', headers: { 'x-clipper': '1' } });
-  if (!r.ok && r.status !== 204) throw new Error(`${r.status}`);
+  if (!r.ok && r.status !== 204) throw new Error((r.status === 400 && await r.text()) || `${r.status}`);
 };
 
 const live = { refetchInterval: 15_000 };
@@ -84,4 +84,9 @@ export interface Accounts { limit: number; hours: (number | null)[][]; accounts:
 export const useEarnings = () => useQuery({ queryKey: ['earnings'], queryFn: () => get<Earnings>('/api/earnings'), ...live });
 export const useHistory = () => useQuery({ queryKey: ['history'], queryFn: () => get<History>('/api/history'), ...live });
 export const useAccounts = () => useQuery({ queryKey: ['accounts'], queryFn: () => get<Accounts>('/api/accounts'), ...live });
+export interface SettingField {
+  key: string; group: string; label: string; help: string; type: 'number' | 'bool' | 'choice';
+  min?: number; max?: number; step?: number; unit?: string; options?: string[]; value: number | boolean | string | null;
+}
+export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => get<SettingField[]>('/api/settings') });
 export const useRate = () => useQuery({ queryKey: ['rate'], queryFn: () => get<{ eurPerUsd: number | null; date: string }>('/api/rate'), staleTime: 3_600_000 });

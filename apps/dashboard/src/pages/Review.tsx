@@ -72,7 +72,7 @@ export function Review({ focus }: { focus?: number }) {
           ) : null}
         </div>
 
-        <div className="flex-1 min-w-0 max-w-[960px] flex flex-col gap-4 md:scroll md:min-h-0">
+        <div className="flex-1 min-w-0 max-w-[960px] flex flex-col gap-4 pb-20 md:pb-0 md:scroll md:min-h-0">
           {c.hook ? <div className="text-m text-sm">On screen: <span className="text-t font-medium">{c.hook}</span></div> : null}
           <section className="card flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3"><h2 className="text-[17px] font-semibold m-0">Why Snip picked this</h2><span className={`pill ${sTone}`}>{sLabel}</span></div>
@@ -83,11 +83,11 @@ export function Review({ focus }: { focus?: number }) {
             <Checks c={c} />
             <section className="card flex flex-col gap-3 min-w-0">
               <h2 className="text-[17px] font-semibold m-0">Will post to</h2>
-              {c.platforms.length ? c.platforms.map((p) => <div key={p} className="flex items-center gap-3 text-sm"><span className="dot bg-a" />{PLATFORM[p] ?? p}</div>) : <span className="text-sm text-f">No platforms in the campaign rules</span>}
+              {c.platforms.length ? c.platforms.map((p) => <div key={p} className="flex items-center gap-3 text-sm"><span className="dot bg-a" />{PLATFORM[p] ?? p}</div>) : <span className="text-sm text-f">None: the campaign's platforms are off in Settings</span>}
               <span className="text-[13px] text-f">Each gets its own title and caption.</span>
             </section>
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-auto sticky bottom-24 md:static">
+          <div className="grid grid-cols-2 gap-3 mt-auto fixed bottom-20 inset-x-0 z-30 px-4 py-3 bg-bg/95 backdrop-blur border-t border-line md:static md:p-0 md:bg-transparent md:backdrop-blur-none md:border-0">
             <button className="btn big" disabled={busy} onClick={() => decide(false)}><Icon name="x" />Skip <span className="kbd hidden md:inline">S</span></button>
             <button className="btn btn-1 big" disabled={busy} onClick={() => decide(true)}><Icon name="check" />Keep and post <span className="kbd hidden md:inline">K</span></button>
           </div>

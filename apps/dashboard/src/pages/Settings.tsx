@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import { fee, post, pref, setPref, useAccounts, useOverview } from '../api.ts';
+import { fee, post, pref, setPref, useOverview, useSettings, type SettingField } from '../api.ts';
 import { Currency, Icon, Page, Skeleton, useToast } from '../ui.tsx';
 
 type Row = { key: string; title: string; text: string; on: boolean; path: (on: boolean) => string; done: (on: boolean) => string };
@@ -12,10 +12,50 @@ const Field = ({ id, label, help, children }: { id?: string; label: string; help
   <div className="flex flex-col gap-2">{id ? <label htmlFor={id} className="kicker">{label}</label> : <span className="kicker">{label}</span>}{children}{help ? <span className="text-sm text-m">{help}</span> : null}</div>
 );
 const input = 'h-12 px-4 rounded-[14px] bg-s border border-line text-t text-base focus:outline-none focus:border-a w-full';
+const Switch = ({ on, label, busy, onClick }: { on: boolean; label: string; busy: boolean; onClick: () => void }) => (
+  <button role="switch" aria-checked={on} aria-labelledby={label} disabled={busy} onClick={onClick}
+    className={`relative shrink-0 w-[52px] h-8 rounded-full border border-line transition-colors cursor-pointer disabled:opacity-50 ${on ? 'bg-p' : 'bg-r'}`}>
+    <span className={`absolute top-[3px] left-[3px] w-6 h-6 rounded-full bg-white transition-transform motion-reduce:transition-none ${on ? 'translate-x-5' : ''}`} />
+  </button>
+);
+
+/** One settings.yaml value. Numbers save when you leave the box; a refused value shows the reason and goes back. */
+function Setting({ f }: { f: SettingField }) {
+  const qc = useQueryClient(), toast = useToast(), [busy, setBusy] = useState(false), [text, setText] = useState(String(f.value ?? ''));
+  const id = `set-${f.key.replace(/\./g, '-')}`;
+  const save = async (v: string) => {
+    if (v === String(f.value)) return;
+    setBusy(true);
+    try { await post(`/settings?key=${encodeURIComponent(f.key)}&value=${encodeURIComponent(v)}`); toast({ text: `${f.label}: saved`, tone: 'up' }); }
+    catch (e) { setText(String(f.value ?? '')); toast({ text: `${f.label}: ${(e as Error).message}`, tone: 'info' }); }
+    finally { await qc.invalidateQueries({ queryKey: ['settings'] }); await qc.invalidateQueries({ queryKey: ['accounts'] }); setBusy(false); }
+  };
+  const head = <div className="flex flex-col gap-1 min-w-0"><label id={id} htmlFor={f.type === 'number' ? `${id}-in` : undefined} className="font-semibold">{f.label}</label><span className="text-sm text-m">{f.help}</span></div>;
+  const row = 'flex items-center justify-between gap-4 py-4 border-b border-line last:border-0 last:pb-0';
+  if (f.type === 'bool') return <div className={row}>{head}<Switch on={f.value === true} label={id} busy={busy} onClick={() => save(String(f.value !== true))} /></div>;
+  if (f.type === 'choice') return (
+    <div className="flex flex-col gap-3 py-4 border-b border-line last:border-0 last:pb-0">{head}
+      <div className="segs self-start" role="group" aria-labelledby={id}>{f.options!.map((o) => <button key={o} className="seg capitalize" disabled={busy} aria-pressed={f.value === o} onClick={() => save(o)}>{o}</button>)}</div>
+    </div>
+  );
+  return (
+    <div className={row}>{head}
+      <div className="relative shrink-0 w-[104px]">
+        <input id={`${id}-in`} type="number" inputMode="decimal" min={f.min} max={f.max} step={f.step} disabled={busy} value={text}
+          className={`${input} num text-right ${f.unit ? 'pr-12' : ''}`} onChange={(e) => setText(e.target.value)}
+          onBlur={() => save(text.trim())} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+        {f.unit ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-m pointer-events-none">{f.unit}</span> : null}
+      </div>
+    </div>
+  );
+}
+const Group = ({ name, fields }: { name: string; fields: SettingField[] }) => (
+  <Card title={name}><div className="flex flex-col -mt-4">{fields.filter((f) => f.group === name).map((f) => <Setting key={`${f.key}:${String(f.value)}`} f={f} />)}</div></Card>
+);
 
 /** Owner settings. Name, currency and fee live in this browser; the switches are files in data/ on the PC. */
 export function Settings() {
-  const { data } = useOverview(), acc = useAccounts().data;
+  const { data } = useOverview(), fields = useSettings().data ?? [];
   const qc = useQueryClient(), toast = useToast(), [busy, setBusy] = useState('');
   const [name, setName] = useState(pref('appName', 'Snip')), [f, setF] = useState(String(fee()));
   if (!data) return <Page title="Settings"><div className="grid grid-cols-3 gap-6">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-80" />)}</div></Page>;
@@ -40,10 +80,7 @@ export function Settings() {
   const sw = (r: Row) => (
     <div key={r.key} className="flex items-center justify-between gap-4 py-4 border-b border-line last:border-0 last:pb-0">
       <div className="flex flex-col gap-1 min-w-0"><span id={`s-${r.key}`} className="font-semibold">{r.title}</span><span className="text-sm text-m">{r.text}</span></div>
-      <button role="switch" aria-checked={r.on} aria-labelledby={`s-${r.key}`} disabled={busy === r.key} onClick={() => flip(r)}
-        className={`relative shrink-0 w-[52px] h-8 rounded-full border border-line transition-colors cursor-pointer disabled:opacity-50 ${r.on ? 'bg-p' : 'bg-r'}`}>
-        <span className={`absolute top-[3px] left-[3px] w-6 h-6 rounded-full bg-white transition-transform motion-reduce:transition-none ${r.on ? 'translate-x-5' : ''}`} />
-      </button>
+      <Switch on={r.on} label={`s-${r.key}`} busy={busy === r.key} onClick={() => flip(r)} />
     </div>
   );
   const perSite = (s: string) => data.campaigns.filter((c) => c.site === s).length;
@@ -79,17 +116,17 @@ export function Settings() {
             </Field>
           </Card>
           <Card title="Posting">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col gap-1"><span className="font-semibold">Posts per account per day</span><span className="text-sm text-m">Set in settings.yaml on the PC.</span></div>
-              <span className="text-[28px] font-semibold num">{acc?.limit ?? '—'}</span>
-            </div>
-            <div className="flex flex-col -mt-4">{sw(run)}</div>
+            <div className="flex flex-col -mt-4">{sw(run)}{fields.filter((x) => x.group === 'Posting').map((x) => <Setting key={`${x.key}:${String(x.value)}`} f={x} />)}</div>
           </Card>
         </div>
-        <Card title="Snip at work">
-          <div className="flex flex-col -mt-4">{work.map(sw)}</div>
-          <span className="text-sm text-m flex items-center gap-2"><Icon name="alert" size={14} />Alerts go to your phone through Bark.</span>
-        </Card>
+        <div className="flex flex-col gap-6">
+          <Card title="Snip at work">
+            <div className="flex flex-col -mt-4">{work.map(sw)}</div>
+            <span className="text-sm text-m flex items-center gap-2"><Icon name="alert" size={14} />Alerts go to your phone through Bark.</span>
+          </Card>
+          <Group name="Review" fields={fields} />
+        </div>
+        {['Clips', 'Finding moments', 'Watching streams', 'PC'].map((g) => <Group key={g} name={g} fields={fields} />)}
       </div>
     </Page>
   );

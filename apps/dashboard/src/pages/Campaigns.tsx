@@ -27,14 +27,14 @@ export function Campaigns() {
           : !rows.length ? <Empty icon="flag" title="Nothing here" text="No campaigns match this filter." />
           : <div className="scroll flex-1 min-h-0">
             <table className="tbl">
-              <thead><tr><th>Streamer</th><th className="hidden lg:table-cell">Platform</th><th className="hidden md:table-cell">Pays</th><th className="r hidden md:table-cell">Your views</th><th className="r">Earned</th><th className="hidden md:table-cell">Time left</th><th>Status</th><th aria-hidden /></tr></thead>
+              <thead><tr><th>Streamer</th><th className="hidden lg:table-cell">Platform</th><th className="hidden md:table-cell">Pays</th><th className="r hidden md:table-cell">Your views</th><th className="r hidden sm:table-cell">Earned</th><th className="hidden md:table-cell">Time left</th><th>Status</th><th aria-hidden /></tr></thead>
               <tbody>{more.shown.map((c) => (
                 <tr key={c.name} className="cursor-pointer" onClick={() => { location.hash = `#/campaigns/${c.name}`; }}>
                   <td><a href={`#/campaigns/${c.name}`} className="no-underline font-medium flex items-center gap-3"><span className="av" aria-hidden>{c.name[0].toUpperCase()}</span>{c.name}</a></td>
                   <td className="hidden lg:table-cell text-m capitalize">{c.site.replace(/_/g, ' ')}</td>
                   <td className="hidden md:table-cell text-m num">{pay(c)}</td>
                   <td className="r hidden md:table-cell num">{count(c.views)}</td>
-                  <td className={`r num font-semibold ${c.earned > 0 ? 'text-up' : 'text-m'}`}>{money(c.earned)}</td>
+                  <td className={`r hidden sm:table-cell num font-semibold ${c.earned > 0 ? 'text-up' : 'text-m'}`}>{money(c.earned)}</td>
                   <td className="hidden md:table-cell w-[160px]"><div className="flex flex-col gap-1.5"><span className={`text-[13px] num ${c.open && c.daysLeft <= 2 ? 'text-warn' : 'text-m'}`}>{ends(c)}</span>
                     {/* shortcut: no start date stored, bar assumes a 30-day campaign */}
                     <div className="bar"><i style={{ width: `${c.open ? Math.min(100, (c.daysLeft / 30) * 100) : 0}%`, background: c.daysLeft <= 2 ? 'var(--color-warn)' : undefined }} /></div></div></td>

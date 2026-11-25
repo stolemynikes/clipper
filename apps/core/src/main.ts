@@ -32,8 +32,10 @@ startDiscord(db).catch((e) => log.error('Discord failed to start', { error: Stri
 const ac = new AbortController();
 
 const watch = () => { if (!isPaused() && loadSettings().watcher.enabled !== false) watchOnce(db).catch((e) => log.error('watcher failed', { error: String(e) })); };
+let lastWatch = Date.now();
 watch();
-const timer = setInterval(watch, loadSettings().watcher.pollMinutes * 60_000);
+// checks each minute so a pollMinutes change from the dashboard applies without a restart
+const timer = setInterval(() => { if (Date.now() - lastWatch >= loadSettings().watcher.pollMinutes * 60_000) { lastWatch = Date.now(); watch(); } }, 60_000);
 const track = () => trackOnce(db).then(() => syncDiscord(db)).catch((e) => log.error('tracker failed', { error: String(e) })); // stats tabs follow the new views
 const trackTimer = setInterval(track, 60 * 60_000); // hourly: views move slowly, API quotas are small
 const learn = () => {

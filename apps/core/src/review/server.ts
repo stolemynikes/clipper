@@ -9,6 +9,7 @@ import { logger } from '../log.ts';
 import { setupRoute } from './setup.ts';
 import { campaignsRoute } from './campaigns.ts';
 import { apiRoute } from './api.ts';
+import { saveSetting } from './settings.ts';
 import { CSS, esc } from './style.ts';
 import { bestScores, decide, getClip, rating, pendingClips, type ReviewRow, setOff, setPaused, status, type Toggle } from './review.ts';
 import { isPractice, setPractice } from '../modules/practice/practice.ts';
@@ -135,6 +136,10 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
   const act = /^\/clip\/(\d+)\/(approve|reject)$/.exec(url.pathname);
   if (act) return res.writeHead(decide(db, Number(act[1]), act[2] === 'approve') ? 204 : 409).end();
   if (url.pathname === '/pause' || url.pathname === '/resume') { setPaused(url.pathname === '/pause'); return res.writeHead(204).end(); }
+  if (url.pathname === '/settings') {
+    try { saveSetting(url.searchParams.get('key') ?? '', url.searchParams.get('value') ?? ''); return res.writeHead(204).end(); }
+    catch (e) { return res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end((e as Error).message); }
+  }
   const tog = /^\/toggle\/(study|learn|claude|practice)\/(on|off)$/.exec(url.pathname);
   if (tog) { if (tog[1] === 'practice') setPractice(tog[2] === 'on'); else setOff(tog[1] as Toggle, tog[2] === 'off'); return res.writeHead(204).end(); }
   res.writeHead(404).end();
