@@ -20,7 +20,7 @@ test('stats: pool shows views, no made-up money', () => {
 
 test('stats: no posts', () => assert.equal(statsText('lacy', [acct({ posts: 0 })]), '**lacy** · no posts yet'));
 
-const lacy = (o: Record<string, unknown> = {}) => ({ name: 'lacy', channel: 'lacy', tag: '@lacy', campaign: { platform: 'contentrewards', ratePer1k: 1, maxPerClip: 100, endsAt: '2026-12-31', url: 'https://contentrewards.com/c/campaigns/x', rules: { hashtags: ['#Lacy'] } }, ...o }) as unknown as StreamerConfig;
+const lacy = (o: Record<string, unknown> = {}) => ({ name: 'lacy', channel: 'lacy', tag: '@lacy', enabled: true, campaign: { platform: 'contentrewards', ratePer1k: 1, maxPerClip: 100, endsAt: '2026-12-31', url: 'https://contentrewards.com/c/campaigns/x', rules: { hashtags: ['#Lacy'] } }, ...o }) as unknown as StreamerConfig;
 
 test('info: card with pay, end date, tag and link; green while open', () => {
   const e = infoEmbed(lacy(), new Date('2026-11-24'));
@@ -37,6 +37,7 @@ test('info: card with pay, end date, tag and link; green while open', () => {
 test('category: dot shows open, off or closed', () => {
   assert.equal(categoryName(lacy(), new Date('2026-11-24')), '🟢 lacy · $1/1K');
   assert.equal(categoryName(lacy({ enabled: false }), new Date('2026-11-24')), '⏸️ lacy · $1/1K');
+  assert.equal(categoryName(lacy({ enabled: undefined }), new Date('2026-11-24')), '⏸️ lacy · $1/1K'); // opt-in: unset means off
   assert.match(categoryName(lacy(), new Date('2027-01-05')), /^🔴/);
 });
 

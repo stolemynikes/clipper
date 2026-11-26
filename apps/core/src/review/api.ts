@@ -33,7 +33,7 @@ function campaignRow(s: StreamerConfig, posts: Post[]) {
   const { facts, warnings } = campaignNotes(c), cr = c.platform === 'content_rewards' ? crState(c.url, [s.name, s.channel]) : null;
   return {
     closed: Boolean(cr?.closed), budget: cr?.budget || null, left: cr?.budget ? cr.left : null,
-    name: s.name, tag: s.tag, site: c.platform, status: campaignStatus(s, p).label, open: campaignOpen(c), on: s.enabled !== false && campaignOpen(c), stage: s.stage ?? 'clips',
+    name: s.name, tag: s.tag, site: c.platform, status: campaignStatus(s, p).label, open: campaignOpen(c), on: s.enabled === true && campaignOpen(c), stage: s.stage ?? 'clips',
     endsAt: c.endsAt, daysLeft: daysLeft(c.endsAt), ratePer1k: c.ratePer1k, maxPerClip: c.maxPerClip, pool: c.pool ?? null, url: c.url ?? null,
     platforms: (Array.isArray(c.rules?.platforms) ? c.rules.platforms : []).map(String), views, earned, posts: mine.length,
     perClip: expectedPerClip(c, p?.medianShortViews), study: p ? { done: p.done, total: p.total, finished: Boolean(p.finished), error: p.error ?? null } : null,

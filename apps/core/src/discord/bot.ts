@@ -65,8 +65,8 @@ export function infoEmbed(s: StreamerConfig, now = new Date()): APIEmbed {
   if (warn.length) fields.push({ name: 'Watch out', value: warn.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
   return {
     title: `${s.name} · ${open ? 'open' : 'closed'}`, url: c.url || undefined,
-    description: s.enabled === false ? '⏸️ Clips are off for this campaign' : '▶️ Making clips for this campaign',
-    color: !open ? COLOR.closed : s.enabled === false ? COLOR.off : COLOR.open, fields: fields.slice(0, 25),
+    description: s.enabled !== true ? '⏸️ Clips are off for this campaign' : '▶️ Making clips for this campaign',
+    color: !open ? COLOR.closed : s.enabled !== true ? COLOR.off : COLOR.open, fields: fields.slice(0, 25),
   };
 }
 
@@ -107,14 +107,14 @@ export function totalsText(rows: ReturnType<typeof accountStats>, clipCounts: { 
 /** Category name: status dot, streamer and what it pays, so the sidebar reads at a glance. */
 export function categoryName(s: StreamerConfig, now = new Date()): string {
   const c = s.campaign!;
-  const dot = !campaignOpen(c, now) ? '🔴' : s.enabled === false ? '⏸️' : '🟢';
+  const dot = !campaignOpen(c, now) ? '🔴' : s.enabled !== true ? '⏸️' : '🟢';
   return `${dot} ${s.name} · ${c.pool ? `$${num(c.pool)} pool` : `$${c.ratePer1k}/1K`}`.slice(0, 100);
 }
 
 const pauseButton = () => new ButtonBuilder().setCustomId('pause').setStyle(isPaused() ? ButtonStyle.Success : ButtonStyle.Danger).setLabel(isPaused() ? 'Resume everything' : 'Pause everything');
 const row = (...b: ButtonBuilder[]) => new ActionRowBuilder<ButtonBuilder>().addComponents(...b);
 const controls = (s: StreamerConfig) => row(
-  new ButtonBuilder().setCustomId(`clips:${s.name}`).setStyle(s.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel(s.enabled === false ? 'Turn clips on' : 'Turn clips off'),
+  new ButtonBuilder().setCustomId(`clips:${s.name}`).setStyle(s.enabled !== true ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel(s.enabled !== true ? 'Turn clips on' : 'Turn clips off'),
   pauseButton(),
   new ButtonBuilder().setCustomId('refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh'),
 );
@@ -267,7 +267,7 @@ async function onButton(db: Db, i: ButtonInteraction) {
   }
   if (what === 'clips') {
     const s = allStreamers().find((x) => x.name === arg);
-    if (s) update(s.name, { enabled: s.enabled === false });
+    if (s) update(s.name, { enabled: s.enabled !== true });
   } else if (what === 'pause') setPaused(!isPaused());
   await i.deferUpdate();
   await syncDiscord(db);

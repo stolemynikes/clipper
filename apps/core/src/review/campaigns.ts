@@ -161,7 +161,7 @@ export function updateCampaign(name: string, patch: Record<string, unknown>) {
 
 export function campaignStatus(s: StreamerConfig, p: Progress | null): { label: string; cls: string } {
   if (!campaignOpen(s.campaign!)) return { label: 'Ended', cls: '' };
-  if (s.enabled === false) return { label: 'Off', cls: '' };
+  if (s.enabled !== true) return { label: 'Off', cls: '' };
   if (s.stage === 'study') return p?.finished ? { label: 'Study done', cls: 'on' } : p?.error ? { label: 'Study failed', cls: 'warn' } : { label: 'Studying', cls: 'warn' };
   return { label: 'Making clips', cls: 'on' };
 }
@@ -171,7 +171,7 @@ function card(s: StreamerConfig, earned: { views: number; earned: number }) {
   const { facts, warnings } = campaignNotes(c);
   const exp = expectedPerClip(c, p?.medianShortViews);
   const plats = (Array.isArray(c.rules?.platforms) ? c.rules.platforms : []).map(String);
-  const on = s.enabled !== false && campaignOpen(c);
+  const on = s.enabled === true && campaignOpen(c);
   const studying = on && s.stage === 'study' && !p?.finished;
   const pct = p?.total ? Math.round((p.done / p.total) * 100) : 0;
   const expLine = exp !== null ? `About $${exp.toFixed(2)} per clip (other clippers' Shorts get ~${p!.medianShortViews!.toLocaleString('en-US')} views)`
@@ -208,7 +208,7 @@ progress::-webkit-progress-value{background:var(--ok);transition:width .4s}progr
 .checks{display:flex;flex-wrap:wrap;gap:8px}.checks label{display:flex;align-items:center;gap:6px;min-height:44px;margin:0;padding:0 12px;border:1px solid var(--line);border-radius:999px;color:var(--text)}.checks input{width:auto;min-height:0;margin:0}
 </style></head><body>
 <header><h1>Campaigns</h1><a href="/">Review</a><a href="/setup">Accounts</a>
-<div class="tiles"><div class="tile"><b>${list.filter((s) => s.enabled !== false && campaignOpen(s.campaign!)).length}</b><span>On</span></div><div class="tile"><b>${list.length}</b><span>Saved</span></div><div class="tile"><b>$${total.toFixed(2)}</b><span>Earned</span></div></div></header>
+<div class="tiles"><div class="tile"><b>${list.filter((s) => s.enabled === true && campaignOpen(s.campaign!)).length}</b><span>On</span></div><div class="tile"><b>${list.length}</b><span>Saved</span></div><div class="tile"><b>$${total.toFixed(2)}</b><span>Earned</span></div></div></header>
 <main>
 <section><h2>Your campaigns</h2>
 <div class="filters"><label>Sort<select id="sort" onchange="order()"><option value="vtp">Fewest views to first pay</option><option value="rate">Most $ per 1K</option><option value="end">Ends soonest</option></select></label>

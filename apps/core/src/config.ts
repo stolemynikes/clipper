@@ -42,10 +42,10 @@ const read = (file: string) => parse(readFileSync(join(paths.configDir, file), '
 
 export const loadSettings = (): Settings => read('settings.yaml');
 
-/** Hard rule: only streamers that are enabled AND have a campaign that hasn't ended. */
+/** Hard rule: only streamers switched on by the owner (enabled: true, opt-in) AND have a campaign that hasn't ended. */
 export function activeStreamers(now = new Date()): StreamerConfig[] {
   const list: StreamerConfig[] = read('streamers.yaml')?.streamers ?? [];
-  return list.filter((s) => s.enabled !== false && s.campaign && campaignOpen(s.campaign, now));
+  return list.filter((s) => s.enabled === true && s.campaign && campaignOpen(s.campaign, now));
 }
 
 /** Not ended (endsAt is a date: valid through that day) and budget not nearly gone. */

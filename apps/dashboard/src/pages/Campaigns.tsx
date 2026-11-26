@@ -70,11 +70,13 @@ export function CampaignPage({ name }: { name: string }) {
   if (error) return <Page back={back} title="Not found"><div className="card"><Empty icon="flag" title="No such campaign" text={`There is no campaign for ${name}.`} /></div></Page>;
   if (isLoading || !c) return <Page back={back} title={name}><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}</div></Page>;
 
-  const toggle = async () => {
+  // Opt-in: off until the owner starts it. Study first (top clips), then the owner presses Make clips.
+  const studying = c.stage === 'study', studied = Boolean(c.study?.finished);
+  const act = async (what: 'on' | 'off' | 'clips') => {
     setBusy(true);
     try {
-      await post(`/campaigns/${c.name}/${c.on ? 'off' : 'on'}`);
-      toast({ text: c.on ? `Stopped making ${c.name} clips` : `Making ${c.name} clips again`, tone: c.on ? 'down' : 'up' });
+      await post(`/campaigns/${c.name}/${what}`);
+      toast({ text: { off: `Stopped ${c.name}`, on: studying && !studied ? `Studying ${c.name}'s best clips first` : `Making ${c.name} clips`, clips: `Making ${c.name} clips` }[what], tone: what === 'off' ? 'down' : 'up' });
       qc.invalidateQueries();
     } catch { toast({ text: 'That did not work. Try again.', tone: 'info' }); }
     finally { setBusy(false); }
@@ -85,7 +87,8 @@ export function CampaignPage({ name }: { name: string }) {
     <Page back={back} kicker={`${c.closed ? 'Submissions closed' : c.status} · ${ends(c)}${c.open ? ' left' : ''}`} title={c.name}
       right={<div className="flex gap-3">
         {c.url ? <a className="btn" href={c.url} target="_blank" rel="noreferrer"><Icon name="link" size={16} />Open brief</a> : null}
-        {c.open ? <button className={`btn ${c.on ? '' : 'btn-1'}`} disabled={busy} onClick={toggle}>{c.on ? 'Stop clips' : 'Start clips'}</button> : null}
+        {c.open && c.on && studying ? <button className="btn btn-1" disabled={busy || !studied} title={studied ? undefined : 'Wait until the study is done'} onClick={() => act('clips')}>Make clips</button> : null}
+        {c.open ? <button className={`btn ${c.on ? '' : 'btn-1'}`} disabled={busy} onClick={() => act(c.on ? 'off' : 'on')}>{c.on ? 'Stop' : studying && !studied ? 'Start study' : 'Start clips'}</button> : null}
       </div>}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
         <Stat label={c.pool ? 'Pool' : 'Pays'}>{c.pool ? money(c.pool) : c.ratePer1k ? `${money(c.ratePer1k)}/1K` : '—'}</Stat>
