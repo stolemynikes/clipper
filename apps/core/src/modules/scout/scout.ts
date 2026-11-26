@@ -132,7 +132,7 @@ export function crState(url: string | undefined, names: string[], scan = cachedD
 
 /** Joins one campaign on CR, reads the brief, saves it and starts the study. Returns the saved name, or why it stopped. */
 export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: string; reason?: string }> {
-  const page = await cr('join', PAGE + c.id) as { joined: boolean; text: string; docs?: string };
+  const page = await cr('join', PAGE + c.id, c.name) as { joined: boolean; text: string; docs?: string };
   if (!page.joined) return { reason: 'CR did not confirm the join' };
   const text = [c.name, c.description, page.text, page.docs ?? '', await rulesDocs(c)].join('\n');
   const { fields } = await extract(text, PAGE + c.id);

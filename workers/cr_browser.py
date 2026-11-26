@@ -153,12 +153,37 @@ def campaign_id(target: str) -> str | None:
     return m.group(1) if m else None
 
 
-def go(page, target: str) -> None:
-    """Gets to target by clicking: a sidebar label, or a campaign via its card on Campaigns (joined) or Discover."""
+def search(page, cid: str, name: str) -> bool:
+    """Types the campaign title in Discover's search bar (it shows a few seconds after load) and clicks the matching card."""
+    nav(page, "Discover")
+    box = page.locator("input[placeholder]:visible, textarea[placeholder]:visible").last  # the sidebar has no input; the bar sits at the bottom
+    try:
+        box.wait_for(timeout=20_000)
+    except Exception:
+        return False
+    human_click(page, box)
+    page.keyboard.type(name, delay=random.randint(40, 110))
+    pause()
+    page.keyboard.press("Enter")
+    settle(page)
+    card = page.locator(f'a[href*="/campaigns/{cid}"]').filter(visible=True)
+    try:
+        card.first.wait_for(timeout=15_000)
+    except Exception:
+        return False
+    human_click(page, card.first)
+    settle(page)
+    return cid in page.url
+
+
+def go(page, target: str, name: str = "") -> None:
+    """Gets to target by clicking: a sidebar label, or a campaign via Discover search, or its card on Campaigns (joined) or Discover."""
     cid = campaign_id(target)
     if not cid:
         return nav(page, target or "Campaigns")
     if cid in page.url:
+        return
+    if name and search(page, cid, name):
         return
     for section in ("Campaigns", "Discover"):
         nav(page, section)
@@ -312,10 +337,10 @@ def read_docs(page) -> str:
     return "\n".join(out)
 
 
-def join(target: str) -> dict:
+def join(target: str, name: str = "") -> dict:
     """Joins a campaign (owner allowed this) and returns the page text, which shows the brief only after joining."""
     def run(page):
-        go(page, target)
+        go(page, target, name)
         if "Joined" not in page.inner_text("body"):
             scroll(page, random.randint(300, 900))  # read the card before joining
             human_click(page, page.get_by_role("button", name="Join Campaign").filter(visible=True).first)  # the page has a hidden copy for small screens
@@ -331,16 +356,16 @@ def join(target: str) -> dict:
 
 
 if __name__ == "__main__":
-    cmd, arg = (sys.argv[1:] + ["", ""])[:2]
+    cmd, arg, name = (sys.argv[1:] + ["", "", ""])[:3]
     if cmd == "open":
-        with_page(lambda page: go(page, arg) if arg else None)
+        with_page(lambda page: go(page, arg, name) if arg else None)
         print(json.dumps({"ok": True}))
     elif cmd == "dump":
         print(json.dumps(dump(arg)))
     elif cmd == "discover":
         print(json.dumps(discover()))
     elif cmd == "join":
-        print(json.dumps(join(arg)))
+        print(json.dumps(join(arg, name)))
     elif cmd == "click":
         print(json.dumps(click(arg, sys.argv[3], (sys.argv[4:] or [""])[0])))
     else:
