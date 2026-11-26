@@ -78,8 +78,7 @@ function Tabs({ route }: { route: string }) {
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 h-20 pb-4 bg-bg/95 backdrop-blur border-t border-line grid grid-cols-5" aria-label="Main">
       {tabs.map(([p, label, icon]) => {
         const on = p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover') || (p === '/more' && MORE.some(([m]) => route.startsWith(m)));
-        return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline ${on ? 'text-t' : 'text-f'}`}>
-          {on ? <motion.span layoutId="tab-ind" className="absolute top-0 inset-x-5 h-[3px] rounded-b-full bg-a" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
+        return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline transition-colors ${on ? 'text-a' : 'text-f'}`}>
           <motion.span animate={{ scale: on ? 1.08 : 1, y: on ? -1 : 0 }} transition={{ duration: 0.18 }} className="flex"><Icon name={icon} size={22} /></motion.span>{label}
           {p === '/review' && data?.toReview ? <span className="badge num absolute top-1 left-1/2 ml-1 h-[18px] min-w-[18px] text-[11px]">{data.toReview}</span> : null}
         </a>;

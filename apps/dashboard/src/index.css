@@ -19,7 +19,7 @@
 
 html, body, #root { height: 100%; }
 body { margin: 0; background: var(--color-bg); color: var(--color-t); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-a { color: inherit; }
+@layer base { a { color: inherit; } } /* layered, so text-* utilities on links win */
 :focus-visible { outline: 2px solid var(--color-a); outline-offset: 2px; }
 
 @layer components {
