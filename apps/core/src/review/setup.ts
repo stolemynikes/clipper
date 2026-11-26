@@ -29,10 +29,12 @@ export const APPS: Record<Platform, {
     extra: { access_type: 'offline', prompt: 'consent' }, // prompt=consent: Google only returns a refresh token on consent
     redirect: () => `http://127.0.0.1:${port()}/oauth/youtube`, // Desktop clients accept any loopback port without registering it
     steps: [
-      '<a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Create a Google Cloud project</a> (name it "Clipper").',
-      'Turn on the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a>.',
-      'Fill in the <a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener">consent screen</a> (External). Under Audience press "Publish app", or the login stops working after 7 days.',
-      '<a href="https://console.cloud.google.com/auth/clients/create" target="_blank" rel="noopener">Create a client</a> of type <b>Desktop app</b> and paste the ID and secret below.',
+      'Use your own Google account; no new account needed. <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Create a Google Cloud project</a> (name it "Clipper"). It is free.',
+      'Turn on the <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a>: press <b>Enable</b>.',
+      'Open the <a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener">consent screen</a> (menu: APIs &amp; Services, OAuth consent screen) and press Get started. App name "Clipper", your own email. Choose <b>External</b>, not Internal: Internal only works for a company Google Workspace.',
+      'Under <b>Audience</b> press <b>Publish app</b>, or the login stops working after 7 days.',
+      'Under <a href="https://console.cloud.google.com/auth/clients/create" target="_blank" rel="noopener">Clients</a> press Create client, type <b>Desktop app</b>. A pop-up shows the Client ID and Client secret: paste them below and press Save keys.',
+      'Press <b>Connect account</b> at the top and log in with the Google account that owns the YouTube channel for the clips (it may differ from the Cloud account). If Google says "hasn't verified this app": press Advanced, then Go to Clipper. That is normal for your own app.',
       'Until Google approves your app (<a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" rel="noopener">audit form</a>), uploads stay private.',
     ],
   },
