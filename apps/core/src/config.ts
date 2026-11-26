@@ -35,7 +35,7 @@ export interface StreamerConfig {
   captionStyle?: CaptionStyle; // bold | pop | clean; overrides settings.clip.captionStyle
   tag: string;
   stage?: 'study' | 'clips'; // study: learn from top clips first, no VODs; clips (or unset): make clips
-  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; disclosureInVideo?: boolean; maxSec?: number; budget?: number; budgetLeft?: number; pool?: number; url?: string; whopBountyId?: string; rulePreset?: string; judgeRules?: string[] }; // rulePreset/judgeRules: layout checks for the judge (config/judge-rules.yaml). url: campaign page to submit on. whopBountyId: bnty_ id, enables auto-submit via the Whop API. budget: total $ for rate campaigns (from the brief). pool: $ split by views
+  campaign?: { platform: string; ratePer1k: number; maxPerClip: number; endsAt: string; rules?: Record<string, unknown>; disclosure?: boolean; disclosureInVideo?: boolean; maxSec?: number; budget?: number; budgetLeft?: number; closed?: boolean; pool?: number; url?: string; whopBountyId?: string; rulePreset?: string; judgeRules?: string[] }; // rulePreset/judgeRules: layout checks for the judge (config/judge-rules.yaml). url: campaign page to submit on. whopBountyId: bnty_ id, enables auto-submit via the Whop API. closed: CR submissions closed (scout sync). budget: total $ for rate campaigns (from the brief). pool: $ split by views
 }
 
 const read = (file: string) => parse(readFileSync(join(paths.configDir, file), 'utf8'));
@@ -50,7 +50,7 @@ export function activeStreamers(now = new Date()): StreamerConfig[] {
 
 /** Not ended (endsAt is a date: valid through that day) and budget not nearly gone. */
 export function campaignOpen(c: NonNullable<StreamerConfig['campaign']>, now = new Date()): boolean {
-  return new Date(c.endsAt).getTime() + 86_400_000 > now.getTime() && !(typeof c.budgetLeft === 'number' && c.budgetLeft < MIN_BUDGET);
+  return !c.closed && new Date(c.endsAt).getTime() + 86_400_000 > now.getTime() && !(typeof c.budgetLeft === 'number' && c.budgetLeft < MIN_BUDGET);
 }
 const MIN_BUDGET = 50; // $ left: below this new clips likely go unpaid
 

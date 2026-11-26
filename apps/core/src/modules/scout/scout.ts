@@ -9,7 +9,7 @@ import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
 import { enqueue } from '../../queue/queue.ts';
-import { allStreamers, extract, isGambling, toEntry, update } from '../../review/campaigns.ts';
+import { allStreamers, extract, isGambling, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
 import { bark } from '../../review/review.ts';
 
 const log = logger('scout');
@@ -92,7 +92,22 @@ const DISCOVER_FILE = join(paths.dataDir, 'cr-discover.json');
 export async function discoverAll(): Promise<CrCampaign[]> {
   const { campaigns, joined } = await cr('discover') as { campaigns: CrCampaign[]; joined?: JoinedCard[] };
   writeFileSync(DISCOVER_FILE, JSON.stringify({ at: new Date().toISOString(), campaigns, joined: joined ?? [] }));
+  syncCrState();
   return campaigns;
+}
+
+/** Copies CR's closed flag and budget left into streamers.yaml, so campaignOpen() stops clips for closed or spent campaigns. */
+export function syncCrState(scan = cachedDiscover(), list = allStreamers(), save = updateCampaign) {
+  for (const s of list) {
+    const c = s.campaign;
+    if (c?.platform !== 'content_rewards') continue;
+    const st = crState(c.url, [s.name, s.channel], scan);
+    if (!st) continue;
+    const budgetLeft = st.budget > 0 ? st.left : c.budgetLeft;
+    if (st.closed === Boolean(c.closed) && budgetLeft === c.budgetLeft) continue;
+    save(s.name, { closed: st.closed, ...(budgetLeft != null ? { budgetLeft } : {}) });
+    log.info(`${s.name}: CR submissions ${st.closed ? 'closed' : 'open'}${st.budget ? `, $${st.left} of $${st.budget} left` : ''}`);
+  }
 }
 
 /** A card on CR's "Your Campaigns" (server-rendered, so text only): spent/budget as shown, e.g. "1,750" or "1.2K". */

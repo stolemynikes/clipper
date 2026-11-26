@@ -151,6 +151,14 @@ export function update(name: string, patch: Partial<StreamerConfig> | StreamerCo
   writeFileSync(file(), doc.toString());
 }
 
+/** Sets single campaign fields in place, so the comments in streamers.yaml stay. */
+export function updateCampaign(name: string, patch: Record<string, unknown>) {
+  const doc = loadDoc(), i = allStreamers().findIndex((s) => s.name === name);
+  if (i < 0) throw new Error('Campaign not found');
+  for (const [k, v] of Object.entries(patch)) doc.setIn(['streamers', i, 'campaign', k], v);
+  writeFileSync(file(), doc.toString());
+}
+
 export function campaignStatus(s: StreamerConfig, p: Progress | null): { label: string; cls: string } {
   if (!campaignOpen(s.campaign!)) return { label: 'Ended', cls: '' };
   if (s.enabled === false) return { label: 'Off', cls: '' };

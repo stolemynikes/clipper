@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { StreamerConfig } from '../../config.ts';
 import { toEntry } from '../../review/campaigns.ts';
-import { type CrCampaign, crState, formOf, pickCampaigns } from './scout.ts';
+import { type CrCampaign, crState, formOf, syncCrState, pickCampaigns } from './scout.ts';
+import { campaignOpen } from '../../config.ts';
 
 const camp = (o: Partial<CrCampaign> = {}): CrCampaign => ({
   id: 'abc', name: 'Lacy GTA 6 Pool', status: 'active', private: false, requiresApplication: false, budgetCents: 1_250_000,
@@ -66,4 +67,16 @@ test('crState: closed card by streamer name, budget left from card text', () => 
   assert.deepEqual(crState('https://x/c/campaigns/zz', ['kaicenat'], scan), { closed: true, budget: 0, left: 0 });
   assert.deepEqual(crState(undefined, ['boeshi'], scan), { closed: false, budget: 1750, left: 1472 });
   assert.equal(crState(undefined, ['nobody'], scan), null);
+});
+
+test('syncCrState: closed CR campaign is marked closed and stops being open', () => {
+  const scan = { at: null, campaigns: [], joined: [{ name: 'Kai Cenat - $10,000 GTA 6 Pool Campaign', closed: true, spent: null, budget: null }, { name: 'Boeshi GTA 6 Clipping', closed: false, spent: '278', budget: '1,750' }] };
+  const camp = { platform: 'content_rewards', ratePer1k: 1, maxPerClip: 0, endsAt: '2099-01-01' };
+  const list = [{ name: 'Kai Cenat', channel: 'kaicenat', campaign: camp }, { name: 'Boeshi', channel: 'boeshi', campaign: { ...camp, budgetLeft: 1472 } }] as never[];
+  const saved: Record<string, any> = {};
+  syncCrState(scan, list, (n, p) => { saved[n] = p; });
+  assert.deepEqual(Object.keys(saved), ['Kai Cenat']);
+  assert.equal(saved['Kai Cenat'].closed, true);
+  assert.equal(campaignOpen({ ...camp, ...saved['Kai Cenat'] }), false);
+  assert.equal(campaignOpen(camp), true);
 });
