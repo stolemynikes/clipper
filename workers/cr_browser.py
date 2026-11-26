@@ -163,8 +163,8 @@ def go(page, target: str) -> None:
     for section in ("Campaigns", "Discover"):
         nav(page, section)
         card = page.locator(f'a[href*="/campaigns/{cid}"]')
-        for _ in range(15):  # cards load while scrolling
-            if card.count():
+        for _ in range(15):  # cards load while scrolling; Discover rows also page sideways
+            if card.count() or (section == "Discover" and page_rows(page, card.count)):
                 human_click(page, card.filter(visible=True).first)
                 return settle(page)
             scroll(page, random.randint(1200, 2200))
@@ -225,6 +225,21 @@ def click(target: str, label: str, shot: str = "") -> dict:
     return with_page(run)
 
 
+def page_rows(page, found=None) -> bool:
+    """Click each on-screen row's "Scroll forward" arrow until it greys out: rows show only ~7 cards until paged.
+    Stops early and returns True once found() is true."""
+    for _ in range(60):  # shortcut: cap per scroll round, so a row that never disables cannot loop forever
+        if found and found():
+            return True
+        arrow = page.locator('button[aria-label="Scroll forward"]:not([disabled])').filter(visible=True)
+        h = page.evaluate("innerHeight")  # real Chrome over CDP: viewport_size is None
+        btn = next((arrow.nth(i) for i in range(arrow.count()) if (b := arrow.nth(i).bounding_box()) and 0 < b["y"] < h - 40), None)
+        if btn is None:
+            return bool(found and found())
+        human_click(page, btn)
+        page.wait_for_timeout(random.randint(500, 1100))
+
+
 def discover() -> dict:
     """All campaigns the Discover page loads, from CR's own JSON responses (the site's fetches; ours get 'Failed to fetch').
     Scrolls down like a person reading until no new campaigns load (the list pages in while scrolling)."""
@@ -246,6 +261,7 @@ def discover() -> dict:
                     if isinstance(c, dict) and c.get("id") and c.get("name"):
                         out[c["id"]] = c
             before, read = len(out), len(seen)
+            page_rows(page)
             move_to(page, random.uniform(400, 1100), random.uniform(250, 650))
             scroll(page, random.randint(1400, 2600))
             page.wait_for_timeout(random.randint(800, 1800))
