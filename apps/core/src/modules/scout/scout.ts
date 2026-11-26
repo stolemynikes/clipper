@@ -140,10 +140,8 @@ export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: stri
   const tag = fields.tag && text.toLowerCase().includes(fields.tag.replace(/^@/, '').toLowerCase()) ? fields.tag : ''; // only a tag written in the brief
   const entry = toEntry(formOf(c, { ...fields, tag }));
   if (!campaignOpen(entry.campaign!)) return { reason: 'Budget or time is used up' };
-  entry.enabled = true;
   if (!datedEnd(fields.endsAt)) entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
-  update(entry.name, entry, true);
-  enqueue(db, 'campaign.study', { name: entry.name }, { maxAttempts: 2 });
+  update(entry.name, entry, true); // opt-in: owner starts study/clips on the campaign page
   log.info(`joined and saved ${entry.name} (${c.name})`);
   return { name: entry.name };
 }
