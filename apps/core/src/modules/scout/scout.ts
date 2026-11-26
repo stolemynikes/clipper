@@ -8,7 +8,6 @@ import type { Db } from '../../db/client.ts';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
-import { enqueue } from '../../queue/queue.ts';
 import { allStreamers, extract, isGambling, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
 import { bark } from '../../review/review.ts';
 
