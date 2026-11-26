@@ -82,7 +82,7 @@ Campaign page: ${url || 'not given'}
 Brief:
 ${text.slice(0, 12_000)}`;
   const r = await fetch(`${OLLAMA}/api/chat`, {
-    method: 'POST', signal: AbortSignal.timeout(180_000),
+    method: 'POST', signal: AbortSignal.timeout(600_000) /* cold load + CPU offload while a game holds VRAM took >180s */,
     body: JSON.stringify({
       model: loadSettings().titles?.model ?? 'gemma4:12b', stream: false, think: false, keep_alive: '2m',
       format: { type: 'object', properties: props, required: Object.keys(props) }, options: { temperature: 0, num_predict: 900 },

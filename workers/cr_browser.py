@@ -2,7 +2,7 @@
 
 No --enable-automation flag, so the site sees a normal browser. The profile lives on E: and holds only the CR login.
 Navigation is by clicks only (owner's wish): <target> is a sidebar label (Discover, Settings, ...) or a campaign id/url,
-reached by clicking its card. The site itself is opened once, in one tab that stays open.
+reached by clicking its card. The site is opened once per run; Chrome closes when the run is done.
 Usage: cr_browser.py open [target]     start Chrome (if needed) and show the CR tab, e.g. to log in once
        cr_browser.py dump <target>     JSON: page text, links, JSON API calls seen while getting there
        cr_browser.py discover          JSON: campaigns the Discover page loads
@@ -35,19 +35,20 @@ def port_open() -> bool:
         return s.connect_ex(("127.0.0.1", PORT)) == 0
 
 
-def ensure_chrome() -> None:
+def ensure_chrome() -> bool:
+    """Starts the CR Chrome if it is not running. True when this run started it."""
     if port_open():
-        return
+        return False
     exe = next((p for p in CHROME if p.is_file()), None)
     if not exe:
         raise SystemExit(json.dumps({"error": "Chrome not found"}))
     PROFILE.mkdir(parents=True, exist_ok=True)
     subprocess.Popen([str(exe), f"--remote-debugging-port={PORT}", f"--user-data-dir={PROFILE}",
-                      "--no-first-run", "--no-default-browser-check", "--mute-audio", HOME],
+                      "--no-first-run", "--no-default-browser-check", "--mute-audio", "--start-maximized", HOME],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(40):
         if port_open():
-            return
+            return True
         time.sleep(0.5)
     raise SystemExit(json.dumps({"error": "Chrome debug port did not open"}))
 
@@ -56,7 +57,6 @@ def with_page(fn):
     """Runs fn on the one CR tab. The site is opened once (HOME); after that the bot only clicks, like a person."""
     import msvcrt
     from playwright.sync_api import sync_playwright
-    ensure_chrome()
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, "a+b") as lock:
         for _ in range(600):  # one command at a time on the shared tab; the OS frees the lock if a run dies
@@ -67,14 +67,26 @@ def with_page(fn):
                 time.sleep(1)
         else:
             raise SystemExit(json.dumps({"error": "CR tab busy"}))
+        ensure_chrome()  # inside the lock: a run that waited never finds a Chrome that is closing
         with sync_playwright() as pw:
-            ctx = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{PORT}").contexts[0]
+            browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{PORT}")
+            ctx = browser.contexts[0]
             page = next((p for p in ctx.pages if "contentrewards.com" in p.url), None)
             if not page:
                 page = ctx.new_page()
                 page.goto(HOME, wait_until="networkidle", timeout=60_000)
             page.bring_to_front()
-            return fn(page)  # the tab stays open for the next run
+            try:  # full screen, also when the owner left the window small
+                cdp = ctx.new_cdp_session(page)
+                win = cdp.send("Browser.getWindowForTarget")["windowId"]
+                cdp.send("Browser.setWindowBounds", {"windowId": win, "bounds": {"windowState": "maximized"}})
+            except Exception:
+                pass
+            try:
+                return fn(page)
+            finally:
+                if sys.argv[1:2] != ["open"]:  # owner's wish: the CR Chrome closes when a run is done; "open" (to log in) keeps it
+                    browser.new_browser_cdp_session().send("Browser.close")
 
 
 def pause(lo: float = 0.4, hi: float = 1.2) -> None:
@@ -153,17 +165,21 @@ def go(page, target: str) -> None:
         card = page.locator(f'a[href*="/campaigns/{cid}"]')
         for _ in range(15):  # cards load while scrolling
             if card.count():
-                human_click(page, card.first)
+                human_click(page, card.filter(visible=True).first)
                 return settle(page)
             scroll(page, random.randint(1200, 2200))
-        if section == "Campaigns":  # joined cards are "Preview <name>" buttons, not links: open each until the id matches
-            names = [b.get_attribute("aria-label") for b in page.locator('button[aria-label^="Preview "]').all()]
-            for name in names:
-                nav(page, "Campaigns")
-                human_click(page, page.locator(f'button[aria-label="{name}"]').first)
-                settle(page)
-                if cid in page.url:
-                    return
+    # Not on Discover as a link: joined cards are "Preview <name>" buttons, so open each until the id matches.
+    nav(page, "Campaigns")
+    names = [b.get_attribute("aria-label") for b in page.locator('button[aria-label^="Preview "]').all()]
+    for name in names:
+        nav(page, "Campaigns")
+        btn = page.locator(f'button[aria-label="{name}"]')
+        if not btn.count():  # list did not render this card again: skip it, not fail the whole run
+            continue
+        human_click(page, btn.filter(visible=True).first)
+        settle(page)
+        if cid in page.url:
+            return
     raise SystemExit(json.dumps({"error": f"campaign card not found: {cid}"}))
 
 
@@ -171,8 +187,8 @@ def click_label(page, label: str) -> None:
     for role in ("button", "tab", "link", "menuitem"):
         el = page.get_by_role(role, name=label, exact=True)
         if el.count():
-            return human_click(page, el.first)
-    human_click(page, page.get_by_text(label, exact=True).first)
+            return human_click(page, el.filter(visible=True).first)
+    human_click(page, page.get_by_text(label, exact=True).filter(visible=True).first)
 
 
 def dump(target: str) -> dict:
@@ -219,7 +235,7 @@ def discover() -> dict:
         page.on("response", lambda r: seen.append(r) if "/api/campaign/campaigns/discover" in r.url else None)
         nav(page, "Discover")
         out, read, still = {}, 0, 0
-        for _ in range(40):  # at most ~40 scroll rounds; stops once three rounds bring nothing new
+        for _ in range(25):  # at most ~25 scroll rounds; stops once three rounds bring nothing new
             for r in seen[read:]:
                 try:
                     data = r.json().get("data")
@@ -233,7 +249,7 @@ def discover() -> dict:
             move_to(page, random.uniform(400, 1100), random.uniform(250, 650))
             scroll(page, random.randint(1400, 2600))
             page.wait_for_timeout(random.randint(800, 1800))
-            still = still + 1 if len(seen) == read and len(out) == before else 0
+            still = still + 1 if len(out) == before else 0
             if still >= 3:
                 break
         return {"campaigns": list(out.values())}
@@ -276,12 +292,12 @@ def join(target: str) -> dict:
         go(page, target)
         if "Joined" not in page.inner_text("body"):
             scroll(page, random.randint(300, 900))  # read the card before joining
-            human_click(page, page.get_by_role("button", name="Join Campaign").first)
+            human_click(page, page.get_by_role("button", name="Join Campaign").filter(visible=True).first)  # the page has a hidden copy for small screens
             page.wait_for_timeout(4000)
             settle(page)
         more = page.get_by_role("button", name="Show more")
         if more.count():
-            human_click(page, more.first)
+            human_click(page, more.filter(visible=True).first)
             page.wait_for_timeout(800)
         text = page.inner_text("body")
         return {"joined": "Joined" in text, "text": text[:20000], "docs": read_docs(page)}
