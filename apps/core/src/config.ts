@@ -10,7 +10,7 @@ export interface Settings {
   clip: { minSec: number; maxSec: number; targetSec?: [number, number]; disclosure: boolean; disclosureText: string; disclosureSec: number; disclosureInVideo?: boolean; disclosureInText?: boolean; captionStyle?: CaptionStyle; censor: { platforms: string[]; words: string[] } };
   limits: { maxPostsPerAccountPerDay: number; maxPostsPerAccountPerWeek?: number };
   platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
-  publish?: { tiktokPublic?: boolean };
+  publish?: { tiktokPublic?: boolean; auto?: boolean };
   titles?: { model: string };
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };

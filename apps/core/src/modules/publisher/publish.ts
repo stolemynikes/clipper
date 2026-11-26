@@ -2,7 +2,7 @@
 // YouTube Data API (resumable upload); TikTok and Instagram via PostPeer when POSTPEER_API_KEY is set, else TikTok Content Posting API.
 import { readFileSync, statSync } from 'node:fs';
 import { and, eq, gte } from 'drizzle-orm';
-import { loadSettings } from '../../config.ts';
+import { loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { accounts, clips, moments, posts } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
@@ -51,6 +51,43 @@ export function campaignAllows(rules: Record<string, unknown> | undefined, platf
 }
 
 const viaPostpeer = (platform: string) => platform !== 'youtube' && hasPostpeer();
+/** True when Snip can upload to this account itself (PostPeer or a saved token). */
+export const canUpload = (a: { id: number; platform: string }) => viaPostpeer(a.platform) || hasToken(a.id);
+
+/** Title and description for one platform, the same text the publisher posts (also shown on Ready to post for manual posting). */
+export function clipText(clip: { title: string | null; transcript: string | null }, cfg: StreamerConfig, platform: AccountPlatform) {
+  const settings = loadSettings(), rules = cfg.campaign?.rules;
+  const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure);
+  const text = postText(platform, {
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags, hashtags: (Array.isArray(rules?.hashtags) ? rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
+  return { paid, text };
+}
+
+const HOSTS: Record<string, RegExp> = { youtube: /(^|\.)(youtube\.com|youtu\.be)$/, tiktok: /(^|\.)tiktok\.com$/, instagram: /(^|\.)instagram\.com$/ };
+/** A link the owner pasted after posting by hand. Null if it is not a link to that platform. externalId lets the tracker read views. */
+export function parsePostUrl(platform: string, raw: string): { url: string; externalId: string | null } | null {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { return null; }
+  if (u.protocol !== 'https:' || !HOSTS[platform]?.test(u.hostname.toLowerCase())) return null;
+  const id = platform === 'youtube' ? (/^\/shorts\/([\w-]{11})/.exec(u.pathname)?.[1] ?? u.searchParams.get('v') ?? (u.hostname.endsWith('youtu.be') ? u.pathname.slice(1, 12) : null))
+    : platform === 'tiktok' ? /\/video\/(\d+)/.exec(u.pathname)?.[1] ?? null : null;
+  return { url: u.toString(), externalId: id && /^[\w-]+$/.test(id) ? id : null };
+}
+
+/** Saves a hand-made post so the submitter and tracker treat it like one Snip posted. */
+export function addManualPost(db: Db, clipId: number, accountId: number, raw: string) {
+  const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
+  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  if (!clip || !account) throw new Error('Clip or account not found');
+  if (clip.status !== 'approved' && clip.status !== 'posted') throw new Error('This clip is not kept');
+  const link = parsePostUrl(account.platform, raw);
+  if (!link) throw new Error(`That is not a ${account.platform} link`);
+  if (db.select().from(posts).where(and(eq(posts.clipId, clipId), eq(posts.accountId, accountId))).get()) throw new Error('This clip already has a link for this account');
+  const postId = db.insert(posts).values({ clipId, accountId, platform: account.platform, url: link.url, externalId: link.externalId, postedAt: new Date() }).returning({ id: posts.id }).get().id;
+  db.update(clips).set({ status: 'posted' }).where(eq(clips.id, clipId)).run();
+  enqueue(db, 'post.submit', { postId });
+  return postId;
+}
 
 /** Content Rewards rejects "reused content": one clip goes to ONE account per platform. Rotates by clip so accounts share the work. */
 export function pickAccounts<T extends { id: number; platform: string }>(list: T[], clipId: number): T[] {
@@ -72,7 +109,7 @@ export function queuePublish(db: Db, clipId: number) {
   if (!source.streamerId) return;
   const on = loadSettings().platforms;
   const ready = db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()
-    .filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && (viaPostpeer(a.platform) || hasToken(a.id)));
+    .filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && canUpload(a));
   for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
 }
 
@@ -155,9 +192,7 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const { cfg } = sourceContext(db, moment.sourceId);
   if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
   if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
-  const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure);
-  const text = postText(account.platform as AccountPlatform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags, hashtags: (Array.isArray(cfg.campaign?.rules?.hashtags) ? cfg.campaign.rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
+  const { paid, text } = clipText(clip, cfg, account.platform as AccountPlatform);
   const pp = viaPostpeer(account.platform);
   if (!pp && account.platform === 'instagram') return log.warn('Instagram posting needs POSTPEER_API_KEY');
   const token = pp ? '' : await accessToken(accountId, account.platform as Platform);

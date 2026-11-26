@@ -18,6 +18,7 @@ export const FIELDS: Field[] = [
   { key: 'platforms.tiktok', group: 'Posting', label: 'Post to TikTok', help: 'Kept clips go up on TikTok.', ...bool },
   { key: 'platforms.youtube', group: 'Posting', label: 'Post to YouTube Shorts', help: 'Kept clips go up as Shorts.', ...bool },
   { key: 'platforms.instagram', group: 'Posting', label: 'Post to Instagram Reels', help: 'Kept clips go up as Reels.', ...bool },
+  { key: 'publish.auto', group: 'Posting', label: 'Post kept clips by themselves', help: 'Off: kept clips wait on Ready to post, where you post or download them yourself.', ...bool },
   { key: 'publish.tiktokPublic', group: 'Posting', label: 'TikTok posts are public', help: 'Only turn on once TikTok approved the app. Off: only you see the posts.', ...bool },
 
   { key: 'clip.minSec', group: 'Clips', label: 'Shortest clip', help: 'Moments shorter than this are dropped.', ...n(5, 60, 's') },

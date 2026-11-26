@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { campaignAllows, fallbackTitle, nextDay, pickAccounts, politicsBlocked, postText } from './publish.ts';
+import { campaignAllows, parsePostUrl, fallbackTitle, nextDay, pickAccounts, politicsBlocked, postText } from './publish.ts';
 import { chunk } from '../tracker/track.ts';
 
 test('fallback title: first sentence, capped, no angle brackets', () => {
@@ -97,4 +97,18 @@ test('politics blocked on TikTok and X only', () => {
 test('study hashtags go after the required tags and never duplicate them', () => {
   const o = { title: 'He hit the shot', streamer: 'Clix', tag: '@Clix', disclosure: '#ad', extra: ['#gaming', '#CLIX'] };
   assert.equal(postText('tiktok', o).title, 'He hit the shot #ad @Clix #Clix #fyp #gaming');
+});
+
+test('parsePostUrl: pasted links give the id the tracker needs, other sites are refused', () => {
+  assert.deepEqual(parsePostUrl('youtube', ' https://youtube.com/shorts/abcDEF12345?feature=share '), { url: 'https://youtube.com/shorts/abcDEF12345?feature=share', externalId: 'abcDEF12345' });
+  assert.equal(parsePostUrl('youtube', 'https://youtu.be/abcDEF12345')?.externalId, 'abcDEF12345');
+  assert.equal(parsePostUrl('youtube', 'https://www.youtube.com/watch?v=abcDEF12345')?.externalId, 'abcDEF12345');
+  assert.equal(parsePostUrl('tiktok', 'https://www.tiktok.com/@me/video/7312345678901234567')?.externalId, '7312345678901234567');
+  assert.equal(parsePostUrl('tiktok', 'https://vm.tiktok.com/ZMabc/')?.externalId, null); // short link: saved, views not tracked
+  assert.equal(parsePostUrl('instagram', 'https://www.instagram.com/reel/Cxyz/')?.externalId, null);
+  assert.equal(parsePostUrl('tiktok', 'https://youtube.com/shorts/abcDEF12345'), null);
+  assert.equal(parsePostUrl('youtube', 'https://evil.com/?youtube.com'), null);
+  assert.equal(parsePostUrl('youtube', 'https://notyoutube.com/shorts/abcDEF12345'), null);
+  assert.equal(parsePostUrl('youtube', 'http://youtube.com/shorts/abcDEF12345'), null);
+  assert.equal(parsePostUrl('youtube', 'not a link'), null);
 });

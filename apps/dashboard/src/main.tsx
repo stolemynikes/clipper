@@ -6,6 +6,7 @@ import { pref, setRate, useOverview, useRate } from './api.ts';
 import { Icon, Page, Toasts } from './ui.tsx';
 import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
+import { Ready } from './pages/Ready.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
 import { Settings } from './pages/Settings.tsx';
@@ -14,7 +15,7 @@ import { Discover } from './pages/Discover.tsx';
 import { Accounts, Earnings, History } from './pages/Money.tsx';
 import './index.css';
 
-// Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/discover, #/earnings, #/history, #/accounts, #/settings
+// Hash routes: #/, #/review, #/ready, #/campaigns, #/campaigns/<name>, #/discover, #/earnings, #/history, #/accounts, #/settings
 // Old Bark/Discord links end in #clip-<id>; send those to that clip in Review.
 const read = () => { const h = location.hash.slice(1) || '/'; return /^clip-\d+$/.test(h) ? `/review/${h.slice(5)}` : h; };
 const useRoute = () => {
@@ -26,6 +27,7 @@ const useRoute = () => {
 const NAV: [string, string, string, string?][] = [
   ['/', 'Home', 'home'],
   ['/review', 'Review', 'play', 'Clips'],
+  ['/ready', 'Ready to post', 'upload'],
   ['/campaigns', 'Campaigns', 'flag', 'Money'],
   ['/earnings', 'Earnings', 'money'],
   ['/history', 'History', 'clock'],
@@ -97,6 +99,7 @@ function App() {
     : camp ? <CampaignPage name={camp[1]} />
     : route.startsWith('/campaigns') ? <Campaigns />
     : route === '/discover' ? <Discover />
+    : route === '/ready' ? <Ready />
     : route === '/earnings' ? <Earnings />
     : route === '/history' ? <History />
     : route === '/accounts' ? <Accounts />

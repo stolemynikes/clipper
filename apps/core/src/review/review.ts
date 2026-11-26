@@ -61,7 +61,7 @@ export function decide(db: Db, id: number, approved: boolean): boolean {
     copyFileSync(clip.filePath, join(dir, `clip-${clip.id}-${basename(clip.filePath)}`));
   }
   db.update(clips).set({ status: approved ? 'approved' : 'rejected' }).where(eq(clips.id, id)).run();
-  if (approved) queuePublish(db, id);
+  if (approved && loadSettings().publish?.auto !== false) queuePublish(db, id); // off: the clip waits on Ready to post
   return true;
 }
 

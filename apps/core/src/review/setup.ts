@@ -147,7 +147,7 @@ export function setupInfo(db: Db) {
   };
 }
 
-async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
+export async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   let s = '';
   for await (const c of req) { s += c; if (s.length > 10_000) throw new Error('body too large'); }
   return s ? JSON.parse(s) : {};

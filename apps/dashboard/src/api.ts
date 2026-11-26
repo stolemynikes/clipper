@@ -101,3 +101,6 @@ export interface SettingField {
 }
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => get<SettingField[]>('/api/settings') });
 export const useRate = () => useQuery({ queryKey: ['rate'], queryFn: () => get<{ eurPerUsd: number | null; date: string }>('/api/rate'), staleTime: 3_600_000 });
+export interface ReadyAccount { id: number; platform: string; label: string; name: string; canPost: boolean; posted: boolean; url: string | null; text: { title: string; description: string } }
+export interface ReadyClip { id: number; streamer: string; title: string | null; seconds: number; at: number; file: boolean; accounts: ReadyAccount[] }
+export const useReady = () => useQuery({ queryKey: ['ready'], queryFn: () => get<ReadyClip[]>('/api/ready'), ...live });

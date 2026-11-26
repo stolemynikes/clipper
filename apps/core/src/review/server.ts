@@ -6,7 +6,10 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Db } from '../db/client.ts';
 import { logger } from '../log.ts';
-import { setupRoute } from './setup.ts';
+import { body, setupRoute } from './setup.ts';
+import { addManualPost, publishClip } from '../modules/publisher/publish.ts';
+import { posts } from '../db/schema.ts';
+import { and, eq } from 'drizzle-orm';
 import { campaignsRoute } from './campaigns.ts';
 import { apiRoute } from './api.ts';
 import { saveSetting } from './settings.ts';
@@ -145,9 +148,22 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
     try { saveSetting(url.searchParams.get('key') ?? '', url.searchParams.get('value') ?? ''); return res.writeHead(204).end(); }
     catch (e) { return res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end((e as Error).message); }
   }
+  const rp = /^\/ready\/(\d+)\/(post|link)\/(\d+)$/.exec(url.pathname);
+  if (rp) return readyAction(db, req, res, Number(rp[1]), rp[2], Number(rp[3]));
   const tog = /^\/toggle\/(study|learn|claude|practice)\/(on|off)$/.exec(url.pathname);
   if (tog) { if (tog[1] === 'practice') setPractice(tog[2] === 'on'); else setOff(tog[1] as Toggle, tog[2] === 'off'); return res.writeHead(204).end(); }
   res.writeHead(404).end();
+}
+
+/** Ready to post: Post uploads now through the publisher; link saves a post made by hand on the phone. */
+async function readyAction(db: Db, req: IncomingMessage, res: ServerResponse, clipId: number, what: string, accountId: number) {
+  const fail = (code: number, msg: string) => res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' }).end(msg);
+  try {
+    if (what === 'link') { addManualPost(db, clipId, accountId, String((await body(req)).url ?? '')); return res.writeHead(204).end(); }
+    await publishClip(db, { clipId, accountId });
+    if (db.select().from(posts).where(and(eq(posts.clipId, clipId), eq(posts.accountId, accountId))).get()) return res.writeHead(204).end();
+    return fail(409, 'Not posted: the daily or weekly limit is reached (it goes tomorrow), or this platform does not count for the campaign.');
+  } catch (e) { log.warn(`ready ${what} failed for clip ${clipId}`, { error: String(e).slice(0, 200) }); return fail(400, (e as Error).message.slice(0, 300)); }
 }
 
 /** Bind to the Tailscale IP (REVIEW_HOST) so the page is only reachable from your own devices. */

@@ -11,6 +11,12 @@ import { reasons } from './server.ts';
 import { isPractice } from '../modules/practice/practice.ts';
 import { accountStats, accountVia, connectUrl, earn, LABEL, setupInfo, tokenKey } from './setup.ts';
 import { getSettings } from './settings.ts';
+import { existsSync } from 'node:fs';
+import { desc, eq, gte, inArray, and } from 'drizzle-orm';
+import { accounts as accountRows, clips, moments, posts as postRows } from '../db/schema.ts';
+import { sourceContext } from '../modules/vod-clipper/analyze.ts';
+import { campaignAllows, canUpload, clipText } from '../modules/publisher/publish.ts';
+import type { AccountPlatform } from './setup.ts';
 import { cachedDiscover, crState, twitchOf, whyNot } from '../modules/scout/scout.ts';
 
 const DAY = 86_400_000;
@@ -161,6 +167,28 @@ function accounts(db: Db) {
   };
 }
 
+/** Ready to post: kept clips of the last 14 days, per account of that streamer the text to copy, the link if posted, and whether Snip can upload it. */
+function ready(db: Db) {
+  const on = loadSettings().platforms;
+  const list = db.select({ clip: clips, sourceId: moments.sourceId }).from(clips).innerJoin(moments, eq(clips.momentId, moments.id))
+    .where(and(inArray(clips.status, ['approved', 'posted']), gte(clips.createdAt, new Date(Date.now() - 14 * DAY)))).orderBy(desc(clips.createdAt)).limit(40).all();
+  return list.flatMap(({ clip, sourceId }) => {
+    let ctx;
+    try { ctx = sourceContext(db, sourceId); } catch { return []; } // campaign ended: hard rule, never post it
+    const { source, cfg } = ctx;
+    const done = db.select().from(postRows).where(eq(postRows.clipId, clip.id)).all();
+    const accs = source.streamerId ? db.select().from(accountRows).where(eq(accountRows.streamerId, source.streamerId)).all() : [];
+    return [{
+      id: clip.id, streamer: cfg.name, title: clip.title, seconds: Math.round(clip.durationSec ?? 0), at: clip.createdAt.getTime(), file: existsSync(clip.filePath),
+      accounts: accs.filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform))
+        // one clip goes to one account per platform (CR "reused content"), so hide the others once it is up somewhere
+        .filter((a) => !done.some((p) => p.platform === a.platform && p.accountId !== a.id))
+        .map((a) => ({ id: a.id, platform: a.platform, label: LABEL[a.platform], name: a.name, canPost: canUpload(a),
+          url: done.find((p) => p.accountId === a.id)?.url ?? null, posted: done.some((p) => p.accountId === a.id), text: clipText(clip, cfg, a.platform as AccountPlatform).text })),
+    }];
+  }).sort((a, b) => Number(a.accounts.every((x) => x.posted)) - Number(b.accounts.every((x) => x.posted)));
+}
+
 // USD to EUR from the ECB daily reference rates (public file, no personal data), cached 12 hours.
 let rate: { eurPerUsd: number; date: string; at: number } | null = null;
 async function usdRate() {
@@ -206,6 +234,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/history') return json(res, history(db)), true;
   if (url.pathname === '/api/settings') return json(res, getSettings()), true;
   if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
+  if (url.pathname === '/api/ready') return json(res, ready(db)), true;
   if (url.pathname === '/api/rate') return usdRate().then((r) => json(res, r), () => json(res, rate ?? { eurPerUsd: null, date: '', at: 0 })), true;
   if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
