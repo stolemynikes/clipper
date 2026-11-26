@@ -192,7 +192,7 @@ function AccountCard({ a, data }: { a: Account; data: AccountsData }) {
       {a.via === 'postpeer' ? <p className="text-[13px] text-m m-0">Connect or change it on <a href="https://postpeer.dev" target="_blank" rel="noopener">postpeer.dev</a>.</p>
         : a.via === 'needs_postpeer' ? <p className="text-[13px] text-warn m-0">{a.label} posts go through PostPeer. Add its key to .env first.</p>
         : !app?.ready ? <p className="text-[13px] text-warn m-0">Set up the {app?.label ?? a.label} app below first.</p>
-        : a.platform === 'youtube' && !a.connected ? <p className="text-[13px] text-m m-0">Press Connect on the PC itself, not on your phone.</p> : null}
+        : a.platform === 'youtube' && !a.connected && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? <PasteBack /> : null}
       <div className="flex gap-2 mt-auto">
         {a.via === 'oauth' ? (app?.ready
           ? <a href={a.connectUrl} className={`btn flex-1 no-underline ${a.connected ? '' : 'btn-1'}`}><Icon name="link" size={16} />{a.connected ? 'Connect again' : 'Connect account'}</a>
@@ -201,6 +201,25 @@ function AccountCard({ a, data }: { a: Account; data: AccountsData }) {
           {busy ? <span className="spin" aria-hidden /> : <Icon name="trash" size={16} />}{sure ? 'Sure? Remove' : 'Remove'}</button>
       </div>
     </motion.section>
+  );
+}
+
+/** Phone login: Google returns to the PC's own address, so the phone shows an error page. Its address finishes the login here. */
+function PasteBack() {
+  const qc = useQueryClient(), toast = useToast(), [v, setV] = useState(''), [busy, setBusy] = useState(false);
+  const send = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { await post('/setup/paste', { url: v }); setV(''); toast({ text: 'Account connected', tone: 'up' }); await qc.invalidateQueries({ queryKey: ['accounts'] }); }
+    catch (er) { toast({ text: er instanceof Error && er.message.length > 3 ? er.message : 'That did not work. Try again.', tone: 'info' }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <form onSubmit={send} className="flex flex-col gap-2">
+      <label htmlFor="paste-back" className="text-[13px] text-m">On your phone: after Allow, the page will not load. Copy its whole address and paste it here.</label>
+      <div className="flex gap-2"><input id="paste-back" value={v} onChange={(e) => setV(e.target.value)} placeholder="http://127.0.0.1:8787/oauth/youtube?…" autoComplete="off"
+        className="h-11 px-3 rounded-[12px] bg-s border border-line text-t text-sm focus:outline-none focus:border-a flex-1 min-w-0" />
+        <button className="btn !h-11" disabled={busy || !v.trim()} aria-busy={busy}>{busy ? <span className="spin" aria-hidden /> : null}Finish</button></div>
+    </form>
   );
 }
 

@@ -106,8 +106,36 @@ export const keysSet = (p: Platform) => Boolean(process.env[APPS[p].idKey] && pr
 /** How an account posts: via PostPeer, needs PostPeer first (Instagram), or our own OAuth app. */
 export const accountVia = (platform: string) =>
   platform === 'instagram' && !hasPostpeer() ? 'needs_postpeer' : platform !== 'youtube' && hasPostpeer() ? 'postpeer' : 'oauth';
-// YouTube's redirect is loopback: the whole login must run in a browser on the PC itself.
-export const connectUrl = (a: { id: number; platform: string }) => a.platform === 'youtube' ? `http://127.0.0.1:${port()}/connect/${a.id}` : `/connect/${a.id}`;
+// Relative everywhere: YouTube's redirect stays loopback, so a phone login ends on an error page whose address the owner pastes back (/setup/paste).
+export const connectUrl = (a: { id: number; platform: string }) => `/connect/${a.id}`;
+
+/** Query of a pasted OAuth return address, or null when it is not one of ours. */
+export function pastedQuery(s: string): { platform: string; q: URLSearchParams } | null {
+  try {
+    const u = new URL(s.trim()), m = /\/oauth\/(youtube|tiktok)$/.exec(u.pathname);
+    return m && u.searchParams.get('state') ? { platform: m[1], q: u.searchParams } : null;
+  } catch { return null; }
+}
+
+/** Finish a login from the OAuth return query. Returns the message for the Accounts tab and whether it worked. */
+async function finishLogin(platform: string, q: URLSearchParams): Promise<[boolean, string]> {
+  const state = q.get('state') ?? '', st = pending.get(state);
+  pending.delete(state);
+  if (!st || st.platform !== platform || Date.now() - st.at > 10 * 60_000) return [false, 'That login link expired. Press Connect again.'];
+  if (q.get('error')) return [false, 'Login was cancelled.'];
+  const app = APPS[st.platform];
+  const r = await fetch(app.token, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({
+    [app.idParam]: process.env[app.idKey] ?? '', client_secret: process.env[app.secretKey] ?? '', code: q.get('code') ?? '',
+    grant_type: 'authorization_code', redirect_uri: app.redirect() ?? '' }) });
+  const tok = await r.json().catch(() => ({})) as { refresh_token?: string; error?: string };
+  if (!r.ok || !tok.refresh_token) {
+    log.warn(`oauth ${st.platform} token exchange failed (${r.status} ${tok.error ?? ''})`); // never log the body: it can hold tokens
+    return [false, 'Connecting failed. Check the app keys and try again.'];
+  }
+  saveEnv(tokenKey(st.accountId), tok.refresh_token);
+  log.info(`account ${st.accountId} connected (${st.platform})`);
+  return [true, 'Account connected.'];
+}
 
 /** Accounts tab setup data: which app keys are saved (never the values), campaigns to link an account to. */
 export function setupInfo(db: Db) {
@@ -166,26 +194,15 @@ export async function setupRoute(db: Db, req: IncomingMessage, res: ServerRespon
   }
 
   const cb = /^\/oauth\/(youtube|tiktok)$/.exec(p);
-  if (req.method === 'GET' && cb) {
-    const st = pending.get(url.searchParams.get('state') ?? '');
-    pending.delete(url.searchParams.get('state') ?? '');
-    if (!st || st.platform !== cb[1] || Date.now() - st.at > 10 * 60_000) return (back(res, 'That login link expired. Press Connect again.'), true);
-    if (url.searchParams.get('error')) return (back(res, 'Login was cancelled.'), true);
-    const app = APPS[st.platform];
-    const r = await fetch(app.token, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({
-      [app.idParam]: process.env[app.idKey] ?? '', client_secret: process.env[app.secretKey] ?? '', code: url.searchParams.get('code') ?? '',
-      grant_type: 'authorization_code', redirect_uri: app.redirect() ?? '' }) });
-    const tok = await r.json().catch(() => ({})) as { refresh_token?: string; error?: string };
-    if (!r.ok || !tok.refresh_token) {
-      log.warn(`oauth ${st.platform} token exchange failed (${r.status} ${tok.error ?? ''})`); // never log the body: it can hold tokens
-      return (back(res, 'Connecting failed. Check the app keys and try again.'), true);
-    }
-    saveEnv(tokenKey(st.accountId), tok.refresh_token);
-    log.info(`account ${st.accountId} connected (${st.platform})`);
-    return (back(res, 'Account connected.'), true);
-  }
+  if (req.method === 'GET' && cb) return (back(res, (await finishLogin(cb[1], url.searchParams))[1]), true);
 
   if (req.method !== 'POST' || req.headers['x-clipper'] !== '1') return false;
+  if (p === '/setup/paste') {
+    const v = (await body(req)).url, got = typeof v === 'string' ? pastedQuery(v) : null;
+    if (!got) return (text(res, 400, 'That is not the address from the login page. Copy the whole address bar.'), true);
+    const [ok, msg] = await finishLogin(got.platform, got.q);
+    return (ok ? res.writeHead(204).end() : text(res, 400, msg), true);
+  }
   const appSave = /^\/setup\/app\/(\w+)$/.exec(p);
   if (appSave) {
     if (!isPlatform(appSave[1])) return (text(res, 404, 'Unknown platform.'), true);
