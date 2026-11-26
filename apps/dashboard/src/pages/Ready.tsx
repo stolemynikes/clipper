@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ago, post, useReady, type ReadyAccount, type ReadyClip } from '../api.ts';
-import { Empty, Icon, Page, Skeleton, useToast } from '../ui.tsx';
+import { ago, post, type ReadyAccount, type ReadyClip } from '../api.ts';
+import { Empty, Icon, useToast } from '../ui.tsx';
 
 const input = 'h-12 px-4 rounded-[14px] bg-s border border-line text-t text-base focus:outline-none focus:border-a w-full min-w-0';
 
@@ -54,7 +54,7 @@ function ClipCard({ c }: { c: ReadyClip }) {
         {c.file ? <a href={`/clip/${c.id}.mp4`} download={`${c.streamer}-clip-${c.id}.mp4`} className="btn !h-11 justify-center"><Icon name="download" size={16} />Download</a> : null}
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-1">
-        <span className="kicker">{c.streamer} · {c.seconds}s · kept {ago(c.at)}</span>
+        <span className="kicker">{c.seconds}s · kept {ago(c.at)}</span>
         <h2 className="text-[17px] font-semibold m-0">{c.title ?? `Clip ${c.id}`}</h2>
         <div className="flex flex-col">
           {c.accounts.length ? c.accounts.map((a) => <AccountRow key={a.id} clip={c} a={a} />)
@@ -65,17 +65,15 @@ function ClipCard({ c }: { c: ReadyClip }) {
   );
 }
 
-/** Kept clips that still need to go up. Post through Snip, or download, copy the text and paste the link back. */
-export function Ready() {
-  const { data } = useReady();
-  const open = (data ?? []).filter((c) => c.accounts.some((a) => !a.posted) || !c.accounts.length);
+/** A kept clip still waits when an account has not got it yet, or when there is no account to post it to. */
+export const waiting = (c: ReadyClip) => !c.accounts.length || c.accounts.some((a) => !a.posted);
+
+/** Ready to post tab of a campaign. Post through Snip, or download, copy the text and paste the link back. */
+export function ReadyList({ clips }: { clips: ReadyClip[] }) {
   return (
-    <Page kicker="Kept clips" title="Ready to post">
-      <div className="scroll flex-1 min-h-0 flex flex-col gap-6">
-        {!data ? [1, 2].map((i) => <Skeleton key={i} className="h-96" />)
-          : !open.length ? <div className="card"><Empty icon="upload" title="Nothing waiting" text="Clips you keep in Review show up here until they are on every account." /></div>
-          : open.map((c) => <ClipCard key={c.id} c={c} />)}
-      </div>
-    </Page>
+    <div className="scroll flex-1 min-h-0 flex flex-col gap-6">
+      {clips.length ? clips.map((c) => <ClipCard key={c.id} c={c} />)
+        : <div className="card"><Empty icon="upload" title="Nothing waiting" text="Clips you keep in Review show up here until they are on every account." /></div>}
+    </div>
   );
 }

@@ -12,7 +12,7 @@ export interface PostRow { id: number; clip: number; title: string | null; platf
 export interface CampaignDetail extends Campaign { hashtags: string[]; disclosure: boolean; clips: PostRow[] }
 export interface Activity { kind: 'new' | 'kept' | 'skipped' | 'posted'; text: string; at: number }
 export interface Overview {
-  paused: boolean; study: boolean; learning: boolean; practice: boolean; claude: boolean; working: number; failed: number; toReview: number; kept: number; skipped: number; posted: number; postedThisWeek: number;
+  paused: boolean; study: boolean; learning: boolean; practice: boolean; claude: boolean; working: number; failed: number; toReview: number; toPost: number; kept: number; skipped: number; posted: number; postedThisWeek: number;
   views: number; earned: number; reviewFrom: string[]; campaigns: Campaign[]; endingSoon: Campaign[]; canJoin: number; activity: Activity[];
   earnedSeries: number[]; earnedWeek: number; viewsWeek: number; viewsPrevWeek: number; reviewIds: number[]; sites: string[];
 }

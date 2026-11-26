@@ -6,7 +6,6 @@ import { pref, setRate, useOverview, useRate } from './api.ts';
 import { Icon, Page, Toasts } from './ui.tsx';
 import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
-import { Ready } from './pages/Ready.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
 import { Settings } from './pages/Settings.tsx';
@@ -15,9 +14,9 @@ import { Discover } from './pages/Discover.tsx';
 import { Accounts, Earnings, History } from './pages/Money.tsx';
 import './index.css';
 
-// Hash routes: #/, #/review, #/ready, #/campaigns, #/campaigns/<name>, #/discover, #/earnings, #/history, #/accounts, #/settings
+// Hash routes: #/, #/review, #/campaigns, #/campaigns/<name>, #/discover, #/earnings, #/history, #/accounts, #/settings
 // Old Bark/Discord links end in #clip-<id>; send those to that clip in Review.
-const read = () => { const h = location.hash.slice(1) || '/'; return /^clip-\d+$/.test(h) ? `/review/${h.slice(5)}` : h; };
+const read = () => { const h = location.hash.slice(1) || '/'; return /^clip-\d+$/.test(h) ? `/review/${h.slice(5)}` : h === '/ready' ? '/campaigns' : h; };
 const useRoute = () => {
   const [h, setH] = useState(read);
   useEffect(() => { const f = () => setH(read()); addEventListener('hashchange', f); return () => removeEventListener('hashchange', f); }, []);
@@ -27,7 +26,6 @@ const useRoute = () => {
 const NAV: [string, string, string, string?][] = [
   ['/', 'Home', 'home'],
   ['/review', 'Review', 'play', 'Clips'],
-  ['/ready', 'Ready to post', 'upload'],
   ['/campaigns', 'Campaigns', 'flag', 'Money'],
   ['/earnings', 'Earnings', 'money'],
   ['/history', 'History', 'clock'],
@@ -42,7 +40,8 @@ function Side({ route }: { route: string }) {
     <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}>
       {cur(p) ? <motion.span layoutId="side-ind" className="absolute inset-0 -z-10 rounded-[12px] bg-r" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
       <Icon name={icon} />{label}
-      {p === '/review' && data?.toReview ? <span className="badge num">{data.toReview}</span> : null}</a>
+      {p === '/review' && data?.toReview ? <span className="badge num">{data.toReview}</span> : null}
+      {p === '/campaigns' && data?.toPost ? <span className="badge num" title="Kept clips ready to post">{data.toPost}</span> : null}</a>
   );
   return (
     <aside className="hidden md:flex w-[248px] shrink-0 h-screen flex-col gap-1 py-6 px-4 border-r border-line">
@@ -83,6 +82,7 @@ function Tabs({ route }: { route: string }) {
         return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline transition-colors ${on ? 'text-a' : 'text-f'}`}>
           <motion.span animate={{ scale: on ? 1.08 : 1, y: on ? -1 : 0 }} transition={{ duration: 0.18 }} className="flex"><Icon name={icon} size={22} /></motion.span>{label}
           {p === '/review' && data?.toReview ? <span className="badge num absolute top-1 left-1/2 ml-1 h-[18px] min-w-[18px] text-[11px]">{data.toReview}</span> : null}
+          {p === '/campaigns' && data?.toPost ? <span className="badge num absolute top-1 left-1/2 ml-1 h-[18px] min-w-[18px] text-[11px]">{data.toPost}</span> : null}
         </a>;
       })}
     </nav>
@@ -99,7 +99,6 @@ function App() {
     : camp ? <CampaignPage name={camp[1]} />
     : route.startsWith('/campaigns') ? <Campaigns />
     : route === '/discover' ? <Discover />
-    : route === '/ready' ? <Ready />
     : route === '/earnings' ? <Earnings />
     : route === '/history' ? <History />
     : route === '/accounts' ? <Accounts />

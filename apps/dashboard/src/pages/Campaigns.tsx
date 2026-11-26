@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ago, count, money, PLATFORM, post, useCampaign, useCampaigns, type Campaign } from '../api.ts';
+import { ago, count, money, PLATFORM, post, useCampaign, useCampaigns, useReady, type Campaign } from '../api.ts';
+import { ReadyList, waiting } from './Ready.tsx';
 import { Counter, Empty, Icon, Page, Skeleton, Stat, useMore, useToast } from '../ui.tsx';
 
 const FILTERS: [string, (c: Campaign) => boolean][] = [['All', () => true], ['Running', (c) => c.on], ['Can join', (c) => c.open && !c.on], ['Ended', (c) => !c.open]];
@@ -66,6 +67,8 @@ export function CampaignPage({ name }: { name: string }) {
   const { data: c, isLoading, error } = useCampaign(name);
   const qc = useQueryClient(), toast = useToast(), [busy, setBusy] = useState(false);
   const clips = useMore(c?.clips ?? [], 25);
+  const ready = (useReady().data ?? []).filter((r) => r.streamer === name && waiting(r)), [tab, setTab] = useState<'clips' | 'ready' | null>(null);
+  const shown = tab ?? (ready.length ? 'ready' : 'clips'); // open on Ready to post while something waits
   const back = <a href="#/campaigns" className="text-sm text-m no-underline flex items-center gap-1 w-fit hover:text-t transition-colors"><Icon name="back" size={16} />Campaigns</a>;
   if (error) return <Page back={back} title="Not found"><div className="card"><Empty icon="flag" title="No such campaign" text={`There is no campaign for ${name}.`} /></div></Page>;
   if (isLoading || !c) return <Page back={back} title={name}><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}</div></Page>;
@@ -97,6 +100,12 @@ export function CampaignPage({ name }: { name: string }) {
         <Stat label="Earned so far" sub={share}><span className={c.earned > 0 ? 'text-up' : ''}><Counter value={c.earned} format={money} /></span></Stat>
       </div>
       <div className="flex flex-col md:flex-row gap-6 md:flex-1 md:min-h-0">
+        <div className="flex flex-col gap-4 flex-1 min-w-0 md:min-h-0">
+        <div className="segs shrink-0 self-start" role="tablist" aria-label="Clips">
+          {([['clips', 'Your clips', c.clips.length], ['ready', 'Ready to post', ready.length]] as const).map(([k, l, n]) => (
+            <button key={k} role="tab" className="seg" aria-selected={shown === k} aria-pressed={shown === k} onClick={() => setTab(k)}>{l} <span className="num text-f">{n}</span></button>))}
+        </div>
+        {shown === 'ready' ? <ReadyList clips={ready} /> :
         <section className="card !p-0 flex flex-col flex-1 min-w-0 md:min-h-0 overflow-hidden">
           {c.clips.length ? <>
             <div className="scroll flex-1 min-h-0">
@@ -114,7 +123,8 @@ export function CampaignPage({ name }: { name: string }) {
               {clips.sentinel}
             </div>{clips.footer}</>
             : <Empty icon="upload" title="No clips posted yet" text="Kept clips for this campaign show up here with their views." />}
-        </section>
+        </section>}
+        </div>
         <div className="md:w-[340px] shrink-0 flex flex-col gap-4 md:min-h-0">
           <section className="card flex flex-col gap-3 shrink-0">
             <h2 className="text-[17px] font-semibold m-0">Payout</h2>

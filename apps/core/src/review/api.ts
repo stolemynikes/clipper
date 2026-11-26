@@ -77,7 +77,7 @@ function overview(db: Db) {
   ].sort((a, b) => b.at - a.at).slice(0, 40);
   return {
     paused: st.paused, study: !isOff('study'), learning: !isOff('learn'), practice: isPractice(), claude: !isOff('claude'), working: sum(st.jobs, 'queued', 'running'), failed: sum(st.jobs, 'failed'),
-    toReview: sum(st.clips, 'pending_review'), kept: sum(st.clips, 'approved', 'posted'), skipped: sum(st.clips, 'rejected'),
+    toReview: sum(st.clips, 'pending_review'), toPost: ready(db).filter((c) => !c.accounts.length || c.accounts.some((a) => !a.posted)).length, kept: sum(st.clips, 'approved', 'posted'), skipped: sum(st.clips, 'rejected'),
     posted: posts.length, postedThisWeek: posts.filter((p) => (p.postedAt ?? 0) >= week).length,
     views, earned, earnedSeries, earnedWeek: earned - wk.earned, viewsWeek: views - wk.views, viewsPrevWeek: wk.views - wk2.views,
     reviewFrom: [...new Set(pending.map((r) => r.streamer.name))], reviewIds: pending.slice(0, 3).map((r) => r.clip.id),
