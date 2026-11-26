@@ -4,9 +4,19 @@ import { ago, count, money, PLATFORM, post, useCampaign, useCampaigns, type Camp
 import { Counter, Empty, Icon, Page, Skeleton, Stat, useMore, useToast } from '../ui.tsx';
 
 const FILTERS: [string, (c: Campaign) => boolean][] = [['All', () => true], ['Running', (c) => c.on], ['Can join', (c) => c.open && !c.on], ['Ended', (c) => !c.open]];
-const tone = (c: Campaign) => !c.open ? 'var(--color-f)' : /making/i.test(c.status) ? 'var(--color-up)' : c.on ? 'var(--color-a)' : 'var(--color-warn)';
+const tone = (c: Campaign) => !c.open || c.closed ? 'var(--color-f)' : /making/i.test(c.status) ? 'var(--color-up)' : c.on ? 'var(--color-a)' : 'var(--color-warn)';
 const ends = (c: Campaign) => !c.open ? 'Ended' : c.daysLeft === 1 ? 'Last day' : `${c.daysLeft} days`;
 const pay = (c: Campaign) => c.pool ? `${money(c.pool)} pool` : c.ratePer1k ? `${money(c.ratePer1k)} per 1K` : '—';
+
+/** Budget left as on the CR card; nothing when CR shows no budget. */
+function BudgetBar({ c }: { c: Campaign }) {
+  if (!c.budget || c.left == null) return null;
+  const pct = Math.max(0, Math.min(100, (c.left / c.budget) * 100));
+  return <>
+    <span className="text-[12px] text-f">{money(c.left)} of {money(c.budget)} left</span>
+    <div className="bar" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Budget left"><i style={{ width: `${pct}%`, background: pct < 15 ? 'var(--color-warn)' : undefined }} /></div>
+  </>;
+}
 
 export function Campaigns() {
   const { data, isLoading } = useCampaigns();
@@ -32,13 +42,13 @@ export function Campaigns() {
                 <tr key={c.name} className="cursor-pointer" onClick={() => { location.hash = `#/campaigns/${c.name}`; }}>
                   <td><a href={`#/campaigns/${c.name}`} className="no-underline font-medium flex items-center gap-3"><span className="av" aria-hidden>{c.name[0].toUpperCase()}</span>{c.name}</a></td>
                   <td className="hidden lg:table-cell text-m capitalize">{c.site.replace(/_/g, ' ')}</td>
-                  <td className="hidden md:table-cell text-m num">{pay(c)}</td>
+                  <td className="hidden md:table-cell text-m num"><div className="flex flex-col gap-1.5 w-[150px]">{pay(c)}<BudgetBar c={c} /></div></td>
                   <td className="r hidden md:table-cell num">{count(c.views)}</td>
                   <td className={`r hidden sm:table-cell num font-semibold ${c.earned > 0 ? 'text-up' : 'text-m'}`}>{money(c.earned)}</td>
                   <td className="hidden md:table-cell w-[160px]"><div className="flex flex-col gap-1.5"><span className={`text-[13px] num ${c.open && c.daysLeft <= 2 ? 'text-warn' : 'text-m'}`}>{ends(c)}</span>
                     {/* shortcut: no start date stored, bar assumes a 30-day campaign */}
                     <div className="bar"><i style={{ width: `${c.open ? Math.min(100, (c.daysLeft / 30) * 100) : 0}%`, background: c.daysLeft <= 2 ? 'var(--color-warn)' : undefined }} /></div></div></td>
-                  <td><span className="pill"><span className="dot" style={{ background: tone(c) }} />{c.status}</span></td>
+                  <td><span className="pill"><span className="dot" style={{ background: tone(c) }} />{c.closed ? 'Submissions closed' : c.status}</span></td>
                   <td className="r text-f w-8"><Icon name="next" size={16} /></td>
                 </tr>))}
               </tbody>
@@ -72,7 +82,7 @@ export function CampaignPage({ name }: { name: string }) {
   const share = c.pool && c.earned ? `${((c.earned / c.pool) * 100).toFixed(1)}% of the pool` : undefined;
 
   return (
-    <Page back={back} kicker={`${c.status} · ${ends(c)}${c.open ? ' left' : ''}`} title={c.name}
+    <Page back={back} kicker={`${c.closed ? 'Submissions closed' : c.status} · ${ends(c)}${c.open ? ' left' : ''}`} title={c.name}
       right={<div className="flex gap-3">
         {c.url ? <a className="btn" href={c.url} target="_blank" rel="noreferrer"><Icon name="link" size={16} />Open brief</a> : null}
         {c.open ? <button className={`btn ${c.on ? '' : 'btn-1'}`} disabled={busy} onClick={toggle}>{c.on ? 'Stop clips' : 'Start clips'}</button> : null}

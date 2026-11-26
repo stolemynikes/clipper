@@ -90,13 +90,30 @@ const DISCOVER_FILE = join(paths.dataDir, 'cr-discover.json');
 
 /** Reads every campaign on CR's Discover page and caches the list for the dashboard. */
 export async function discoverAll(): Promise<CrCampaign[]> {
-  const { campaigns } = await cr('discover') as { campaigns: CrCampaign[] };
-  writeFileSync(DISCOVER_FILE, JSON.stringify({ at: new Date().toISOString(), campaigns }));
+  const { campaigns, joined } = await cr('discover') as { campaigns: CrCampaign[]; joined?: JoinedCard[] };
+  writeFileSync(DISCOVER_FILE, JSON.stringify({ at: new Date().toISOString(), campaigns, joined: joined ?? [] }));
   return campaigns;
 }
 
-export const cachedDiscover = (): { at: string | null; campaigns: CrCampaign[] } =>
+/** A card on CR's "Your Campaigns" (server-rendered, so text only): spent/budget as shown, e.g. "1,750" or "1.2K". */
+export type JoinedCard = { name: string; closed: boolean; spent: string | null; budget: string | null };
+
+export const cachedDiscover = (): { at: string | null; campaigns: CrCampaign[]; joined?: JoinedCard[] } =>
   existsSync(DISCOVER_FILE) ? JSON.parse(readFileSync(DISCOVER_FILE, 'utf8')) : { at: null, campaigns: [] };
+
+const usd = (v: string | null) => v ? Number(v.replace(/,/g, '').replace(/K$/i, 'e3')) : null;
+const flat = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Live CR state of a joined campaign from the last scan: submissions closed, and budget left when CR shows it. */
+export function crState(url: string | undefined, names: string[], scan = cachedDiscover()): { closed: boolean; budget: number; left: number } | null {
+  const id = url?.split('/').pop(), c = scan.campaigns.find((x) => x.id === id);
+  // shortcut: cards carry no id, so match by the open campaign's name, else by streamer name in the card title
+  const card = (scan.joined ?? []).find((j) => c ? j.name === c.name : names.some((n) => n && flat(j.name).includes(flat(n))));
+  if (c) return { closed: Boolean(card?.closed), budget: c.budgetCents / 100, left: Math.max(0, c.budgetCents - (c.metrics?.budgetSpentCents ?? 0)) / 100 };
+  if (!card) return null;
+  const spent = usd(card.spent), budget = usd(card.budget);
+  return { closed: card.closed, budget: budget ?? 0, left: budget != null && spent != null ? Math.max(0, budget - spent) : 0 };
+}
 
 /** Joins one campaign on CR, reads the brief, saves it and starts the study. Returns the saved name, or why it stopped. */
 export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: string; reason?: string }> {

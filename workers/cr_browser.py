@@ -240,13 +240,23 @@ def page_rows(page, found=None) -> bool:
         page.wait_for_timeout(random.randint(500, 1100))
 
 
+# Joined cards are server-rendered (no JSON): per "Preview <name>" button, its card's text.
+JOINED_JS = r"""bs => bs.map(b => {
+  let e = b;
+  while (e.parentElement && e.parentElement.querySelectorAll('button[aria-label^="Preview "]').length === 1) e = e.parentElement;
+  const t = e.innerText.replace(/\s+/g, ' '), m = /\$([\d.,]+K?)\s*\/\s*\$([\d.,]+K?)/.exec(t);
+  return { name: b.getAttribute('aria-label').slice(8), closed: /submissions closed/i.test(t), spent: m ? m[1] : null, budget: m ? m[2] : null };
+})"""
+
+
 def discover() -> dict:
     """All campaigns the Discover page loads, from CR's own JSON responses (the site's fetches; ours get 'Failed to fetch').
     Scrolls down like a person reading until no new campaigns load (the list pages in while scrolling)."""
     def run(page):
         seen = []
-        if "/c/discover" in page.url:
-            nav(page, "Campaigns")  # leave first, so clicking Discover loads the list fresh
+        nav(page, "Campaigns")  # leave Discover first, so clicking it loads the list fresh; also read our joined cards here
+        page.wait_for_timeout(random.randint(1500, 2500))
+        joined = page.eval_on_selector_all('button[aria-label^="Preview "]', JOINED_JS)
         page.on("response", lambda r: seen.append(r) if "/api/campaign/campaigns/discover" in r.url else None)
         nav(page, "Discover")
         out, read, still = {}, 0, 0
@@ -268,7 +278,7 @@ def discover() -> dict:
             still = still + 1 if len(out) == before else 0
             if still >= 3:
                 break
-        return {"campaigns": list(out.values())}
+        return {"campaigns": list(out.values()), "joined": joined}
     return with_page(run)
 
 

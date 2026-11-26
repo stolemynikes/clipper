@@ -86,7 +86,7 @@ export function Settings() {
   const perSite = (s: string) => data.campaigns.filter((c) => c.site === s).length;
   return (
     <Page kicker="Changes save automatically" title="Settings" right={<Currency />}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+      <div className="scroll flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
         <div className="flex flex-col gap-6">
           <Card title="App">
             <Field id="app-name" label="App name" help="Shown in the sidebar of this browser.">

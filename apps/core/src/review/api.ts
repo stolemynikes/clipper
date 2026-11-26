@@ -11,7 +11,7 @@ import { reasons } from './server.ts';
 import { isPractice } from '../modules/practice/practice.ts';
 import { accountStats, accountVia, connectUrl, earn, LABEL, setupInfo, tokenKey } from './setup.ts';
 import { getSettings } from './settings.ts';
-import { cachedDiscover, twitchOf, whyNot } from '../modules/scout/scout.ts';
+import { cachedDiscover, crState, twitchOf, whyNot } from '../modules/scout/scout.ts';
 
 const DAY = 86_400_000;
 type Post = { id: number; clip: number; account: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
@@ -30,8 +30,9 @@ function campaignRow(s: StreamerConfig, posts: Post[]) {
   const c = s.campaign!, p = readProgress(s.name), mine = posts.filter((x) => x.streamer === s.name);
   const views = mine.reduce((t, x) => t + (x.views ?? 0), 0);
   const earned = mine.reduce((t, x) => t + earn(x.views ?? 0, c.ratePer1k, c.maxPerClip), 0);
-  const { facts, warnings } = campaignNotes(c);
+  const { facts, warnings } = campaignNotes(c), cr = c.platform === 'content_rewards' ? crState(c.url, [s.name, s.channel]) : null;
   return {
+    closed: Boolean(cr?.closed), budget: cr?.budget || null, left: cr?.budget ? cr.left : null,
     name: s.name, tag: s.tag, site: c.platform, status: campaignStatus(s, p).label, open: campaignOpen(c), on: s.enabled !== false && campaignOpen(c), stage: s.stage ?? 'clips',
     endsAt: c.endsAt, daysLeft: daysLeft(c.endsAt), ratePer1k: c.ratePer1k, maxPerClip: c.maxPerClip, pool: c.pool ?? null, url: c.url ?? null,
     platforms: (Array.isArray(c.rules?.platforms) ? c.rules.platforms : []).map(String), views, earned, posts: mine.length,

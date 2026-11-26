@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { StreamerConfig } from '../../config.ts';
 import { toEntry } from '../../review/campaigns.ts';
-import { type CrCampaign, formOf, pickCampaigns } from './scout.ts';
+import { type CrCampaign, crState, formOf, pickCampaigns } from './scout.ts';
 
 const camp = (o: Partial<CrCampaign> = {}): CrCampaign => ({
   id: 'abc', name: 'Lacy GTA 6 Pool', status: 'active', private: false, requiresApplication: false, budgetCents: 1_250_000,
@@ -59,4 +59,11 @@ test('whyNot gives a plain reason per blocked campaign', async () => {
   assert.equal(whyNot({ ...base, name: 'Stake casino clips' }, []), 'Gambling');
   assert.equal(whyNot({ ...base, referenceMaterials: [] }, []), 'No Twitch streamer');
   assert.equal(whyNot(base, [{ name: 'somebody', channel: 'somebody' } as never]), 'Already joined');
+});
+
+test('crState: closed card by streamer name, budget left from card text', () => {
+  const scan = { at: null, campaigns: [], joined: [{ name: 'Kai Cenat - $10,000 GTA 6 Pool Campaign', closed: true, spent: null, budget: null }, { name: 'Boeshi GTA 6 Clipping', closed: false, spent: '278', budget: '1,750' }] };
+  assert.deepEqual(crState('https://x/c/campaigns/zz', ['kaicenat'], scan), { closed: true, budget: 0, left: 0 });
+  assert.deepEqual(crState(undefined, ['boeshi'], scan), { closed: false, budget: 1750, left: 1472 });
+  assert.equal(crState(undefined, ['nobody'], scan), null);
 });
