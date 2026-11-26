@@ -22,6 +22,7 @@ const P: Record<string, string> = {
   link: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   back: 'M15 18l-6-6 6-6',
   next: 'M9 18l6-6-6-6',
+  menu: 'M4 6h16M4 12h16M4 18h16',
   pause: 'M6 4h4v16H6zM14 4h4v16h-4z',
   up: 'M18 15l-6-6-6 6',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',

@@ -3,7 +3,7 @@ import { MotionConfig, motion } from 'motion/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { pref, setRate, useOverview, useRate } from './api.ts';
-import { Icon, Toasts } from './ui.tsx';
+import { Icon, Page, Toasts } from './ui.tsx';
 import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
@@ -58,13 +58,26 @@ function Side({ route }: { route: string }) {
   );
 }
 
+// Mobile: pages without their own bottom tab (max 5 tabs) live behind More.
+const MORE = [...NAV, ...BOTTOM].filter(([p]) => !['/', '/review', '/campaigns', '/earnings'].includes(p));
+function More() {
+  return (
+    <Page title="More">
+      <nav className="card !p-0 flex flex-col divide-y divide-line overflow-hidden" aria-label="More pages">
+        {MORE.map(([p, label, icon]) => <a key={p} href={`#${p}`} className="flex items-center gap-3 px-5 min-h-14 no-underline hover:bg-r active:bg-r transition-colors"><Icon name={icon} />
+          <span className="flex-1 font-medium">{label}</span><Icon name="next" size={16} className="text-f" /></a>)}
+      </nav>
+    </Page>
+  );
+}
+
 function Tabs({ route }: { route: string }) {
   const { data } = useOverview();
-  const tabs: [string, string, string][] = [['/', 'Home', 'home'], ['/review', 'Review', 'play'], ['/campaigns', 'Campaigns', 'flag'], ['/earnings', 'Earnings', 'money'], ['/settings', 'Settings', 'gear']];
+  const tabs: [string, string, string][] = [['/', 'Home', 'home'], ['/review', 'Review', 'play'], ['/campaigns', 'Campaigns', 'flag'], ['/earnings', 'Earnings', 'money'], ['/more', 'More', 'menu']];
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 h-20 pb-4 bg-bg/95 backdrop-blur border-t border-line grid grid-cols-5" aria-label="Main">
       {tabs.map(([p, label, icon]) => {
-        const on = p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover');
+        const on = p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover') || (p === '/more' && MORE.some(([m]) => route.startsWith(m)));
         return <a key={p} href={`#${p}`} aria-current={on ? 'page' : undefined} className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-medium no-underline ${on ? 'text-t' : 'text-f'}`}>
           {on ? <motion.span layoutId="tab-ind" className="absolute top-0 inset-x-5 h-[3px] rounded-b-full bg-a" transition={{ type: 'spring', stiffness: 500, damping: 40 }} /> : null}
           <motion.span animate={{ scale: on ? 1.08 : 1, y: on ? -1 : 0 }} transition={{ duration: 0.18 }} className="flex"><Icon name={icon} size={22} /></motion.span>{label}
@@ -90,6 +103,7 @@ function App() {
     : route === '/accounts' ? <Accounts />
     : route === '/settings' ? <Settings />
     : route === '/proposals' ? <Proposals />
+    : route === '/more' ? <More />
     : <Later what={route.slice(1)} />;
   return (
     <div className="flex min-h-screen md:h-screen">
