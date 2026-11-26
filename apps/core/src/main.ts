@@ -27,7 +27,8 @@ const { drift } = checkHardware();
 for (const d of drift) log.warn(`hardware drift: ${d}`);
 
 const db = openDb();
-const server = startReviewServer(db);
+// --no-server: started by dashboard.ts, which already serves the page.
+const server = process.argv.includes('--no-server') ? null : startReviewServer(db);
 startDiscord(db).catch((e) => log.error('Discord failed to start', { error: String(e) }));
 const ac = new AbortController();
 
@@ -60,7 +61,9 @@ const practice = () => practiceTick(db).catch((e) => log.error('practice tick fa
 const practiceTimer = setInterval(practice, 60_000);
 const scoutTimer = setInterval(scout, 24 * 60 * 60_000); // daily: joins at most 3 new campaigns per run
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); clearInterval(practiceTimer); server.close(); stopDiscord(); });
+const stop = () => { ac.abort(); clearInterval(timer); clearInterval(trackTimer); clearInterval(learnTimer); clearInterval(scoutTimer); clearInterval(weeklyTimer); clearInterval(practiceTimer); server?.close(); stopDiscord(); };
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, stop);
+process.on('message', (m) => { if (m === 'stop') stop(); }); // Windows has no SIGTERM for children: dashboard.ts asks over IPC
 
 // One worker process: anything still 'running' at start was cut off by a stop or crash. Requeue before any loop claims.
 const orphans = recoverStale(db, 0);
@@ -79,3 +82,4 @@ await Promise.all([
   runWorker(db, { 'campaign.discover': async () => { await discoverAll(); }, 'campaign.join': (p) => joinJob(db, p as { id: string }) }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);
+process.exit(0); // loops end only on stop; Discord and sockets would keep the process alive
