@@ -65,7 +65,7 @@ export function infoEmbed(s: StreamerConfig, now = new Date()): APIEmbed {
   if (warn.length) fields.push({ name: 'Watch out', value: warn.map((w) => `⚠️ ${w}`).join('\n').slice(0, 1024), inline: false });
   return {
     title: `${s.name} · ${open ? 'open' : 'closed'}`, url: c.url || undefined,
-    description: s.enabled !== true ? '⏸️ Clips are off for this campaign' : '▶️ Making clips for this campaign',
+    description: s.enabled !== true ? '⏸️ Clips are off for this campaign' : isPaused() ? '⏸️ Snip is paused' : '▶️ Making clips for this campaign',
     color: !open ? COLOR.closed : s.enabled !== true ? COLOR.off : COLOR.open, fields: fields.slice(0, 25),
   };
 }

@@ -11,6 +11,7 @@ import { logger } from '../log.ts';
 import { campaignNotes, viewsToPay } from '../modules/compliance/campaign-notes.ts';
 import { readProgress, type Progress } from '../modules/learner/study.ts';
 import { enqueue } from '../queue/queue.ts';
+import { isPaused } from './review.ts';
 import { accountStats, earn } from './setup.ts';
 import { CSS, esc } from './style.ts';
 
@@ -163,6 +164,7 @@ export function campaignStatus(s: StreamerConfig, p: Progress | null): { label: 
   if (!campaignOpen(s.campaign!)) return { label: 'Ended', cls: '' };
   if (s.enabled !== true) return { label: 'Off', cls: '' };
   if (s.stage === 'study') return p?.finished ? { label: 'Study done', cls: 'on' } : p?.error ? { label: 'Study failed', cls: 'warn' } : { label: 'Studying', cls: 'warn' };
+  if (isPaused()) return { label: 'Paused', cls: 'warn' }; // whole pipeline off: data/paused
   return { label: 'Making clips', cls: 'on' };
 }
 
