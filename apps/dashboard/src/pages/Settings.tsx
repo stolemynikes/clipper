@@ -105,6 +105,7 @@ export function Settings() {
             </div>
             <span className="text-sm text-m">New campaigns are found automatically every day.</span>
           </Card>
+          <Group name="Clips" fields={fields} />
         </div>
         <div className="flex flex-col gap-6">
           <Card title="Money">
@@ -118,6 +119,7 @@ export function Settings() {
           <Card title="Posting">
             <div className="flex flex-col -mt-4">{sw(run)}{fields.filter((x) => x.group === 'Posting').map((x) => <Setting key={`${x.key}:${String(x.value)}`} f={x} />)}</div>
           </Card>
+          <Group name="Finding moments" fields={fields} />
         </div>
         <div className="flex flex-col gap-6">
           <Card title="Snip at work">
@@ -125,8 +127,10 @@ export function Settings() {
             <span className="text-sm text-m flex items-center gap-2"><Icon name="alert" size={14} />Alerts go to your phone through Bark.</span>
           </Card>
           <Group name="Review" fields={fields} />
+          {/* fixed columns, no implicit grid rows: those collapsed and let cards overlap */}
+          <Group name="Watching streams" fields={fields} />
+          <Group name="PC" fields={fields} />
         </div>
-        {['Clips', 'Finding moments', 'Watching streams', 'PC'].map((g) => <Group key={g} name={g} fields={fields} />)}
       </div></div>
     </Page>
   );
