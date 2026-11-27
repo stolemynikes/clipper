@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { GENRES, loadSettings, type StreamerConfig } from '../../config.ts';
+import { GENRES, isFootage, loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { clips, moments } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -53,6 +53,7 @@ export async function footageLayout(src: string, cfg: StreamerConfig, start: num
   const want = cfg.layout ?? (cfg.genre && GENRES[cfg.genre].layout);
   if (want === 'whole') return WHOLE;
   const l = await detectLayout(src, null, start, end);
+  if ((l.faces ?? 0) >= 2) return WHOLE; // two people at a table: a crop on one face loses the other speaker
   return l.scene === 'fullcam' || (want === 'face' && l.content) ? { ...l, scene: 'fullcam', cam: null, fit: undefined } : WHOLE;
 }
 
@@ -133,7 +134,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const used = accountStats(db).filter((a) => a.streamer === cfg.name).reduce((n, a) => n + a.earned, 0);
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
-    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: cfg.platform === 'footage',
+    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: isFootage(cfg),
     transcript, duplicateOf: source.streamerId && !old && !practice ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
@@ -150,7 +151,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   if (practice) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
   if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
 
-  const layout = cfg.platform === 'footage' ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  const layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
   if (layout.fit === 'full') {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
     db.update(moments).set({ score: moment.score * WEBSITE_PENALTY, signals: { ...(moment.signals ?? {}), website: 1 } }).where(eq(moments.id, momentId)).run();
@@ -184,7 +185,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
   const dy = stackTop(layout);
-  const genre = cfg.platform === 'footage' && cfg.genre ? GENRES[cfg.genre] : undefined;
+  const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = old ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const encode = async (out: string, ch: Change) => {
@@ -207,7 +208,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead,
-      duckFilter(quietMusic((cfg.platform === 'footage' ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
+      duckFilter(quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
       twitchChat?.file ?? null, ch.lufs), { cwd: dir });
   };
   await encode('clip.mp4', live);

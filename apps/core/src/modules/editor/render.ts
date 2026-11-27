@@ -1,7 +1,7 @@
 // ffmpeg 9:16 render: facecam on top (1080x768), gameplay below (1080x1152), captions burned in.
 export interface Rect { x: number; y: number; w: number; h: number } // fractions of the source frame
 
-export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack' } // from workers/face_track.py
+export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack'; faces?: number } // from workers/face_track.py
 
 /** fit stack: cam (768) + whole game side scaled to 1080 wide, as one block centered on blur. Returns the block's top y (0 otherwise). */
 export function stackTop(layout: Layout): number {

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { paths } from '../../env.ts';
 import type { Rect } from '../editor/render.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
-import type { StreamerConfig } from '../../config.ts';
+import { isFootage, type StreamerConfig } from '../../config.ts';
 import type { Kind } from '../learner/patterns.ts';
 
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
@@ -42,7 +42,7 @@ export const saveProposals = (ps: Proposal[]) => writeFileSync(file(), JSON.stri
 /** Proposals tested on the next practice clip: all of them at once (one render of the moment, one encode per variant). */
 export const kindOf = (p: Pick<Proposal, 'kind'>): Kind => p.kind ?? 'gaming';
 /** Kind of clip a campaign makes: streams = gaming, footage music = music, other footage (podcast, show, product) = talk. */
-export const kindFor = (cfg: Pick<StreamerConfig, 'platform' | 'genre'>): Kind => cfg.platform !== 'footage' ? 'gaming' : cfg.genre === 'music' ? 'music' : 'talk';
+export const kindFor = (cfg: Pick<StreamerConfig, 'platform' | 'genre'>): Kind => !isFootage(cfg) ? 'gaming' : cfg.genre === 'music' ? 'music' : 'talk';
 /** Up to max testing proposals of one kind (or of every kind when unset), oldest first. */
 export const activeProposals = (max = 6, kind?: Kind) => proposals().filter((p) => p.status === 'testing' && !p.untested && (!kind || kindOf(p) === kind)).sort((a, b) => a.created - b.created).slice(0, max);
 

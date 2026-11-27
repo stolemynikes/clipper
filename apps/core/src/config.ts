@@ -27,6 +27,8 @@ export interface AutoKeep { enabled: boolean; minViewerClips: number; minChatRat
 export interface FacecamBox { x: number; y: number; w: number; h: number; exact?: boolean }
 
 export type Genre = 'podcast' | 'music' | 'show' | 'product';
+/** Brand footage, or a YouTube channel with a genre (podcast, show): no chat, own audio, face-follow layout. */
+export const isFootage = (cfg: Pick<StreamerConfig, 'platform' | 'genre'>) => cfg.platform === 'footage' || (cfg.platform === 'youtube' && !!cfg.genre);
 /** Per kind of footage campaign: default layout, caption look (null = no captions) and what makes a good clip, for the judge.
  *  A campaign's own layout or captionStyle wins. */
 export const GENRES: Record<Genre, { layout: 'face' | 'whole'; captions: CaptionStyle | null; focus: string }> = {

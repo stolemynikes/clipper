@@ -4,7 +4,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { FOOTAGE_FOCUS, GENRES, loadSettings } from '../../config.ts';
+import { FOOTAGE_FOCUS, GENRES, isFootage, loadSettings } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { clips, moments } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -200,7 +200,7 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
   const { cfg } = sourceContext(db, moment.sourceId);
   const s = loadSettings();
   const model = s.titles?.model ?? 'gemma4:12b';
-  const footage = cfg.platform === 'footage', focus = footage ? (cfg.genre ? GENRES[cfg.genre].focus : FOOTAGE_FOCUS) : undefined;
+  const footage = isFootage(cfg), focus = footage ? (cfg.genre ? GENRES[cfg.genre].focus : FOOTAGE_FOCUS) : undefined;
   const kind: Kind | undefined = !footage ? 'gaming' : cfg.genre === 'music' ? 'music' : cfg.genre === 'product' ? undefined : 'talk';
   const hint = judgeHint(kind);
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;

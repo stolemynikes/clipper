@@ -95,6 +95,25 @@ def stable_face(found, n_frames: int, raw: np.ndarray | None = None):
     return max(big or faces, key=lambda f: (f[0], f[1][2]))[1]
 
 
+def count_big_faces(found, n_frames: int, raw: np.ndarray | None = None) -> int:
+    """Distinct big, steady, moving faces: 2+ is a podcast table, where a crop on one face loses the other speaker."""
+    boxes = []
+    for _, (x, y, w, h) in found:
+        if w < FULLCAM_FACE_W:
+            continue
+        cx = x + w / 2
+        near = [(i, b) for i, b in found if abs(b[0] + b[2] / 2 - cx) < 0.06 and abs(b[1] + b[3] / 2 - (y + h / 2)) < 0.08]
+        if len({i for i, _ in near}) < max(1, MIN_PRESENCE * n_frames):
+            continue
+        if raw is not None:
+            x0, y0 = int(x * W), int(y * H)
+            if raw[y0:y0 + int(h * H) + 1, x0:x0 + int(w * W) + 1].mean() < MIN_FACE_MOTION:
+                continue
+        if all(abs(cx - c) >= 0.15 for c in boxes):
+            boxes.append(cx)
+    return len(boxes)
+
+
 def edge_profile(gray: np.ndarray, axis: int) -> np.ndarray:
     """Mean edge strength per column (axis=0) or per row (axis=1)."""
     g = cv2.Sobel(gray, cv2.CV_32F, 1, 0) if axis == 0 else cv2.Sobel(gray, cv2.CV_32F, 0, 1)
@@ -212,7 +231,7 @@ def analyze(path: str, model: str, hint: dict | list | None = None, start: float
     if fw >= FULLCAM_FACE_W:
         weight = np.zeros((H, W), np.float32)
         weight[:, int((fx + fw / 2) * W)] = 1  # center the crop on the face
-        return {"scene": "fullcam", "cam": None, "content": best_window(weight, 9 / 16)}
+        return {"scene": "fullcam", "cam": None, "content": best_window(weight, 9 / 16), "faces": count_big_faces(found, len(frames), raw)}
 
     box = cam_rect(face, frames)
     hint = pick_hint(hints, face)

@@ -96,6 +96,29 @@ export async function footageMoments(file: string, durationSec: number, scoring:
   return lessonRank(cands, peaks, lifts, picked.length);
 }
 
+type Heat = { start_time: number; end_time: number; value: number };
+const HEAT_AFTER = 10; // a clip ends at its peak window: read the heatmap 10s later so the replayed part itself is inside
+
+/** YouTube "most replayed" (0-1 per segment) as one value per window, so pickMoments treats it like loudness. */
+export function heatWindows(heat: Heat[], durationSec: number, windowSec: number): number[] {
+  return Array.from({ length: Math.ceil(durationSec / windowSec) }, (_, i) => {
+    const t = (i + 0.5) * windowSec + HEAT_AFTER;
+    return heat.find((h) => t >= h.start_time && t < h.end_time)?.value ?? 0;
+  });
+}
+
+/** YouTube video: the heatmap picks when there is one; else loudness of the audio track (only audio is downloaded). */
+async function youtubeMoments(url: string, durationSec: number, scoring: ScoringConfig, limits: { minSec: number; maxSec: number }, kind: Kind, dir: string) {
+  const info = JSON.parse(await runCmd('yt-dlp', ['-J', '--skip-download', '--no-warnings', url], { timeoutMs: 120_000 })) as { heatmap?: Heat[] | null };
+  if (info.heatmap?.length) {
+    log.info(`youtube: ${info.heatmap.length} heatmap segments pick the moments`);
+    return footagePick(durationSec, heatWindows(info.heatmap, durationSec, scoring.windowSec), scoring, limits);
+  }
+  const audio = join(dir, 'audio.m4a');
+  await runCmd('yt-dlp', ['-q', '--no-warnings', '--force-overwrites', '-f', 'ba[ext=m4a]/ba', '-o', audio, url], { timeoutMs: 30 * 60_000 });
+  try { return await footageMoments(audio, durationSec, scoring, limits, kind, dir); } finally { rmSync(audio, { force: true }); }
+}
+
 export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { sourceId: number; vodId: string; practice?: boolean }) {
   const { source, cfg } = sourceContext(db, sourceId);
   if (db.select().from(moments).where(eq(moments.sourceId, sourceId)).get()) return log.info(`source ${sourceId} already analyzed`);
@@ -105,7 +128,8 @@ export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { source
 
   const limits = { minSec: settings.clip.minSec, maxSec: Math.min(settings.clip.maxSec, cfg.campaign?.maxSec ?? Infinity) };
   let chat: ChatMessage[] = [], viewerClips: { offset: number; duration: number }[] = [], picked: Moment[];
-  if (cfg.platform === 'footage') picked = await footageMoments(source.url, source.durationSec ?? 0, settings.scoring, limits, kindFor(cfg), dir);
+  if (cfg.platform === 'youtube') picked = await youtubeMoments(source.url, source.durationSec ?? 0, settings.scoring, limits, kindFor(cfg), dir);
+  else if (cfg.platform === 'footage') picked = await footageMoments(source.url, source.durationSec ?? 0, settings.scoring, limits, kindFor(cfg), dir);
   else {
     const vod = await getVod(vodId);
     chat = await downloadChat(vodId, dir, source.durationSec ?? 0);

@@ -2,7 +2,7 @@
 // YouTube Data API (resumable upload); TikTok and Instagram via PostPeer when POSTPEER_API_KEY is set, else TikTok Content Posting API.
 import { readFileSync, statSync } from 'node:fs';
 import { and, desc, eq, gte } from 'drizzle-orm';
-import { loadSettings, type StreamerConfig } from '../../config.ts';
+import { isFootage, loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { accounts, clips, jobs, moments, posts } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
@@ -114,7 +114,7 @@ function postTime(db: Db, accountId: number, audience: unknown, after = new Date
 export type AccountKind = 'streamers' | 'talk' | 'music' | 'product';
 /** Which account niche a campaign posts to: streams and gaming, podcast and show, music or product. */
 export function kindOf(cfg: Pick<StreamerConfig, 'platform' | 'genre'>): AccountKind {
-  if (cfg.platform !== 'footage') return 'streamers';
+  if (!isFootage(cfg)) return 'streamers';
   return cfg.genre === 'music' ? 'music' : cfg.genre === 'product' ? 'product' : 'talk';
 }
 /** An account posts a campaign when it is tied to that streamer, or is a shared account of the campaign's kind. */
