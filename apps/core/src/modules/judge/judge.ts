@@ -185,6 +185,8 @@ function saveCalibration(clipId: number, frame: string | undefined, transcript: 
 }
 
 /** Weights frozen at the last learner run before proposals, plus owner-approved weight proposals. */
+/** The screen score costs an LLM call per clip; while the learner gives it no weight, ask only 1 in 5 clips so it can still prove itself later. */
+export const askVisual = (clipId: number, weight = 0) => weight > 0 || clipId % 5 === 0;
 const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
 
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
@@ -222,8 +224,10 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
     let shot: string | undefined;
     if (existsSync(clip.filePath)) {
       const vis = await frames(clip.filePath, clip.durationSec ?? 20); shot = vis[1];
-      const b = await ask(model, gpu, (focus ? footageVisualPrompt(focus) : VISUAL_PROMPT) + (kind === 'music' ? hint : ''), vis); // music has no speech prompt
-      fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
+      if (askVisual(clipId, liveWeights().visual)) {
+        const b = await ask(model, gpu, (focus ? footageVisualPrompt(focus) : VISUAL_PROMPT) + (kind === 'music' ? hint : ''), vis); // music has no speech prompt
+        fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
+      }
       const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540), clip.transcript ?? '', footage);
       fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
