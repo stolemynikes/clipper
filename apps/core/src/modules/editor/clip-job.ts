@@ -21,7 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
-import { activeProposals, type Change, isLength, kindFor, tweaks } from '../practice/proposals.ts';
+import { activeProposals, proposals, type Change, isLength, kindFor, tweaks } from '../practice/proposals.ts';
 import { keepWindow, tried } from '../practice/practice.ts';
 
 const log = logger('editor');
@@ -92,20 +92,21 @@ export async function fetchSection(url: string, from: number, to: number, out: s
 }
 
 /** retest: practice moment rendered before, raw window kept; encode only the proposals it has not tried. */
-export async function renderClip(db: Db, { momentId, practice, retest }: { momentId: number; practice?: boolean; retest?: boolean }) {
+export async function renderClip(db: Db, { momentId, practice, retest, proof }: { momentId: number; practice?: boolean; retest?: boolean; proof?: string[] }) {
   const moment = db.select().from(moments).where(eq(moments.id, momentId)).get();
   if (!moment) throw new Error(`moment ${momentId} not found`);
   const old = db.select().from(clips).where(eq(clips.momentId, momentId)).get();
-  if (old && !(retest && practice)) return log.info(`moment ${momentId} already rendered`);
+  if (old && !(retest && practice) && !proof) return log.info(`moment ${momentId} already rendered`);
   const { source, cfg } = sourceContext(db, moment.sourceId);
   const settings = loadSettings();
   const hw = readHardwareConfig();
   const dir = join(paths.dataDir, 'clips', String(momentId));
   mkdirSync(dir, { recursive: true });
-  db.update(moments).set({ status: 'rendering' }).where(eq(moments.id, momentId)).run();
+  if (!proof) db.update(moments).set({ status: 'rendering' }).where(eq(moments.id, momentId)).run();
 
   // Only the moment itself is downloaded, never the whole VOD.
   const src = join(dir, 'src.mp4'); // already there for a re-test or a study clip
+  const had = existsSync(src);
   if (!existsSync(src) || statSync(src).size === 0) await downloadSection(source.url, moment.startSec, moment.endSec, src);
 
   // a broken download fails here every retry; dropping it makes the next attempt download it again
@@ -121,6 +122,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     tailSec: sc.tailSec ?? 0, targetSec: [target[0], Math.max(target[0], ch.maxLen ?? target[1])], minSec: settings.clip.minSec, maxSec, leadSec: ch.leadSec, deadAirSec: ch.deadAirSec });
   const { start: lead, end: cut } = trimFor(live);
   const words = t.words.filter((w) => w.s >= lead && w.s < cut).map((w) => ({ ...w, s: w.s - lead, e: Math.min(w.e, cut) - lead }));
+  if (proof && ((peakDb ?? 0) < SILENT_DB)) return log.warn(`proof ${momentId}: silent`);
   if ((peakDb ?? 0) < SILENT_DB) {
     rmSync(src, { force: true });
     db.update(moments).set({ status: 'skipped' }).where(eq(moments.id, momentId)).run();
@@ -139,6 +141,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
   });
+  if (proof && !compliance.ok) return log.warn(`proof ${momentId}: blocked ${compliance.blocks.join('; ')}`);
   if (!compliance.ok) {
     rmSync(src, { force: true });
     db.update(moments).set({ status: 'skipped' }).where(eq(moments.id, momentId)).run();
@@ -146,13 +149,13 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   }
 
   // Practice: every testing proposal of this kind not tried on this window yet (tried.txt lets a later proposal re-test it).
-  const was = practice ? tried(dir) : [], act = practice ? activeProposals(6, kind) : [];
+  const was = practice ? tried(dir) : [], act = proof ? proposals().filter((p) => proof.includes(p.id)) : practice ? activeProposals(6, kind) : [];
   const props = act.filter((p) => !was.includes(p.id) && (!p.change.gameCrop || p.change.gameCrop[cfg.name]));
-  if (practice) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
+  if (practice && !proof) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
   if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
 
   const layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
-  if (layout.fit === 'full') {
+  if (layout.fit === 'full' && !proof) {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
     db.update(moments).set({ score: moment.score * WEBSITE_PENALTY, signals: { ...(moment.signals ?? {}), website: 1 } }).where(eq(moments.id, momentId)).run();
   }
@@ -187,7 +190,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const dy = stackTop(layout);
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
-  const title = old ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
+  const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const encode = async (out: string, ch: Change) => {
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
@@ -211,16 +214,19 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
       duckFilter(quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
       twitchChat?.file ?? null, ch.lufs), { cwd: dir });
   };
-  await encode('clip.mp4', live);
+  const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
+  await encode(proof ? 'proof-live.mp4' : 'clip.mp4', live);
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
   for (const p of props) {
-    if (!isLength(p.change)) { await encode(`clip-${p.id}.mp4`, { ...live, ...p.change }); continue; }
+    if (!isLength(p.change)) { await encode(`${pre}${p.id}.mp4`, { ...live, ...p.change }); continue; }
     // Length: only the cut moves, judged on the transcripts, so no encode needed.
     const v = trimFor({ ...live, ...p.change });
     const text = t.words.filter((w) => w.s >= v.start && w.s < v.end).map((w) => w.w).join(' ');
-    writeFileSync(join(dir, `clip-${p.id}.json`), JSON.stringify({ sec: v.end - v.start, text }));
+    writeFileSync(join(dir, `${pre}${p.id}.json`), JSON.stringify({ sec: v.end - v.start, text }));
   }
+  if (proof) for (const f of [...(had ? [] : [src]), join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
+  if (proof) return log.info(`proof ${momentId}: ${props.map((p) => p.id).join(', ')} rendered as proof-*.mp4`); // no DB change, no judge
   if (props.length) writeFileSync(join(dir, 'proposals.txt'), props.map((p) => p.id).join('\n'));
   for (const f of [...(practice ? [] : [src]), join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
