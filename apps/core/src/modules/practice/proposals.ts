@@ -90,9 +90,9 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   const ps = proposals();
   const add = (p: Omit<Proposal, 'status' | 'created' | 'pairs' | 'aa' | 'frames'>) => { if (!ps.some((x) => x.id === p.id)) ps.push({ ...p, status: 'testing', created: Date.now(), pairs: [], aa: [], frames: [] }); };
   // The weekly study used to change live captions on its own; now it is a proposal like the rest.
-  if (cur.weeklyPer && cur.weeklyPer !== cur.per) add({ id: `words-${cur.weeklyPer}`, title: `${cur.weeklyPer} words per caption line`, why: `Most top gaming Shorts this week show about ${cur.weeklyPer} words per line (weekly study). Now ${cur.per}.`, change: { wordsPerChunk: cur.weeklyPer } });
+  if (cur.weeklyPer && cur.weeklyPer !== cur.per) add({ id: `words-${cur.weeklyPer}`, title: `${cur.weeklyPer} word${cur.weeklyPer === 1 ? "" : "s"} per caption line`, why: `Most top gaming Shorts this week show about ${cur.weeklyPer} words per line (weekly study). Now ${cur.per}.`, change: { wordsPerChunk: cur.weeklyPer } });
   const fewer = Math.max(1, cur.per - 1);
-  if (fewer !== cur.weeklyPer && fewer !== cur.per) add({ id: `words-${fewer}`, title: `${fewer} words per caption line`, why: `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, change: { wordsPerChunk: fewer } });
+  if (fewer !== cur.weeklyPer && fewer !== cur.per) add({ id: `words-${fewer}`, title: `${fewer} word${fewer === 1 ? "" : "s"} per caption line`, why: `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, change: { wordsPerChunk: fewer } });
   add({ id: 'captions-lower', title: 'Captions 150 px lower', why: 'Lower captions cover less of the face and the action; still above the app buttons.', change: { captionShift: 150 } });
   // Length (trim.ts: lead 12s, target 12-26s). Judged on transcripts: does the cut keep the build-up and end on the payoff?
   add({ id: 'lead-6', title: 'Shorter build-up (6 s before the peak)', why: 'Gets to the point faster; most viewers decide in the first seconds. Now 12 s.', change: { leadSec: 6 } });
@@ -103,7 +103,7 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
   const t = (id: string, title: string, why: string, change: Change, kind: Kind) => add({ id: `${id}-${kind}`, title, why, change, kind });
-  if (fewer !== cur.per) t(`words-${fewer}`, `${fewer} words per caption line`, `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, { wordsPerChunk: fewer }, 'talk');
+  if (fewer !== cur.per) t(`words-${fewer}`, `${fewer} word${fewer === 1 ? "" : "s"} per caption line`, `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, { wordsPerChunk: fewer }, 'talk');
   t('captions-lower', 'Captions 150 px lower', 'Lower captions cover less of the faces; still above the app buttons.', { captionShift: 150 }, 'talk');
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) t(`style-${s}`, `Caption style "${s}"`, `Test the ${s} caption look against the current "${cur.style}".`, { captionStyle: s }, 'talk');
   // Length for podcasts and music (music has no captions to test).
