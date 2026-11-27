@@ -25,3 +25,13 @@ test('footagePick: short video whole, too short nothing, long video by loudness'
   for (const m of picked) assert.ok(m.end - m.start <= 60 && m.end - m.start >= 15);
   assert.ok(picked.some((m) => m.start <= 500 && m.end >= 500));
 });
+
+test('lessonRank: learned laughter lifts a quieter stretch above a louder one, top n kept in time order', async () => {
+  const { lessonRank } = await import('../vod-clipper/analyze.ts');
+  const m = (start: number, score: number) => ({ start, end: start + 30, score, peakAt: start + 15, signals: { chatRate: 0, emoteScore: 0, viewerClipHits: 0, audioPeak: score } });
+  const cands = [m(0, 1), m(100, 0.8), m(200, 0.5)];
+  const peaks = [{ laughMax: 0.1, cheerMax: 0 }, { laughMax: 0.6, cheerMax: 0 }, null];
+  assert.deepEqual(lessonRank(cands, peaks, { laugh: 0.4, cheer: 0 }, 2).map((x) => x.start), [0, 100]);
+  assert.equal(lessonRank(cands, peaks, { laugh: 0.4, cheer: 0 }, 1)[0].start, 100); // 0.8 x 1.4 beats 1
+  assert.equal(lessonRank(cands, peaks, { laugh: -0.4, cheer: 0 }, 1)[0].start, 0);
+});

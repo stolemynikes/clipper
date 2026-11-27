@@ -11,6 +11,8 @@ import { enqueue, Stop } from '../../queue/queue.ts';
 import { getVod, getVodClips } from '../../twitch.ts';
 import { pickMoments, type ChatMessage, type Moment, type ScoringConfig } from './scoring.ts';
 import { loudness } from '../watcher/footage.ts';
+import { type Kind, readRows, soundLifts } from '../learner/patterns.ts';
+import { kindFor } from '../practice/proposals.ts';
 
 const log = logger('vod-clipper');
 
@@ -63,8 +65,35 @@ export function footagePick(durationSec: number, audio: number[], scoring: Scori
   return pickMoments({ durationSec, chat: [], audio }, cfg, limits).slice(0, Math.min(5, Math.max(1, Math.round(durationSec / 600))));
 }
 
-export async function footageMoments(file: string, durationSec: number, scoring: ScoringConfig, limits: { minSec: number; maxSec: number }) {
-  return footagePick(durationSec, durationSec > limits.maxSec ? await loudness(file, scoring.windowSec) : [], scoring, limits);
+const LAUGH_CUT = 0.3; // same YAMNet peak cut as the study rows
+
+/** Re-rank loud candidates by what the study learned: score x (1 + lift) per trait the moment has. Keeps the top n. */
+export function lessonRank(cands: Moment[], peaks: ({ laughMax: number; cheerMax: number } | null)[], lifts: { laugh: number; cheer: number }, n: number) {
+  const boost = (i: number) => 1 + (peaks[i] && peaks[i]!.laughMax >= LAUGH_CUT ? lifts.laugh : 0) + (peaks[i] && peaks[i]!.cheerMax >= LAUGH_CUT ? lifts.cheer : 0);
+  return cands.map((m, i) => ({ ...m, score: m.score * boost(i) })).sort((a, b) => b.score - a.score).slice(0, n).sort((a, b) => a.start - b.start);
+}
+
+/** Laugh/cheer peaks of one stretch (YAMNet on a cut of the audio). null when the check fails. */
+async function soundPeaks(file: string, m: Moment, dir: string) {
+  const wav = join(dir, `peaks-${Math.round(m.start)}.wav`);
+  try {
+    await runCmd('ffmpeg', ['-y', '-v', 'error', '-ss', String(m.start), '-t', String(m.end - m.start), '-i', file, '-vn', '-ac', '1', '-ar', '16000', wav]);
+    return JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'music_detect.py'), JSON.stringify({ input: wav })])) as { laughMax: number; cheerMax: number };
+  } catch (e) { log.warn(`sound peaks failed: ${(e as Error).message}`); return null; }
+  finally { rmSync(wav, { force: true }); }
+}
+
+export async function footageMoments(file: string, durationSec: number, scoring: ScoringConfig, limits: { minSec: number; maxSec: number }, kind?: Kind, dir?: string) {
+  const audio = durationSec > limits.maxSec ? await loudness(file, scoring.windowSec) : [];
+  const picked = footagePick(durationSec, audio, scoring, limits);
+  const lifts = kind ? soundLifts(readRows().filter((r) => r.kind === kind)) : { laugh: 0, cheer: 0 };
+  if (!dir || picked.length < 2 || (!lifts.laugh && !lifts.cheer)) return picked; // nothing learned yet: loudness only
+  // twice the candidates by loudness, then the lessons choose
+  const cands = pickMoments({ durationSec, chat: [], audio }, { ...scoring, weights: { chatRate: 0, emoteScore: 0, viewerClipHits: 0, audioPeak: 1 } }, limits).slice(0, picked.length * 2);
+  const peaks = [];
+  for (const m of cands) peaks.push(await soundPeaks(file, m, dir));
+  log.info(`footage: re-ranked ${cands.length} loud stretches by learned laugh ${lifts.laugh} / cheer ${lifts.cheer}`);
+  return lessonRank(cands, peaks, lifts, picked.length);
 }
 
 export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { sourceId: number; vodId: string; practice?: boolean }) {
@@ -76,7 +105,7 @@ export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { source
 
   const limits = { minSec: settings.clip.minSec, maxSec: Math.min(settings.clip.maxSec, cfg.campaign?.maxSec ?? Infinity) };
   let chat: ChatMessage[] = [], viewerClips: { offset: number; duration: number }[] = [], picked: Moment[];
-  if (cfg.platform === 'footage') picked = await footageMoments(source.url, source.durationSec ?? 0, settings.scoring, limits);
+  if (cfg.platform === 'footage') picked = await footageMoments(source.url, source.durationSec ?? 0, settings.scoring, limits, kindFor(cfg), dir);
   else {
     const vod = await getVod(vodId);
     chat = await downloadChat(vodId, dir, source.durationSec ?? 0);

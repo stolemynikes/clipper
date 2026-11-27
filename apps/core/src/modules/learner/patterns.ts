@@ -77,6 +77,12 @@ export function learnedLines(rows: Row[]) {
   return { works: list.filter((x) => x.lift >= 0.15).slice(0, 3).map(line), weak: list.filter((x) => x.lift <= -0.15).reverse().slice(0, 2).map(line) };
 }
 
+/** Learned lift of the measured laugh/cheer traits, 0 unless sure (same z cut as the judge lines). For picking footage moments. */
+export function soundLifts(rows: Row[]) {
+  const p = patterns(rows), lift = (t: string) => (p.ready ? p.list.find((x) => x.trait === t && Math.abs(x.z) >= Z_MIN)?.lift ?? 0 : 0);
+  return { laugh: lift('laugh'), cheer: lift('cheer') };
+}
+
 /** Extra prompt text for the judge; empty string when nothing is learned yet. */
 export function judgeHint(kind: Kind | undefined) {
   if (!kind) return '';
