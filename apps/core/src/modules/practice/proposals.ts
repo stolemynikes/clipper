@@ -17,6 +17,7 @@ export type Change = {
   duckVol?: number; deadAirSec?: number; lufs?: number; // sound: the frame judge cannot hear, so these come from the sound study (untested)
   postWindow?: [number, number]; descSource?: boolean; // post hours (US Eastern) and a source link line in the YouTube description, from the weekly study
   hashtags?: string[]; titleMax?: number; // metadata from the weekly study: added after the required tags, never instead of them
+  chatBurst?: boolean; // our own Twitch chat box when chat goes wild (settings clip.chatBurst is the live default)
   gameCrop?: Record<string, Rect & { fit?: 'stack' }>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
 };
@@ -114,6 +115,8 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'crop-lacy', title: 'Lacy: game part without his chat box', why: 'The judge saw his stream chat overlay inside the game part. It sits top-right; this crop starts below it (zoom 1.2x).', change: { gameCrop: { lacy: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
   // Nov 27 crop study (data/study/lacy): the one gaming split among lacy's top clipper Shorts shows the whole stream frame, chat and all, not a zoomed crop.
   add({ id: 'crop-lacy-whole', title: 'Lacy: whole stream picture under the cam', why: 'A top clipper Short of Lacy shows the whole game picture (his chat included), not zoomed. His cam shows twice then.', change: { gameCrop: { lacy: { x: 0, y: 0, w: 1, h: 1, fit: 'stack' } } } });
+  // Crop order step 2: each crop with and without our own chat overlay. Default is off, so test it on.
+  add({ id: 'chat-burst-on', title: 'Show the Twitch chat when it goes wild', why: 'Now only the messages the streamer reacts to show. This adds the real chat box at the busiest chat moment.', change: { chatBurst: true } });
   // Nov 27 frame check of all streamers: same overlay problem. jasontheween: chat top-left + sub counter top-right (y < 0.17).
   add({ id: 'crop-jasontheween', title: 'Jasontheween: game part without his chat box', why: 'His stream chat sits top-left and a sub counter top-right inside the game part. This crop starts below both (zoom 1.2x).', change: { gameCrop: { jasontheween: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
   // silky: sub counter top-left, chat top-right (y < 0.12). Same 1080:1152 shape from y 0.13.

@@ -169,7 +169,8 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const chatLines = existsSync(chatFile) ? JSON.parse(readFileSync(chatFile, 'utf8')) as ChatLine[] : [];
   // Chat going wild at the peak shows as a stack; single "he reacts to this" cards stay out of its way.
   // Off by default: a chat box eats the screen and top clips rarely show one; reacted-to messages (matchChat) still show.
-  const burst = settings.clip.chatBurst ? burstChat(chatLines, lead, cut) : []; // chat going wild anywhere in the kept part; most clips get none
+  const burstOn = (ch: Change) => ch.chatBurst ?? settings.clip.chatBurst ?? false; // a proposal can test it either way
+  const burst = burstOn(live) || props.some((p) => burstOn({ ...live, ...p.change })) ? burstChat(chatLines, lead, cut) : []; // chat going wild anywhere in the kept part; most clips get none
   const busy = burst.length ? [burst[0].s, burst[0].e] : null;
   // shortcut: one render for all platforms, masked if any enabled platform wants it; render variants if YouTube reach suffers.
   const censor = settings.clip.censor.platforms.some((p) => settings.platforms[p as keyof typeof settings.platforms]) ? settings.clip.censor.words : undefined;
@@ -192,6 +193,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   }
   const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...(twitchChat ? [] : burst)]
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
+  const calm = matchChat(t.words, chatLines).map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec); // burst off: only reacted-to cards
 
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
@@ -203,7 +205,8 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
     writeFileSync(join(dir, subs), buildAss({
-      words: !cfg.captionStyle && genre?.captions === null ? [] : words, durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen disclosureSec: settings.clip.disclosureSec, chat,
+      words: !cfg.captionStyle && genre?.captions === null ? [] : words, durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen
+      disclosureSec: settings.clip.disclosureSec, chat: burstOn(ch) ? chat : calm,
       // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
       disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
       style: ch.captionStyle ?? cfg.captionStyle ?? genre?.captions ?? settings.clip.captionStyle,
@@ -215,15 +218,15 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
     }));
     // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-      twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
+      twitchChat && burstOn(ch) ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
     const duck = duckFilter(quiet, ch.duckVol);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead, duck, durationSec,
-      twitchChat?.file ?? null, ch.lufs), { cwd: dir });
+      burstOn(ch) ? twitchChat?.file ?? null : null, ch.lufs), { cwd: dir });
   };
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : null;
+    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
