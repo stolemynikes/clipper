@@ -186,7 +186,8 @@ Totale score = gewogen som (gewichten in `settings.yaml`, later bijgesteld door 
 - **Disclosure** aan het begin van elke clip als de campagne dat vraagt (standaard aan).
 - **Tag of watermerk** van de streamer volgens de brief.
 - **Muziek** van derden zachter zetten, vervangen of de clip blokkeren.
-- **Geen Discord-selfbots** en geen scraping van TikTok of Instagram. Alleen officiële API's. Waar geen API is: melding naar Telegram.
+- **Geen Discord-selfbots** en geen scraping van andermans data op TikTok of Instagram.
+- **Posten op eigen accounts mag via de browser** (TikTok, Instagram, X), net als bij Content Rewards: eigen Chrome-profiel, de eigenaar logt zelf in, de bot typt geen wachtwoorden of 2FA-codes, menselijk tempo binnen de postlimieten. Een officiële API heeft voorrang waar die werkt. Besloten 2026-11-27 door de eigenaar, met het ban-risico (ToS) bekend.
 - **Limieten:** maximaal X posts per account per dag (`settings.yaml`), en een noodstop via Telegram (`/pause`, `/resume`).
 
 ---
