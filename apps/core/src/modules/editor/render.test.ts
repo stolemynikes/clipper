@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { captionSpot, chatSpot, duckFilter, coldOpenArgs, faceTrouble, ffmpegArgs, filterGraph, jumpCutArgs, jumpCuts, parseSilence, quietMusic, stackTop, teaserSpan } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, coldOpenArgs, faceTrouble, ffmpegArgs, filterGraph, jumpCutArgs, jumpCuts, parseSilence, quietMusic, speechInMusic, duckMixArgs, stackTop, teaserSpan } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -52,10 +52,16 @@ test('stack: cam + whole game side as one block centered on blur', () => {
   assert.equal(stackTop({ cam: l.cam, content: l.content }), 0);
 });
 
-test('music ducking: only where nobody talks', () => {
+test('music ducking: music stem down only where someone talks', () => {
   const words = [{ s: 2, e: 3 }, { s: 3.2, e: 4 }, { s: 10, e: 11 }];
+  const r = (x: [number, number][]) => x.map(([a, b]) => [+a.toFixed(2), +b.toFixed(2)]);
+  assert.deepEqual(r(speechInMusic([[0, 12]], words)), [[1.7, 3.3], [2.9, 4.3], [9.7, 11.3]]);
+  assert.deepEqual(r(speechInMusic([[2.5, 3.5]], words)), [[2.5, 3.3], [2.9, 3.5]]);
+  assert.deepEqual(speechInMusic([[5, 9]], words), []);
   assert.deepEqual(quietMusic([[0, 12]], words), [[0, 1.7], [4.3, 9.7], [11.3, 12]]);
   assert.deepEqual(quietMusic([[2.5, 3.5]], words), []);
+  assert.equal(duckFilter(speechInMusic([[0, 12]], words)), "volume='1-0.5*clip(min((t-1.70)/0.5,(4.30-t)/0.5),0,1)':eval=frame"); // 9.7-11.3 too short
+  assert.match(duckMixArgs('c.mp4', 'v.wav', 'm.wav', 'o.mp4', 'volume=0.5').join(' '), /\[2:a\]volume=0\.5\[m\];\[1:a\]\[m\]amix=inputs=2:normalize=0,loudnorm=I=-14.* -map 0:v -map \[a\] -c:v copy/);
   assert.equal(duckFilter([]), null);
   assert.equal(duckFilter([[0, 1.7]]), null); // too short to duck: avoids pumping
   assert.equal(duckFilter([[0, 1.7], [2.5, 4]]), "volume='1-0.5*clip(min((t-0.00)/0.5,(4.00-t)/0.5),0,1)':eval=frame"); // gap bridged

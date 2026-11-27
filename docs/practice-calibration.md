@@ -78,7 +78,21 @@ Audio could still help as a content signal (laughter, shouting) later, not as an
 
 ## Sound and crop measurements (Nov 27)
 
-**sound-duck-0.3:** proof renders on the 7 moments with the most music (913, 914, 920, 923, 925, 934, 147). It was skipped on every one with "no music without speech here". The music in these clips always sits under the streamer's voice, so ducking only the speech-free spans never applies. As built, the proposal cannot change a clip. To be useful, it must duck music under speech too (sidechain), which is a new design.
+**sound-duck-0.3:** proof renders on the 7 moments with the most music (913, 914, 920, 923, 925, 934, 147). The first version was skipped on every one with "no music without speech here": music always sits under the streamer's voice, so ducking only speech-free spans never applied.
+
+Rebuilt as a sidechain duck (Nov 28). `workers/separate.py` (sherpa-onnx spleeter 2-stems) splits the rendered sound into voice and music stems. The music stem goes to 0.3 under every word (0.3 s margin), the voice stays as is, and the video is copied. The music detector only hears music between words (speech masks it), so any music span in the clip counts for the whole clip.
+
+Measured on the stems of live vs. duck render (RMS per 0.1 s, speech = voice stem within 25 dB of its max):
+
+| Moment | Music under speech (dB) | Voice (dB) | Music without speech (dB) |
+|---|---|---|---|
+| 913 | -42.9 to -57.6 | -19.0 to -19.1 | -36.4 to -36.2 |
+| 914 | -61.8 to -68.9 | -19.1 to -19.3 | -40.8 to -41.4 |
+| 920 | -48.7 to -61.2 | -16.8 to -16.9 | -40.2 to -39.2 |
+| 934 | -48.0 to -53.2 | -22.3 to -22.1 | -45.1 to -49.0 |
+| 147 | -64.9 to -72.0 | -20.5 to -20.0 | -58.8 to -67.7 |
+
+923 and 925 were skipped: no music detected inside the clip window. Music under speech drops 5-15 dB and the voice does not change. Integrated loudness of the duck render is about 1.7 LU below live (913: -15.2 vs. -13.5 LUFS, one loudnorm pass after the mix). The music stem also holds game sound, so that is ducked under speech too. A render takes about 5 minutes per moment.
 
 **sound-deadair-2:** in 1 of the last 12 clips the first word comes after 2 s (4.52 s). Dead air at the start is rare, so the proposal applies to few clips.
 

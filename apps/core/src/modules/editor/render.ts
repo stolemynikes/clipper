@@ -149,6 +149,25 @@ export function quietMusic(music: [number, number][], words: { s: number; e: num
   return out;
 }
 
+/** Parts of the music spans where someone talks (0.3s margin around words): the sidechain duck turns the music stem down there.
+ *  Sorted, may overlap: duckFilter merges them. */
+export function speechInMusic(music: [number, number][], words: { s: number; e: number }[], pad = 0.3): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [a, b] of music) {
+    for (const w of words) {
+      const s = Math.max(a, w.s - pad), e = Math.min(b, w.e + pad);
+      if (e > s) out.push([s, e]);
+    }
+  }
+  return out;
+}
+
+/** Rendered clip's sound rebuilt from workers/separate.py stems: voice as is + music stem through the duck filter, video copied. */
+export const duckMixArgs = (input: string, vocals: string, music: string, output: string, duck: string, lufs = -14): string[] => [
+  '-y', '-hide_banner', '-loglevel', 'error', '-i', input, '-i', vocals, '-i', music,
+  '-filter_complex', `[2:a]${duck}[m];[1:a][m]amix=inputs=2:normalize=0,${loudnorm(lufs)}[a]`,
+  '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
+
 /** ffmpeg -af value that lowers volume inside the given spans (null when nothing to duck).
  * Gaps under 1.5s are bridged and spans under 2s skipped, with 0.5s ramps: no audible pumping. -6dB keeps game sound audible. */
 export function duckFilter(spans: [number, number][], vol = 0.5, ramp = 0.5): string | null {

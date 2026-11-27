@@ -13,3 +13,5 @@ __pycache__/
 # diarize.py models (download links in workers/diarize.py)
 assets/models/sherpa-onnx-pyannote-segmentation-3-0/
 assets/models/3dspeaker_*.onnx
+# separate.py model (download link in workers/separate.py)
+assets/models/sherpa-onnx-spleeter-2stems-fp16/

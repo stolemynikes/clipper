@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { captionSpot, chatSpot, coldOpenArgs, jumpCutArgs, jumpCuts, parseSilence, SILENCE_AF, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop, teaserSpan } from './render.ts';
+import { captionSpot, chatSpot, coldOpenArgs, jumpCutArgs, jumpCuts, parseSilence, SILENCE_AF, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, speechInMusic, duckMixArgs, type Rect, stackTop, teaserSpan } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -238,7 +238,15 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const sfx = (music?.sfx ?? []).map(([a, b, w]) => [a - lead, b - lead, w] as [number, number, string]).filter(([a]) => a >= 0);
-  const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
+  const musicRel = (isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0);
+  // The music detector only hears music in the gaps (speech masks it), so any music span counts for the whole clip.
+  const quiet = quietMusic(musicRel, words), talk = musicRel.length ? speechInMusic([[0, durationSec]], words) : [];
+  // Sidechain duck (duck proposal): split the rendered sound into voice + music stems, music down only under speech.
+  const duckTalk = async (out: string, vol: number) => {
+    await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'separate.py'), JSON.stringify({ input: out, vocals: 'voc.wav', music: 'mus.wav' })], { cwd: dir });
+    await runCmd('ffmpeg', duckMixArgs(out, 'voc.wav', 'mus.wav', 'duck.mp4', duckFilter(talk, vol)!), { cwd: dir });
+    renameSync(join(dir, 'duck.mp4'), join(dir, out)); rmSync(join(dir, 'voc.wav')); rmSync(join(dir, 'mus.wav'));
+  };
   // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: off the face. Shift capped above the app buttons.
   const capY = (ch: Change, l = layout) => Math.min(1560, (l.cam ? 900 + stackTop(l) : l.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
   // Crop that pans with the person: only a one-face full-cam scene, and only when the face really moves (else a byte copy).
@@ -286,15 +294,17 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
     // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat && burstOn(ch) && (layout.cam || spot != null) ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : spot! } : undefined);
-    const duck = duckFilter(quiet, ch.duckVol);
+    const sidechain = ch.duckVol !== undefined && !!duckFilter(talk);
+    const duck = sidechain ? null : duckFilter(quiet, ch.duckVol);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead, duck, durationSec,
       burstOn(ch) && (layout.cam || spot != null) ? twitchChat?.file ?? null : null, ch.lufs), { cwd: dir });
+    if (sidechain) await duckTalk(out, ch.duckVol!);
   };
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
     const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here'
-      : p.change.jumpCut && (live.coldOpen || p.change.coldOpen) && teaser ? 'cold open already reorders this clip' : p.change.coldOpen && !teaser ? 'no clean payoff cut' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+      : p.change.jumpCut && (live.coldOpen || p.change.coldOpen) && teaser ? 'cold open already reorders this clip' : p.change.coldOpen && !teaser ? 'no clean payoff cut' : p.change.duckVol !== undefined && !duckFilter(talk) ? 'no talking over music here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
