@@ -134,7 +134,7 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'wide-game', title: 'Whole game picture under the cam', why: '3 of 13 top clipper Shorts show the whole stream picture, not a zoomed part, so viewers see the full game moment.', change: { wideGame: true } });
   add({ id: 'follow-face', title: 'Picture follows the streamer', why: 'In 223 of 929 clips the camera is the whole scene; when the streamer moves, a fixed crop cuts them off.', change: { followFace: true } });
   add({ id: 'cold-open', title: 'Show the payoff first', why: 'A second of the funny part before the build-up gives a reason to keep watching. 0 of 16 top clips we studied do it, so it is a test.', change: { coldOpen: true } });
-  add({ id: 'jump-cut', title: 'Cut the quiet pauses', why: 'Top Shorts we measured cut often; our clips have 0 cuts. 14 of our last 34 clips have a pause with no talking and quiet game sound.', change: { jumpCut: true } });
+  add({ id: 'jump-cut', title: 'Cut the quiet pauses', why: 'Nov 27 measure (12 top gaming Shorts vs 12 of ours): our longest silent gap is 5.5 s (median), theirs 3.0 s. 14 of our last 34 clips have a pause with no talking and quiet game sound.', change: { jumpCut: true } });
   add({ id: 'sfx-captions', title: 'Show *LAUGHS* and *SCREAMS*', why: 'Top clippers write reaction sounds in the captions, so muted viewers get the moment too.', change: { sfxCaptions: true } });
   add({ id: 'speaker-colors', title: 'Caption colour per speaker', why: 'With 2+ people on screen each speaker gets a colour (main speaker white), so viewers follow who talks.', change: { speakerColors: true } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
