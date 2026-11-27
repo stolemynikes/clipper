@@ -105,13 +105,16 @@ function writeGaming(out: ShortFacts[]) {
 }
 
 /** What the editor and title writer take from the last weekly study; empty until it has run. */
-/** Hashtags that 3+ top Shorts from 2+ channels use, minus any channel or streamer name (no other streamers' tags) and the ones we always add. Max 3. */
+// Topic-free tags only: the study mixes games (#leagueoflegends, #rust, #chess), and a game tag on another game's clip misleads.
+const NEUTRAL = new Set(['twitch', 'kick', 'gaming', 'gamer', 'clips', 'twitchclips', 'kickclips', 'streamer', 'streamers', 'streaming', 'livestream', 'funny', 'funnymoments', 'comedy', 'viral', 'highlights', 'memes']);
+
+/** Neutral hashtags that 3+ top Shorts from 2+ channels use, minus any channel or streamer name (no other streamers' tags) and the ones we always add. Max 3. */
 export function genericHashtags(shorts: Pick<ShortFacts, 'channel' | 'hashtags'>[], names: string[] = []) {
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
   const banned = [...shorts.map((f) => norm(f.channel)), ...names.map(norm)].filter((n) => n.length >= 3);
   const seen = new Map<string, Set<string>>(), uses = new Map<string, number>();
   for (const f of shorts) for (const h of new Set(f.hashtags.map(norm))) { uses.set(h, (uses.get(h) ?? 0) + 1); seen.set(h, (seen.get(h) ?? new Set()).add(f.channel)); }
-  return [...uses].filter(([h, n]) => h.length >= 3 && n >= 3 && seen.get(h)!.size >= 2 && !['shorts', 'fyp', 'reels', 'ad'].includes(h) && !banned.some((b) => h.includes(b) || b.includes(h)))
+  return [...uses].filter(([h, n]) => NEUTRAL.has(h) && n >= 3 && seen.get(h)!.size >= 2 && !banned.some((b) => h.includes(b) || b.includes(h)))
     .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h]) => `#${h}`);
 }
 

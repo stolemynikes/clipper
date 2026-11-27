@@ -9,6 +9,8 @@ test('generic hashtags: 3+ Shorts from 2+ channels, no channel or streamer names
     s('ChannelB', ['#Gaming', '#kaicenat', '#ChannelB']), s('ChannelB', ['#channelb', '#channelb', '#funny']), s('C', ['#channelb']),
   ];
   assert.deepEqual(genericHashtags(shorts, ['kaicenat']), ['#gaming', '#funny']);
+  const games = [s('A', ['#leagueoflegends', '#twitch']), s('B', ['#leagueoflegends', '#twitch']), s('C', ['#leagueoflegends', '#twitch'])];
+  assert.deepEqual(genericHashtags(games), ['#twitch']); // game tags mislead on other games' clips
 });
 
 test('peakWindow finds the busiest US-East 5h window, or null when weak', async () => {
