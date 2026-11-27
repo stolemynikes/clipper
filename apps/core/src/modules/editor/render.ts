@@ -1,7 +1,7 @@
 // ffmpeg 9:16 render: facecam on top (1080x768), gameplay below (1080x1152), captions burned in.
 export interface Rect { x: number; y: number; w: number; h: number } // fractions of the source frame
 
-export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack'; faces?: number; face?: Rect } // from workers/face_track.py
+export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack'; faces?: number; face?: Rect; pan?: [number, number][] } // from workers/face_track.py; pan: fullcam crop-left keyframes [t, x] (followPath)
 
 const BOX = { x: 16, w: 560, h: 340 }; // chat box / card stack in a 1080x1920 frame (CHAT_BOX)
 const TOP_SAFE = 150; // below the platform's top tabs
@@ -68,6 +68,36 @@ export function stackTop(layout: Layout): number {
 }
 
 const crop = (r: Rect) => `crop=iw*${r.w}:ih*${r.h}:iw*${r.x}:ih*${r.y}`;
+
+const DEAD = 0.04; // the crop only moves when the face drifts this far (of frame width) from where it points: no jitter
+/** Face centers every ~0.5 s (face_track.py track, null = lost) to crop-left keyframes [t, x] for a crop `cw` wide.
+ *  Lost face holds the last spot; ±1 s average + dead zone keep it calm; points on a straight line are dropped. */
+export function followPath(raw: [number, number | null][], cw: number, x0: number): [number, number][] {
+  if (!raw.length) return [[0, x0]];
+  let hold = raw.find(([, c]) => c != null)?.[1] ?? x0 + cw / 2;
+  const cx = raw.map(([, c]) => (hold = c ?? hold));
+  // median, not mean: one bad sample (hand, head turn) must not drag the crop
+  const avg = cx.map((_, i) => { const w = cx.slice(Math.max(0, i - 2), i + 3).sort((a, b) => a - b); return w[w.length >> 1]; });
+  let cur = avg[0];
+  const pts = avg.map((c, i): [number, number] => {
+    if (Math.abs(c - cur) > DEAD) cur = c - Math.sign(c - cur) * DEAD;
+    return [raw[i][0], +Math.min(Math.max(cur - cw / 2, 0), 1 - cw).toFixed(4)];
+  });
+  return pts.filter((p, i) => i === 0 || i === pts.length - 1 || Math.abs(p[1] - pts[i - 1][1]) + Math.abs(pts[i + 1][1] - p[1]) > 1e-4
+    && Math.abs((p[1] - pts[i - 1][1]) / (p[0] - pts[i - 1][0]) - (pts[i + 1][1] - p[1]) / (pts[i + 1][0] - p[0])) > 1e-3);
+}
+
+/** ffmpeg crop x as a piecewise-linear function of t (x is evaluated per frame; w/h are not, so the crop only pans). */
+export function panExpr(keys: [number, number][]): string {
+  let e = String(keys[keys.length - 1][1]);
+  for (let i = keys.length - 2; i >= 0; i--) {
+    const [t0, a] = keys[i], [t1, b] = keys[i + 1];
+    e = `if(lt(t,${t1}),${a}+${+(b - a).toFixed(4)}*(t-${t0})/${+(t1 - t0).toFixed(2)},${e})`;
+  }
+  return `if(lt(t,${keys[0][0]}),${keys[0][1]},${e})`;
+}
+
+const cropFollow = (r: Rect, keys?: [number, number][]) => (keys && keys.length > 1 ? `crop=iw*${r.w}:ih*${r.h}:'iw*(${panExpr(keys)})':ih*${r.y}` : crop(r));
 const fill = (w: number, h: number) => `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1`;
 
 /** cam: cam on top (1080x768), content below (1080x1152; fit full: whole frame on blur). nocam: content whole, centered on a blurred
@@ -85,7 +115,7 @@ export function filterGraph(layout: Layout, assFile: string, fontsDir: string, c
     return `[0:v]split=2[a][b];[a]${fill(1080, 1920)},boxblur=30:2,eq=brightness=-0.2[bg];`
       + `[b]${crop(content)},scale=1080:-2,setsar=1[fg];[bg][fg]overlay=0:(H-h)/2${end}`;
   }
-  if (!cam) return `[0:v]${content ? crop(content) : 'crop=ih*9/16:ih'},${fill(1080, 1920)}${end}`;
+  if (!cam) return `[0:v]${content ? cropFollow(content, layout.pan) : 'crop=ih*9/16:ih'},${fill(1080, 1920)}${end}`;
   if (layout.fit === 'stack' && content) {
     // Cam and game stay joined; the spare height is split above and below (owner, Nov 2026).
     return `[0:v]split=3[a][b][c];[a]${crop(cam)},${fill(1080, 768)}[top];[b]${fill(1080, 1920)},boxblur=30:2,eq=brightness=-0.2[bg];`

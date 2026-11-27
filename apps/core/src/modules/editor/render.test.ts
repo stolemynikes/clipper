@@ -108,3 +108,15 @@ test('hookSpot: cam panel bottom, nocam above content, fullcam above hair or nul
   assert.equal(hookSpot({ scene: 'fullcam', content: c, face: { x: 0.4, y: 0.05, w: 0.1, h: 0.15 } }), null); // face near the top
   assert.ok((hookSpot({ scene: 'fullcam', content: c, face: { x: 0.4, y: 0.5, w: 0.1, h: 0.15 } }) ?? 0) >= 150);
 });
+
+test('followPath: still face = one key, moving face pans with dead zone, lost face holds', async () => {
+  const { followPath, panExpr } = await import('./render.ts');
+  const still = followPath([[0, 0.5], [0.5, 0.51], [1, 0.49], [1.5, 0.5]], 0.3, 0.35);
+  assert.ok(still.every(([, x]) => x === still[0][1]) && still.length <= 2);
+  const walk = followPath(Array.from({ length: 21 }, (_, i) => [i * 0.5, i < 10 ? 0.3 : i < 14 ? null : 0.7] as [number, number | null]), 0.3, 0.15);
+  const xs = walk.map(([, x]) => x);
+  assert.ok(Math.max(...xs) > 0.3 && Math.min(...xs) < 0.2 && xs.every((x) => x >= 0 && x <= 0.7)); // moved right, stayed inside the frame
+  assert.ok(xs.every((x, i) => !i || x >= xs[i - 1])); // never swings back while the face was lost
+  const e = panExpr([[0, 0.1], [2, 0.3]]);
+  assert.equal(e, 'if(lt(t,0),0.1,if(lt(t,2),0.1+0.2*(t-0)/2,0.3))');
+});

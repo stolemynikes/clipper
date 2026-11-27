@@ -304,8 +304,39 @@ def check_render(path: str, model: str, n: int = 5) -> dict:
     return {"frames": frames}
 
 
+def track(path: str, model: str, start: float, end: float, cx0: float, step: float = 0.5) -> dict:
+    """Face center x (fraction of frame width) every `step` s from start to end, for a crop that follows the person.
+    Follows the big face nearest the last position (another face walking in does not steal the crop); null = no face."""
+    opts = vision.FaceDetectorOptions(base_options=BaseOptions(model_asset_path=model), min_detection_confidence=0.6)
+    det = vision.FaceDetector.create_from_options(opts)
+    cap = cv2.VideoCapture(path)
+    out, last, t, miss = [], cx0, start, 0
+    while t < end:
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+        ok, f = cap.read()
+        if not ok:
+            break
+        rgb = np.ascontiguousarray(cv2.cvtColor(cv2.resize(f, (W, H)), cv2.COLOR_BGR2RGB))
+        xs = [(b.origin_x + b.width / 2) / W for d in det.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)).detections
+              if (b := d.bounding_box).width / W >= FULLCAM_FACE_W / 2]
+        cx = min(xs, key=lambda x: abs(x - last)) if xs else None
+        # A jump across the frame is a different face, not the same person moving; after 3 s without a match, take it.
+        if cx is not None and (abs(cx - last) < 0.35 or miss >= 3 / step):
+            last, miss = cx, 0
+        else:
+            cx, miss = None, miss + 1
+        out.append([round(t - start, 2), None if cx is None else round(cx, 4)])
+        t += step
+    cap.release()
+    det.close()
+    return {"track": out}
+
+
 if __name__ == "__main__":
     args = json.loads(sys.argv[1])
+    if args.get("track"):
+        json.dump(track(args["input"], args["model"], args.get("start") or 0, args["end"], args["cx"]), sys.stdout)
+        sys.exit(0)
     if args.get("check"):
         json.dump(check_render(args["input"], args["model"]), sys.stdout)
         sys.exit(0)

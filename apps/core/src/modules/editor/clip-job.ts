@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, hookSpot, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -43,6 +43,17 @@ async function detectLayout(src: string, hint: StreamerConfig["facecam"], start:
     log.warn(`face_track failed, showing the whole frame: ${(e as Error).message}`);
     return { scene: 'nocam', cam: null, content: { x: 0, y: 0, w: 1, h: 1 } };
   }
+}
+
+/** fullcam: crop-left keyframes that follow the face over [start, end], or null when it stays put or tracking fails. */
+async function facePan(src: string, layout: Layout, start: number, end: number): Promise<[number, number][] | null> {
+  const c = layout.content!, cx = layout.face ? layout.face.x + layout.face.w / 2 : c.x + c.w / 2;
+  try {
+    const { track } = JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'face_track.py'),
+      JSON.stringify({ input: src, track: true, start, end, cx, model: join(paths.rootDir, 'assets', 'models', 'blaze_face_short_range.tflite') })])) as { track: [number, number | null][] };
+    const keys = followPath(track, c.w, c.x);
+    return keys.length > 1 ? keys : null;
+  } catch (e) { log.warn(`face track failed, fixed crop: ${(e as Error).message}`); return null; }
 }
 
 /** Sets word.sp (speaker) from workers/diarize.py on [start, end]; words are relative to start. Never blocks the clip. */
@@ -230,9 +241,12 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
   // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: off the face. Shift capped above the app buttons.
   const capY = (ch: Change, l = layout) => Math.min(1560, (l.cam ? 900 + stackTop(l) : l.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
+  // Crop that pans with the person: only a one-face full-cam scene, and only when the face really moves (else a byte copy).
+  const follow = layout.scene === 'fullcam' && (layout.faces ?? 1) < 2 && layout.content && (live.followFace || props.some((p) => p.change.followFace));
+  const pan = follow ? await facePan(src, layout, lead, cut) : null;
   const encode = async (out: string, ch: Change) => {
     const own = ch.gameCrop?.[cfg.name] ?? (ch.wideGame ? { x: 0, y: 0, w: 1, h: 1, fit: 'stack' as const } : undefined); // only the plain cam scene: stack/full layouts already pick their own content
-    const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : layout;
+    const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : ch.followFace && pan ? { ...layout, pan } : layout;
     const dy = stackTop(lay), chatTop = 1920 - dy - CHAT_BOX.h - 16; // a whole-frame proposal moves cam + game into a centered block
     const subs = out.replace('.mp4', '.ass');
     const captionY = capY(ch, lay), spot = chatSpot(lay, captionY); // fullcam: a free spot beside the head, null = no box
@@ -258,7 +272,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+    const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
