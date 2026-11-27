@@ -229,13 +229,13 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const sfx = (music?.sfx ?? []).map(([a, b, w]) => [a - lead, b - lead, w] as [number, number, string]).filter(([a]) => a >= 0);
   const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
   // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: off the face. Shift capped above the app buttons.
-  const capY = (ch: Change, l = layout) => Math.min(1560, (layout.cam ? 900 + stackTop(layout) : layout.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
+  const capY = (ch: Change, l = layout) => Math.min(1560, (l.cam ? 900 + stackTop(l) : l.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
   const encode = async (out: string, ch: Change) => {
-    const own = ch.gameCrop?.[cfg.name]; // only the plain cam scene: stack/full layouts already pick their own content
+    const own = ch.gameCrop?.[cfg.name] ?? (ch.wideGame ? { x: 0, y: 0, w: 1, h: 1, fit: 'stack' as const } : undefined); // only the plain cam scene: stack/full layouts already pick their own content
     const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : layout;
     const dy = stackTop(lay), chatTop = 1920 - dy - CHAT_BOX.h - 16; // a whole-frame proposal moves cam + game into a centered block
     const subs = out.replace('.mp4', '.ass');
-    const captionY = capY(ch), spot = chatSpot(lay, captionY); // fullcam: a free spot beside the head, null = no box
+    const captionY = capY(ch, lay), spot = chatSpot(lay, captionY); // fullcam: a free spot beside the head, null = no box
     writeFileSync(join(dir, subs), buildAss({
       words: !cfg.captionStyle && genre?.captions === null ? [] : ch.speakerColors ? words : words.map(({ sp: _, ...w }) => w), durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen
       disclosureSec: settings.clip.disclosureSec, chat: burstOn(ch) ? chat : calm,
@@ -258,7 +258,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+    const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });

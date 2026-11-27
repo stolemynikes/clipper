@@ -21,6 +21,7 @@ export type Change = {
   sfxCaptions?: boolean; // *LAUGHS* / *SCREAMS* above the captions where YAMNet hears it
   speakerColors?: boolean; // caption colour per speaker when 2+ people are on screen (diarize.py)
   chatBurst?: boolean; // our own Twitch chat box when chat goes wild (settings clip.chatBurst is the live default)
+  wideGame?: boolean; // whole stream picture under the cam on blur, any streamer (study: 3/13 top clipper Shorts); cam scene only
   gameCrop?: Record<string, Rect & { fit?: 'stack' }>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
 };
@@ -127,6 +128,7 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   // Nov 27 owner: speaker colours tested first, then switched on where they win.
   add({ id: 'hook-title', title: 'Title on screen, key word yellow', why: 'Most top clipper Shorts keep a title on screen with the payoff word coloured. Now the hook is only the cover.', change: { hookTitle: true } });
+  add({ id: 'wide-game', title: 'Whole game picture under the cam', why: '3 of 13 top clipper Shorts show the whole stream picture, not a zoomed part, so viewers see the full game moment.', change: { wideGame: true } });
   add({ id: 'sfx-captions', title: 'Show *LAUGHS* and *SCREAMS*', why: 'Top clippers write reaction sounds in the captions, so muted viewers get the moment too.', change: { sfxCaptions: true } });
   add({ id: 'speaker-colors', title: 'Caption colour per speaker', why: 'With 2+ people on screen each speaker gets a colour (main speaker white), so viewers follow who talks.', change: { speakerColors: true } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
