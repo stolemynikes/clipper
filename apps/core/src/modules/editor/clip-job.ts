@@ -193,12 +193,13 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const chat = [...matchChat(t.words, chatLines).filter((c) => !busy || c.e <= busy[0] || c.s >= busy[1]), ...(twitchChat ? [] : burst)]
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
-  const dy = stackTop(layout);
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
-  const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
   const encode = async (out: string, ch: Change) => {
+    const own = ch.gameCrop?.[cfg.name]; // only the plain cam scene: stack/full layouts already pick their own content
+    const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : layout;
+    const dy = stackTop(lay), chatTop = 1920 - dy - CHAT_BOX.h - 16; // a whole-frame proposal moves cam + game into a centered block
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
     writeFileSync(join(dir, subs), buildAss({
@@ -213,8 +214,6 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
       captionY: Math.min(1560, base + (ch.captionShift ?? 0)), chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
     }));
     // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
-    const own = ch.gameCrop?.[cfg.name]; // only the plain cam scene: stack/full layouts already pick their own content
-    const lay = own && layout.cam && !layout.fit ? { ...layout, content: own } : layout;
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
     const duck = duckFilter(quiet, ch.duckVol);
