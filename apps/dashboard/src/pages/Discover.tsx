@@ -45,15 +45,20 @@ export function Discover() {
       right={<button className="btn btn-1" onClick={scan} disabled={scanning} aria-busy={scanning}>{scanning ? <span className="spin" aria-hidden /> : <Icon name="search" size={16} />}{scanning ? 'Looking…' : 'Look for campaigns'}</button>}>
       {data?.scanError && !scanning ? <p className="card !py-3 text-sm text-warn m-0 shrink-0 flex items-center gap-2" role="alert"><Icon name="alert" size={16} />The last look failed. Is the Content Rewards Chrome open and logged in?</p> : null}
       <div className="segs shrink-0 self-start" role="group" aria-label="Filter">{FILTERS.map(([l], i) => <button key={l} className="seg" aria-pressed={f === i} onClick={() => setF(i)}>{l} <span className="num text-f">{data ? n(i) : ''}</span></button>)}</div>
-      {isLoading ? <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</div>
+      {isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</div>
         : !rows.length ? <div className="card flex flex-1"><Empty icon="search" title={data?.at ? 'Nothing here' : 'No campaigns yet'}
           text={data?.at ? 'No campaigns match this filter. New ones show up every day.' : 'Press "Look for campaigns". Snip opens Content Rewards like a person would and lists everything.'} /></div>
-        : <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="grid md:grid-cols-2 xl:grid-cols-3 min-[2200px]:grid-cols-4 gap-4 content-start pb-6">
+        : <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 min-[2200px]:grid-cols-4 gap-4 content-start pb-6">
           <AnimatePresence initial={false}>{rows.map((c) => <Card key={c.id} c={c} onJoin={() => join(c)} />)}</AnimatePresence>
         </div></div>}
     </Page>
   );
 }
+
+/** A failed join in plain words, not a stack trace. */
+const joinFail = (e: string) => /card not found/i.test(e) ? 'Snip could not find this campaign on Content Rewards. Look for campaigns again, then retry.'
+  : /timeout|timed out/i.test(e) ? 'Content Rewards or the brief reader took too long. Try again.'
+  : e.replace(/^Error:\s*/, '').split('\n')[0].slice(0, 140);
 
 function Card({ c, onJoin }: { c: DiscoverCampaign; onJoin: () => void }) {
   const leftPct = c.budget ? Math.max(0, Math.min(100, (c.left / c.budget) * 100)) : 0;
@@ -73,7 +78,7 @@ function Card({ c, onJoin }: { c: DiscoverCampaign; onJoin: () => void }) {
         <div className="flex justify-between text-[13px]"><span className="text-m">{c.pool ? 'Pool' : 'Budget'} left</span><span className="num">{money(c.left)} of {money(c.budget)}</span></div>
         <div className="bar" role="progressbar" aria-valuenow={Math.round(leftPct)} aria-valuemin={0} aria-valuemax={100} aria-label="Budget left"><i style={{ width: `${leftPct}%`, background: leftPct < 15 ? 'var(--color-warn)' : undefined }} /></div>
       </div>
-      {c.joinError && !c.joining && c.why !== JOINED ? <p className="text-[13px] text-warn m-0">Last try failed: {c.joinError.replace(/^Error:\s*/, '').slice(0, 140)}</p> : null}
+      {c.joinError && !c.joining && c.why !== JOINED ? <p className="text-[13px] text-warn m-0 break-words">Last try failed: {joinFail(c.joinError)}</p> : null}
       {c.why === JOINED ? <a href={c.streamer ? `#/campaigns/${c.streamer}` : '#/campaigns'} className="btn no-underline"><Icon name="check" size={16} />Joined · open campaign</a>
         : c.why ? <span className="pill self-start"><span className="dot" style={{ background: 'var(--color-f)' }} />{c.why}</span>
         : <button className="btn btn-1" onClick={onJoin} disabled={c.joining} aria-busy={c.joining}>{c.joining ? <><span className="spin" aria-hidden />Joining…</> : <><Icon name="plus" size={16} />Join</>}</button>}

@@ -151,7 +151,7 @@ export function Accounts() {
       <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="flex flex-col gap-8 pb-6">
         <AnimatePresence initial={false}>{open ? <AddAccount key="add" data={data} onDone={() => setAdding(false)} /> : null}</AnimatePresence>
         {data.accounts.length ? (
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 min-[2200px]:grid-cols-4 gap-4 content-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 min-[2200px]:grid-cols-4 gap-4 content-start">
             <AnimatePresence initial={false}>{data.accounts.map((a) => <AccountCard key={a.id} a={a} data={data} />)}</AnimatePresence>
           </div>
         ) : null}
@@ -159,7 +159,7 @@ export function Accounts() {
         <section className="flex flex-col gap-4" aria-labelledby="apps-h">
           <div className="flex flex-col gap-1"><h2 id="apps-h" className="text-lg font-semibold m-0">Platform apps</h2>
             <p className="text-sm text-m m-0">One time per platform. Keys go straight into .env on the PC and are never shown again.{data.hasPostpeer ? ' TikTok and Instagram post through PostPeer, so only YouTube needs its own app.' : ''}</p></div>
-          <div className="grid xl:grid-cols-2 gap-4 content-start">{data.apps.map((p) => <AppCard key={p.platform} app={p} />)}</div>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 content-start">{data.apps.map((p) => <AppCard key={p.platform} app={p} />)}</div>
         </section>
       </div></div>
     </Page>
@@ -253,7 +253,7 @@ function AddAccount({ data, onDone }: { data: AccountsData; onDone: () => void }
       className="card flex flex-col gap-5" aria-labelledby="add-h">
       <div className="flex flex-col gap-1"><h2 id="add-h" className="text-lg font-semibold m-0">Add an account</h2>
         <p className="text-sm text-m m-0">Make the account on the platform first, then add it here and press Connect.</p></div>
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <fieldset className="flex flex-col gap-2 m-0 p-0 border-0"><legend className="text-sm text-m mb-2">Platform</legend>
           <div className="segs self-start" role="group">{PLATFORMS.map(([k, l]) => <button type="button" key={k} className="seg" aria-pressed={platform === k} onClick={() => setPlatform(k)}>{l}</button>)}</div></fieldset>
         <label className="flex flex-col gap-2 text-sm text-m">Campaign
@@ -299,7 +299,7 @@ function AppCard({ app }: { app: AppSetup }) {
       <details open={!app.ready} className="text-sm"><summary className="cursor-pointer text-m min-h-[44px] flex items-center">How to set up (one time)</summary>
         {/* steps are fixed server text with links (setup.ts APPS), not user input */}
         <ol className="flex flex-col gap-2 m-0 pl-5 leading-relaxed list-decimal marker:text-f">{app.steps.map((s, i) => <li key={i} dangerouslySetInnerHTML={{ __html: s }} />)}</ol></details>
-      <div className="grid md:grid-cols-2 gap-3">{app.fields.map((f) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{app.fields.map((f) => (
         <label key={f.key} className="flex flex-col gap-2 text-sm text-m">{f.label}
           <input className="field" name={f.key} type={f.secret ? 'password' : 'text'} autoComplete="off" spellCheck={false} placeholder={f.saved ? 'Saved. Paste to replace' : 'Paste here'} /></label>))}</div>
       {err ? <p className="text-sm text-warn m-0" role="alert">{err}</p> : null}

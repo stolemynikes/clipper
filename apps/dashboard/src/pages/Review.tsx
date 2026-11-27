@@ -79,7 +79,7 @@ export function Review({ focus }: { focus?: number }) {
             {c.reasons.map((r) => <div key={r} className="flex items-center gap-3"><span className="tile"><Icon name={why(r)} size={18} /></span><span className="text-[15px] font-semibold">{r}</span></div>)}
             <a href={c.source} target="_blank" rel="noreferrer" className="text-sm text-a no-underline flex items-center gap-2 w-fit"><Icon name="link" size={14} />Watch it in the stream</a>
           </section>
-          <div className="grid xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <Checks c={c} />
             <section className="card flex flex-col gap-3 min-w-0">
               <h2 className="text-[17px] font-semibold m-0">Will post to</h2>
