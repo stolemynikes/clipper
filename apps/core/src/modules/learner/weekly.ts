@@ -1,4 +1,4 @@
-// Daily study per kind (gaming, talk, music): top Shorts of the past 2 days, plus the best and worst Short of their channels (patterns.ts).
+// Daily study per kind (gaming, talk, music): top Shorts of the past 2 days, plus the best and up to 3 weak Shorts of their channels (patterns.ts).
 // Gaming tops also: What titles, pacing and captions win now.
 // Feeds the title prompt (example titles) and caption chunking (words per line). Downloads are for analysis only and deleted after.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -43,9 +43,10 @@ export async function weeklyShorts() {
           const own = (await channelShorts(ch)).filter((v) => !seen.has(v.id)); // sorted by views
           if (own.length < 8) continue;
           const q = Math.floor(own.length / 4);
-          const best = own.slice(0, q).find((v) => !tops.some((t) => t.id === v.id)), worst = own[own.length - 1];
+          // up to 3 weak ones from the bottom quarter: 1 a channel took ~4 days to reach NEED flops
+          const best = own.slice(0, q).find((v) => !tops.some((t) => t.id === v.id)), weak = own.slice(-q).slice(-3);
           if (best) picks.push({ v: best, kind, group: 'top' });
-          picks.push({ v: worst, kind, group: 'flop' });
+          for (const v of weak) picks.push({ v, kind, group: 'flop' });
         } catch (e) { log.warn(`weekly: channel list failed: ${(e as Error).message.slice(0, 120)}`); }
       }
       const facts: { p: Picked; f: ShortFacts; laugh: number; cheer: number }[] = [];

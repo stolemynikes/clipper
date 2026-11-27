@@ -14,6 +14,7 @@ const log = logger('footage');
 const VIDEO = /\.(mp4|mov|mkv|webm|m4v)$/i;
 // Windows' own bsdtar reads zip; a GNU tar earlier on PATH (Git Bash) does not. shortcut: Linux VPS needs unzip here.
 const TAR = process.platform === 'win32' ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+const MAX_BYTES = 20 * 2 ** 30; // one brand folder was 55 GB; a few videos are enough to clip from
 const PER_PASS = 3; // new videos per campaign per watch pass: a 50-file folder must not flood the queue
 
 /** Every footage folder link in a brief: Google Drive (folder or file) or Dropbox. Briefs often mix an overlays folder
@@ -38,25 +39,32 @@ async function fetchOne(dir: string, url: string): Promise<string[]> {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     const timeoutMs = 2 * 3600_000;
-    // shortcut: no size check before downloading; add one if a campaign shares hundreds of GB.
+    // gdown has no size limit: stop it once the folder passes MAX_BYTES and keep what came.
+    const stop = new AbortController();
+    const watch = setInterval(() => { if (dirBytes(dir) > MAX_BYTES) { log.warn('footage folder over 20 GB, stopping download'); stop.abort(); } }, 15_000);
     if (url.includes('drive.google.com')) {
       const folder = url.includes('/folders/');
       // One file Drive refuses (quota, removed) must not lose the rest: keep what came, only videos count.
-      await runCmd(paths.pythonBin, ['-m', 'gdown', ...(folder ? ['--folder'] : ['--fuzzy']), '--quiet', url, '-O', folder ? dir : dir + '/'], { timeoutMs })
+      await runCmd(paths.pythonBin, ['-m', 'gdown', ...(folder ? ['--folder'] : ['--fuzzy']), '--quiet', url, '-O', folder ? dir : dir + '/'], { timeoutMs, signal: stop.signal })
         .catch((err) => log.warn('footage download incomplete', { error: String(err).split('\n').slice(0, 2).join(' ').slice(0, 200) }));
     } else {
       const zip = join(dir, 'footage.download');
-      await runCmd('curl', ['-sSL', '--fail', '--max-filesize', String(50 * 2 ** 30), '-o', zip, dropboxDirect(url)], { timeoutMs });
+      try { await runCmd('curl', ['-sSL', '--fail', '--max-filesize', String(MAX_BYTES), '-o', zip, dropboxDirect(url)], { timeoutMs }); } finally { clearInterval(watch); }
       // Folder links give a zip; a file link gives the video itself. Windows tar reads zip.
       const head = Buffer.alloc(2), fd = openSync(zip, 'r'); readSync(fd, head, 0, 2, 0); closeSync(fd);
       if (head.toString() === 'PK') { await runCmd(TAR, ['-xf', zip, '-C', dir]); rmSync(zip); }
       else renameSync(zip, join(dir, 'footage.mp4'));
     }
+    clearInterval(watch);
     writeFileSync(done, url);
   }
   const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true })
     .flatMap((e) => e.isDirectory() ? walk(join(d, e.name)) : VIDEO.test(e.name) ? [join(d, e.name)] : []);
   return walk(dir).filter((f) => statSync(f).size > 0).sort();
+}
+
+function dirBytes(d: string): number {
+  try { return readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? dirBytes(join(d, e.name)) : statSync(join(d, e.name)).size), 0); } catch { return 0; } // file moved mid-walk
 }
 
 const probe = async (file: string) => Number(await runCmd('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file])) || 0;

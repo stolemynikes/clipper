@@ -5,16 +5,16 @@ import { learnedLines, patterns, type Row } from './patterns.ts';
 const row = (i: number, group: Row['group'], labels: string[], laugh = false): Row =>
   ({ id: `${group}${i}`, kind: 'talk', group, at: '2026-11-27T00:00:00Z', views: 1, labels, question: false, hook: true, laugh, cheer: false, fast: false });
 
-test('not ready below 15 rows per group: no lines', () => {
-  const rows = [...Array(14)].map((_, i) => row(i, 'top', ['hot take']));
+test('not ready below 30 rows per group: no lines', () => {
+  const rows = [...Array(29)].map((_, i) => row(i, 'top', ['hot take']));
   assert.equal(patterns(rows).ready, false);
   assert.deepEqual(learnedLines(rows), { works: [], weak: [] });
 });
 
 test('trait common in top, rare in flop, becomes a line; shared trait does not', () => {
   const rows = [
-    ...[...Array(20)].map((_, i) => row(i, 'top', i < 12 ? ['hot take'] : ['advice'], i < 10)),
-    ...[...Array(20)].map((_, i) => row(i, 'flop', i < 2 ? ['hot take'] : ['advice'])),
+    ...[...Array(30)].map((_, i) => row(i, 'top', i < 18 ? ['hot take'] : ['advice'], i < 15)),
+    ...[...Array(30)].map((_, i) => row(i, 'flop', i < 3 ? ['hot take'] : ['advice'])),
   ];
   const p = patterns(rows);
   assert.equal(p.ready, true);
@@ -29,10 +29,10 @@ test('trait common in top, rare in flop, becomes a line; shared trait does not',
 });
 
 test('difference that may be chance is not a line', () => {
-  const rows = [ // 5/15 vs 2/15: lift 0.2 but z 1.29
-    ...[...Array(15)].map((_, i) => row(i, 'top', i < 5 ? ['hot take'] : ['advice'])),
-    ...[...Array(15)].map((_, i) => row(i, 'flop', i < 2 ? ['hot take'] : ['advice'])),
+  const rows = [ // 9/30 vs 4/30: lift 0.17 but z 1.6
+    ...[...Array(30)].map((_, i) => row(i, 'top', i < 9 ? ['hot take'] : ['advice'])),
+    ...[...Array(30)].map((_, i) => row(i, 'flop', i < 4 ? ['hot take'] : ['advice'])),
   ];
-  assert.equal(patterns(rows).list.find((x) => x.trait === 'hot take')!.lift, 0.2);
+  assert.equal(patterns(rows).list.find((x) => x.trait === 'hot take')!.lift, 0.17);
   assert.ok(learnedLines(rows).works.every((l) => !l.startsWith('hot take')));
 });

@@ -15,7 +15,7 @@ export const LABELS = ['punchline', 'hot take', 'argument', 'surprising fact', '
 
 export type Row = { id: string; kind: Kind; group: 'top' | 'flop'; at: string; views: number; labels: string[]; question: boolean; hook: boolean; laugh: boolean; cheer: boolean; fast: boolean; laughScore?: number; cheerScore?: number }; // raw YAMNet peaks, to tune the 0.3 cut later
 const FEATURES: Record<string, string> = { question: 'asks the viewer a question', hook: 'someone talks in the first 3 seconds', laugh: 'audible laughter', cheer: 'cheering or applause', fast: 'fast talking (3+ words a second)' };
-export const NEED = 15; // per group, before a pattern counts
+export const NEED = 30; // per group, before a pattern counts
 const MIN_SUPPORT = 5;
 const Z_MIN = 1.645;
 const KEEP_DAYS = 60, MAX_ROWS = 400;
