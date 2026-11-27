@@ -1,7 +1,54 @@
 // ffmpeg 9:16 render: facecam on top (1080x768), gameplay below (1080x1152), captions burned in.
 export interface Rect { x: number; y: number; w: number; h: number } // fractions of the source frame
 
-export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack'; faces?: number } // from workers/face_track.py
+export interface Layout { scene?: 'cam' | 'fullcam' | 'nocam'; cam?: Rect | null; content?: Rect | null; fit?: 'full' | 'stack'; faces?: number; face?: Rect } // from workers/face_track.py
+
+const BOX = { x: 16, w: 560, h: 340 }; // chat box / card stack in a 1080x1920 frame (CHAT_BOX)
+const TOP_SAFE = 150; // below the platform's top tabs
+
+const CAP_HALF = 90; // captions are ~2 lines centered on captionY
+const CAP_MAX = 1560; // lowest caption center: above the app's bottom-left text
+
+/** fullcam face in output pixels (head = top of the hair), or null when there is no face to keep clear. */
+function faceBand(layout: Layout) {
+  const f = layout.face, c = layout.content;
+  if (layout.scene !== 'fullcam' || !f || !c) return null;
+  const y = (f.y - c.y) / c.h * 1920, h = f.h / c.h * 1920;
+  // BlazeFace box starts at the brows: hair sits ~0.45 box heights above (measured on lacy, 912)
+  return { x0: (f.x - c.x) / c.w * 1080, x1: (f.x + f.w - c.x) / c.w * 1080, head: y - 0.45 * h, chin: y + h };
+}
+
+/** fullcam: caption center y off the face: under the chin, else over the hair, else as low as allowed (covers only the chin). */
+export function captionSpot(layout: Layout, def = 1300): number {
+  const b = faceBand(layout);
+  if (!b) return def;
+  if (b.chin + 16 + CAP_HALF <= CAP_MAX) return Math.max(def, Math.round(b.chin + 16 + CAP_HALF));
+  if (b.head - 16 - CAP_HALF >= TOP_SAFE) return Math.round(b.head - 16 - CAP_HALF);
+  return CAP_MAX;
+}
+
+/** fullcam: top y of the chat box where it covers neither the streamer's head nor the captions; below the chin first, then above the hair.
+ *  null = no free spot (box dropped). Other layouts keep their fixed spot (def). */
+export function chatSpot(layout: Layout, captionY: number, def = 400): number | null {
+  const b = faceBand(layout);
+  if (!b) return def;
+  if (b.x1 < BOX.x - 16 || b.x0 > BOX.x + BOX.w + 16) return def; // face is beside the box
+  if (b.chin + 16 + BOX.h <= captionY - CAP_HALF) return Math.round(b.chin + 16);
+  if (b.head - 16 - BOX.h >= TOP_SAFE && (captionY > b.head || TOP_SAFE + BOX.h + 16 <= captionY - CAP_HALF)) return TOP_SAFE;
+  return null;
+}
+
+/** Rendered fullcam frames (face boxes as fractions of the 9:16 frame): why the face is not well framed, or null. */
+export function faceTrouble(frames: Rect[][]): string | null {
+  if (!frames.length) return null;
+  const big = frames.map((fs) => fs.filter((f) => f.w >= 0.2).sort((a, b) => b.w - a.w)[0]);
+  const seen = big.filter((f): f is Rect => !!f);
+  if (seen.length < Math.ceil(frames.length * 0.4)) return 'face not found in most frames (cut off?)';
+  const edge = seen.filter((f) => f.x <= 0.01 || f.x + f.w >= 0.99).length;
+  if (edge >= 2) return 'face touches the frame edge';
+  const cx = seen.map((f) => f.x + f.w / 2).sort((a, b) => a - b)[Math.floor(seen.length / 2)];
+  return Math.abs(cx - 0.5) > 0.22 ? 'face off center' : null;
+}
 
 /** fit stack: cam (768) + whole game side scaled to 1080 wide, as one block centered on blur. Returns the block's top y (0 otherwise). */
 export function stackTop(layout: Layout): number {

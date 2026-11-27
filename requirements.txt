@@ -5,3 +5,4 @@ nvidia-cublas-cu12
 nvidia-cudnn-cu12==9.*
 playwright==1.65.2 # workers/cr_browser.py: drives the owner's CR Chrome over CDP (no bundled browser needed)
 gdown==6.5.2 # watcher/footage.ts: downloads public Google Drive folders campaigns give as footage
+sherpa-onnx==2.0.3 # workers/diarize.py: who speaks when, caption colour per speaker (no Hugging Face token)

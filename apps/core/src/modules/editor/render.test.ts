@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { duckFilter, ffmpegArgs, filterGraph, quietMusic, stackTop } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, quietMusic, stackTop } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -69,4 +69,33 @@ test('twitch chat layer: second input, faded and delayed, under the captions', (
   const a = ffmpegArgs('in.mp4', 'out.mp4', g, 'libx264', 5, null, 30, 'chat.mov');
   assert.deepEqual(a.slice(a.indexOf('-i'), a.indexOf('-filter_complex')), ['-i', 'in.mp4', '-i', 'chat.mov']);
   assert.ok(a.indexOf('-ss') < a.indexOf('-i')); // seek applies to the clip source only
+});
+
+test('chatSpot: fullcam close-up (lacy 912) goes above the hair, beside-face and small faces keep the default', () => {
+  const content = { x: 0.34, y: 0, w: 0.316, h: 1 };
+  const lacy = { scene: 'fullcam' as const, content, face: { x: 0.34 + 0.18 * 0.316, y: 0.47, w: 0.6 * 0.316, h: 0.34 } };
+  assert.equal(chatSpot(lacy, 1300), 150);
+  assert.equal(chatSpot({ ...lacy, face: { ...lacy.face, y: 0.2, h: 0.2 } }, 1300), Math.round(0.4 * 1920 + 16)); // room under the chin
+  assert.equal(chatSpot({ ...lacy, face: { ...lacy.face, y: 0.12, h: 0.6 } }, 1300), null); // fills the frame: no spot
+  assert.equal(chatSpot({ ...lacy, face: { x: 0.34 + 0.7 * 0.316, y: 0.3, w: 0.25 * 0.316, h: 0.2 } }, 1300), 400); // face on the right
+  assert.equal(chatSpot({ scene: 'cam', cam: content, content }, 1300), 400);
+});
+
+test('captionSpot: fullcam captions stay off the face', () => {
+  const content = { x: 0.34, y: 0, w: 0.316, h: 1 };
+  const lacy = { scene: 'fullcam' as const, content, face: { x: 0.34 + 0.18 * 0.316, y: 0.47, w: 0.6 * 0.316, h: 0.34 } };
+  assert.equal(captionSpot(lacy), 503); // chin at 1555: over the hair (head 609)
+  assert.equal(chatSpot(lacy, 503), null); // hair band holds the captions: no room for the box too
+  assert.equal(captionSpot({ ...lacy, face: { ...lacy.face, y: 0.35, h: 0.35 } }), Math.round(0.7 * 1920 + 106)); // under the chin
+  assert.equal(captionSpot({ ...lacy, face: { ...lacy.face, y: 0.1, h: 0.2 } }), 1300); // small high face: default
+  assert.equal(captionSpot({ ...lacy, face: { ...lacy.face, y: 0.1, h: 0.85 } }), 1560); // fills the frame: lowest
+  assert.equal(captionSpot({ scene: 'nocam', content }), 1300);
+});
+
+test('faceTrouble: real 912 frames before/after the crop fix', () => {
+  const ok = [0.2667, 0.1778, 0.1528, 0.1722, 0.1861].map((x) => [{ x, y: 0.5, w: 0.6, h: 0.34 }]);
+  assert.equal(faceTrouble(ok), null);
+  assert.match(faceTrouble([[], [], [], [], []])!, /not found/); // old crop: face at the right edge, never detected
+  assert.match(faceTrouble(ok.map(() => [{ x: 0.5, y: 0.5, w: 0.5, h: 0.3 }]))!, /edge/);
+  assert.match(faceTrouble(ok.map(() => [{ x: 0.6, y: 0.5, w: 0.3, h: 0.2 }]))!, /off center/);
 });

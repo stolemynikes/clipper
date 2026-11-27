@@ -5,7 +5,7 @@
 
 import type { Overlay } from './chat-overlay.ts';
 
-export interface Word { w: string; s: number; e: number }
+export interface Word { w: string; s: number; e: number; sp?: number } // sp: speaker from diarize.py
 
 export interface AssOptions {
   words: Word[];
@@ -27,6 +27,8 @@ export interface AssOptions {
 const WHITE = '&H00FFFFFF';
 const YELLOW = '&H0015CCFA'; // #FACC15 in ASS BGR order
 const BLACK = '&H00000000';
+// Other speakers' lines (main speaker stays white): pink #F472B6, cyan #22D3EE, orange #FB923C.
+const SPEAKER = ['&H00B672F4', '&H00EED322', '&H003C92FB'];
 
 export type CaptionStyle = keyof typeof STYLES;
 /** Caption presets (fonts in assets/fonts, OFL). Picked per streamer or in settings; the Learner can A/B them.
@@ -81,6 +83,14 @@ export function buildAss(o: AssOptions): string {
     lines.push(`Dialogue: 0,${ts(start)},${ts(end)},${style},,0,0,0,,${text}`);
 
   const groups = chunkWords(words, per);
+  // 2+ speakers: each line in its speaker's colour so viewers follow who talks; the one who talks most stays white.
+  const count = new Map<number, number>();
+  for (const w of words) if (w.sp != null) count.set(w.sp, (count.get(w.sp) ?? 0) + 1);
+  const ranked = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([sp]) => sp);
+  const base = (chunk: Word[]) => {
+    const r = ranked.length > 1 ? ranked.indexOf(chunk.find((x) => x.sp != null)?.sp ?? ranked[0]) : 0;
+    return r > 0 ? SPEAKER[(r - 1) % SPEAKER.length] : WHITE;
+  };
   groups.forEach((chunk, g) => {
     const last = chunk[chunk.length - 1];
     // Hold the line until the next one starts, but not over a long pause.
@@ -88,8 +98,9 @@ export function buildAss(o: AssOptions): string {
     chunk.forEach((word, j) => {
       const end = j < chunk.length - 1 ? chunk[j + 1].s : chunkEnd;
       if (end <= word.s) return;
-      const on = `{\\c${st.active}${st.pop ? POP : ''}}`, off = `{\\c${WHITE}${st.pop ? '\\fscx100\\fscy100' : ''}}`;
-      const text = chunk.map((x, k) => (k === j ? `${on}${clean(x.w)}${off}` : clean(x.w))).join(' ');
+      const col = base(chunk);
+      const on = `{\\c${st.active}${st.pop ? POP : ''}}`, off = `{\\c${col}${st.pop ? '\\fscx100\\fscy100' : ''}}`;
+      const text = (col === WHITE ? '' : `{\\c${col}}`) + chunk.map((x, k) => (k === j ? `${on}${clean(x.w)}${off}` : clean(x.w))).join(' ');
       ev(word.s, end, 'Caption', `{\\pos(540,${y})}${text}`);
     });
   });

@@ -11,7 +11,7 @@ const words = [
 
 test('one caption event per word, active word highlighted, markup stripped', () => {
   const ass = buildAss({ words, durationSec: 10, tag: '@Streamer', disclosure: '#ad' });
-  const caps = ass.split('\n').filter((l) => l.includes(',Caption,'));
+  const caps = ass.split('\n').filter((l) => l.startsWith('Dialogue') && l.includes(',Caption,'));
   assert.equal(caps.length, 4);
   assert.match(caps[0], /^Dialogue: 0,0:00:00.50,0:00:00.90,Caption.*\{\\c&H0015CCFA&?\}NO\{\\c&H00FFFFFF\} WAY B1BRO$/);
   assert.match(caps[2], /0:00:01.30,0:00:02.00/); // last word of chunk lasts until next chunk
@@ -65,4 +65,12 @@ test('hook burned in for the whole clip, braces stripped', () => {
   assert.ok(line.endsWith('}He did WHAT?')); // sentence case kept, emoji dropped
   assert.ok(line.includes('{\\pos(540,470)\\fad(0,200)}'));
   assert.ok(!buildAss({ words, durationSec: 10, tag: '@S', disclosure: null }).includes(',Hook,,'));
+});
+
+test('2+ speakers: main speaker white, other speaker pink; one speaker stays white', () => {
+  const two = buildAss({ words: [{ w: 'a', s: 0, e: 0.2, sp: 1 }, { w: 'b.', s: 0.3, e: 0.5, sp: 1 }, { w: 'c', s: 2, e: 2.2, sp: 0 }], durationSec: 3, tag: '' });
+  const caps = two.split('\n').filter((l) => l.startsWith('Dialogue') && l.includes(',Caption,'));
+  assert.ok(!caps[0].includes('B672F4') && caps[2].includes('c&H00B672F4'));
+  const one = buildAss({ words: [{ w: 'a', s: 0, e: 0.2, sp: 3 }], durationSec: 1, tag: '' });
+  assert.ok(!one.includes('B672F4'));
 });

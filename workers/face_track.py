@@ -95,9 +95,9 @@ def stable_face(found, n_frames: int, raw: np.ndarray | None = None):
     return max(big or faces, key=lambda f: (f[0], f[1][2]))[1]
 
 
-def count_big_faces(found, n_frames: int, raw: np.ndarray | None = None) -> int:
+def big_faces(found, n_frames: int, raw: np.ndarray | None = None) -> list[tuple[float, float, float, float]]:
     """Distinct big, steady, moving faces: 2+ is a podcast table, where a crop on one face loses the other speaker."""
-    boxes = []
+    boxes, out = [], []
     for _, (x, y, w, h) in found:
         if w < FULLCAM_FACE_W:
             continue
@@ -111,7 +111,15 @@ def count_big_faces(found, n_frames: int, raw: np.ndarray | None = None) -> int:
                 continue
         if all(abs(cx - c) >= 0.15 for c in boxes):
             boxes.append(cx)
-    return len(boxes)
+            out.append((x, y, w, h))
+    return out
+
+
+def group_crop(faces) -> dict:
+    """4:5 window (wider if needed) centered on all faces, full height: top clippers show two people this way on blur."""
+    x0, x1 = min(f[0] for f in faces), max(f[0] + f[2] for f in faces)
+    cw = min(1.0, max(0.8 * H / W, x1 - x0 + 0.1))
+    return rect(min(max((x0 + x1) / 2 - cw / 2, 0), 1 - cw), 0, cw, 1)
 
 
 def edge_profile(gray: np.ndarray, axis: int) -> np.ndarray:
@@ -229,9 +237,11 @@ def analyze(path: str, model: str, hint: dict | list | None = None, start: float
 
     fx, fy, fw, fh = face
     if fw >= FULLCAM_FACE_W:
-        weight = np.zeros((H, W), np.float32)
-        weight[:, int((fx + fw / 2) * W)] = 1  # center the crop on the face
-        return {"scene": "fullcam", "cam": None, "content": best_window(weight, 9 / 16), "faces": count_big_faces(found, len(frames), raw)}
+        group = big_faces(found, len(frames), raw)
+        if len(group) >= 2:
+            return {"scene": "nocam", "cam": None, "content": group_crop(group), "face": rect(fx, fy, fw, fh), "faces": len(group)}
+        cw = min(W, round(H * 9 / 16)) / W  # crop centered on the face; best_window on one column put the face at the right edge
+        return {"scene": "fullcam", "cam": None, "content": rect(min(max(fx + fw / 2 - cw / 2, 0), 1 - cw), 0, cw, 1), "face": rect(fx, fy, fw, fh), "faces": len(group)}
 
     box = cam_rect(face, frames)
     hint = pick_hint(hints, face)
@@ -274,6 +284,29 @@ def analyze(path: str, model: str, hint: dict | list | None = None, start: float
     return {"scene": "cam", "cam": cam, "content": best_window(motion, 1080 / 1152)}
 
 
+def check_render(path: str, model: str, n: int = 5) -> dict:
+    """Faces in a rendered 9:16 clip (n frames, full frame only): the editor checks them for a cut-off or covered face."""
+    cap = cv2.VideoCapture(path)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+    opts = vision.FaceDetectorOptions(base_options=BaseOptions(model_asset_path=model), min_detection_confidence=0.5)
+    det = vision.FaceDetector.create_from_options(opts)
+    frames = []
+    for i in range(n):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int((i + 0.5) * total / n))
+        ok, f = cap.read()
+        if not ok:
+            continue
+        rgb = np.ascontiguousarray(cv2.cvtColor(cv2.resize(f, (360, 640)), cv2.COLOR_BGR2RGB))
+        frames.append([rect(d.bounding_box.origin_x / 360, d.bounding_box.origin_y / 640, d.bounding_box.width / 360, d.bounding_box.height / 640)
+                       for d in det.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)).detections])
+    cap.release()
+    det.close()
+    return {"frames": frames}
+
+
 if __name__ == "__main__":
     args = json.loads(sys.argv[1])
+    if args.get("check"):
+        json.dump(check_render(args["input"], args["model"]), sys.stdout)
+        sys.exit(0)
     json.dump(analyze(args["input"], args["model"], args.get("hint"), args.get("start") or 0, args.get("end")), sys.stdout)

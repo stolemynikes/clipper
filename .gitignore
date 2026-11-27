@@ -9,3 +9,7 @@ tools/
 *.db-shm
 dist/
 __pycache__/
+
+# diarize.py models (download links in workers/diarize.py)
+assets/models/sherpa-onnx-pyannote-segmentation-3-0/
+assets/models/3dspeaker_*.onnx

@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -45,6 +45,31 @@ async function detectLayout(src: string, hint: StreamerConfig["facecam"], start:
   }
 }
 
+/** Sets word.sp (speaker) from workers/diarize.py on [start, end]; words are relative to start. Never blocks the clip. */
+async function tagSpeakers(src: string, start: number, end: number, words: Word[]): Promise<void> {
+  try {
+    const { segments } = JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'diarize.py'), JSON.stringify({ input: src, start, end })])) as
+      { segments: { start: number; end: number; speaker: number }[] };
+    for (const w of words) {
+      const overlap = (g: { start: number; end: number }) => Math.min(w.e, g.end) - Math.max(w.s, g.start);
+      const best = segments.reduce<typeof segments[number] | null>((b, g) => (overlap(g) > (b ? overlap(b) : 0) ? g : b), null);
+      if (best) w.sp = best.speaker;
+    }
+  } catch (e) { log.warn(`diarize failed, one caption colour: ${(e as Error).message}`); }
+}
+
+/** Face boxes per frame in a rendered clip (fractions of the 9:16 frame); [] when the check cannot run (never blocks). */
+async function renderedFaces(file: string): Promise<Rect[][]> {
+  try {
+    const out = await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'face_track.py'),
+      JSON.stringify({ check: true, input: file, model: join(paths.rootDir, 'assets', 'models', 'blaze_face_short_range.tflite') })]);
+    return (JSON.parse(out) as { frames: Rect[][] }).frames;
+  } catch (e) {
+    log.warn(`face check failed: ${(e as Error).message}`);
+    return [];
+  }
+}
+
 const WHOLE: Layout = { scene: 'nocam', cam: null, content: { x: 0, y: 0, w: 1, h: 1 } };
 
 /** Footage is not a stream: no facecam over gameplay. A podcast follows the speaker's face (fullcam crop);
@@ -53,7 +78,7 @@ export async function footageLayout(src: string, cfg: StreamerConfig, start: num
   const want = cfg.layout ?? (cfg.genre && GENRES[cfg.genre].layout);
   if (want === 'whole') return WHOLE;
   const l = await detectLayout(src, null, start, end);
-  if ((l.faces ?? 0) >= 2) return WHOLE; // two people at a table: a crop on one face loses the other speaker
+  if ((l.faces ?? 0) >= 2) return l; // two people: face_track already gives a crop around all faces (nocam on blur)
   return l.scene === 'fullcam' || (want === 'face' && l.content) ? { ...l, scene: 'fullcam', cam: null, fit: undefined } : WHOLE;
 }
 
@@ -91,11 +116,12 @@ export async function fetchSection(url: string, from: number, to: number, out: s
     '--download-sections', `*${from}-${to}`, '--merge-output-format', 'mp4', '-o', out, url], { timeoutMs });
 }
 
-/** retest: practice moment rendered before, raw window kept; encode only the proposals it has not tried. */
-export async function renderClip(db: Db, { momentId, practice, retest, proof }: { momentId: number; practice?: boolean; retest?: boolean; proof?: string[] }) {
+/** retest: practice moment rendered before, raw window kept; encode only the proposals it has not tried.
+ *  redo: render a reviewed moment again from scratch into its existing clip row (lost or badly framed clip.mp4). */
+export async function renderClip(db: Db, { momentId, practice, retest, proof, redo }: { momentId: number; practice?: boolean; retest?: boolean; proof?: string[]; redo?: boolean }) {
   const moment = db.select().from(moments).where(eq(moments.id, momentId)).get();
   if (!moment) throw new Error(`moment ${momentId} not found`);
-  const old = db.select().from(clips).where(eq(clips.momentId, momentId)).get();
+  const prev = db.select().from(clips).where(eq(clips.momentId, momentId)).get(), old = redo ? undefined : prev;
   if (old && !(retest && practice) && !proof) return log.info(`moment ${momentId} already rendered`);
   const { source, cfg } = sourceContext(db, moment.sourceId);
   const settings = loadSettings();
@@ -142,7 +168,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
     disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: isFootage(cfg), steadyMusic,
-    transcript, duplicateOf: source.streamerId && !old && !practice ? findDuplicate(db, source.streamerId, transcript) : null,
+    transcript, duplicateOf: source.streamerId && !prev && !practice ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
   });
@@ -157,9 +183,11 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const was = practice ? tried(dir) : [], act = proof ? proposals().filter((p) => proof.includes(p.id)) : practice ? activeProposals(6, kind) : [];
   const props = act.filter((p) => !was.includes(p.id) && (!p.change.gameCrop || p.change.gameCrop[cfg.name]));
   if (practice && !proof) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
-  if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
+  if (old && !props.length) { if (!proof) keepWindow(dir); // proof never deletes: a review clip's dir has no tried.txt
+    return log.info(`moment ${momentId}: nothing new to re-test`); }
 
-  const layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  let layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  if ((layout.faces ?? 0) >= 2) await tagSpeakers(src, lead, cut, words); // 2+ people on screen: caption colour per speaker
   if (proof) log.info(`proof layout: ${JSON.stringify(layout)}; music spans: ${JSON.stringify(music?.musicSec ?? [])}`); // why a proposal does or does not change the output
   if (layout.fit === 'full' && !proof) {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
@@ -198,12 +226,14 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
+  // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: off the face. Shift capped above the app buttons.
+  const capY = (ch: Change, l = layout) => Math.min(1560, (layout.cam ? 900 + stackTop(layout) : layout.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
   const encode = async (out: string, ch: Change) => {
     const own = ch.gameCrop?.[cfg.name]; // only the plain cam scene: stack/full layouts already pick their own content
     const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : layout;
     const dy = stackTop(lay), chatTop = 1920 - dy - CHAT_BOX.h - 16; // a whole-frame proposal moves cam + game into a centered block
     const subs = out.replace('.mp4', '.ass');
-    const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
+    const captionY = capY(ch), spot = chatSpot(lay, captionY); // fullcam: a free spot beside the head, null = no box
     writeFileSync(join(dir, subs), buildAss({
       words: !cfg.captionStyle && genre?.captions === null ? [] : words, durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen
       disclosureSec: settings.clip.disclosureSec, chat: burstOn(ch) ? chat : calm,
@@ -212,16 +242,15 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
       style: ch.captionStyle ?? cfg.captionStyle ?? genre?.captions ?? settings.clip.captionStyle,
       wordsPerChunk: ch.wordsPerChunk, // style default unless an approved proposal sets it
       censor,
-      // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
       // stack: everything moves down with the centered block; chat sits on the game's bottom edge. Shift capped above the app buttons.
-      captionY: Math.min(1560, base + (ch.captionShift ?? 0)), chatY: layout.cam ? 820 + dy : 400, burstY: layout.cam ? (dy ? chatTop : 1600) : 400,
+      captionY, chatY: layout.cam ? 820 + dy : spot ?? 150, burstY: layout.cam ? (dy ? chatTop : 1600) : spot ?? 150,
     }));
     // cwd = clip dir + relative forward-slash paths: avoids escaping "E:" inside the ffmpeg filter string.
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
-      twitchChat && burstOn(ch) ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
+      twitchChat && burstOn(ch) && (layout.cam || spot != null) ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : spot! } : undefined);
     const duck = duckFilter(quiet, ch.duckVol);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead, duck, durationSec,
-      burstOn(ch) ? twitchChat?.file ?? null : null, ch.lufs), { cwd: dir });
+      burstOn(ch) && (layout.cam || spot != null) ? twitchChat?.file ?? null : null, ch.lufs), { cwd: dir });
   };
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
@@ -230,8 +259,29 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
-  if (old && !run.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing here the proposals can change`); }
-  await encode(proof ? 'proof-live.mp4' : 'clip.mp4', live);
+  if (old && !run.length) { if (!proof) keepWindow(dir); return log.info(`moment ${momentId}: nothing here the proposals can change`); }
+  const liveOut = proof ? 'proof-live.mp4' : 'clip.mp4';
+  await encode(liveOut, live);
+  // fullcam: check the render itself. A cut-off or off-center face gets one re-crop on the measured face; the measured face
+  // also moves the chat box off the head. Podcasts (2+ faces) are exempt: one face is off center there on purpose.
+  for (let i = 0; layout.scene === 'fullcam' && (layout.faces ?? 1) < 2 && layout.content; i++) {
+    const frames = await renderedFaces(join(dir, liveOut)), why = faceTrouble(frames), c: Rect = layout.content;
+    const seen = frames.map((fs) => fs.filter((f) => f.w >= 0.2).sort((a, b) => b.w - a.w)[0]).filter((f): f is Rect => !!f);
+    const med = (k: keyof Rect) => seen.map((f) => f[k]).sort((a, b) => a - b)[Math.floor(seen.length / 2)];
+    const face = seen.length ? { x: c.x + med('x') * c.w, y: c.y + med('y') * c.h, w: med('w') * c.w, h: med('h') * c.h } : layout.face;
+    const next: Layout = { ...layout, face, content: why && seen.length ? { ...c, x: Math.min(Math.max(face!.x + face!.w / 2 - c.w / 2, 0), 1 - c.w) } : c };
+    const moved = capY(live, next) !== capY(live) || chatSpot(next, capY(live, next)) !== chatSpot(layout, capY(live));
+    if (i || (!why || !seen.length) && !moved) {
+      if (!why) break;
+      if (proof) { log.warn(`proof ${momentId}: ${why}`); break; }
+      rmSync(src, { force: true });
+      db.update(moments).set({ status: 'skipped' }).where(eq(moments.id, momentId)).run();
+      return log.warn(`moment ${momentId} skipped: ${why}`);
+    }
+    log.info(`reframe: ${why ?? 'captions/chat box moved off the face'}`);
+    layout = next;
+    await encode(liveOut, live);
+  }
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
   for (const p of run) {
@@ -247,8 +297,9 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   for (const f of [...(practice ? [] : [src]), join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   if (old) db.update(clips).set({ durationSec, transcript, compliance: { ...compliance, music } }).where(eq(clips.id, old.id)).run();
-  const clip = old ?? db.insert(clips).values({ momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music },
-    title: title?.title, hook: title?.hook, titleStyle: title?.style, ...(practice && { status: 'practice' as const }) }).returning().get();
+  const row = { momentId, filePath: join(dir, 'clip.mp4'), durationSec, transcript, compliance: { ...compliance, music }, title: title?.title, hook: title?.hook, titleStyle: title?.style };
+  const clip = old ?? (prev ? db.update(clips).set(row).where(eq(clips.id, prev.id)).returning().get()
+    : db.insert(clips).values({ ...row, ...(practice && { status: 'practice' as const }) }).returning().get());
   db.update(moments).set({ status: 'rendered' }).where(eq(moments.id, momentId)).run();
   enqueue(db, practice ? 'practice.judge' : 'clip.judge', { clipId: clip.id, ...(old && { retest: true }) }); // judge then asks for review (not for practice)
   log.info(`clip ${clip.id} rendered (${durationSec.toFixed(0)}s, ${words.length} words)`);
