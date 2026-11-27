@@ -91,8 +91,17 @@ export async function notifyReview(db: Db, { clipId }: { clipId: number }) {
     { url: `${reviewUrl()}/#clip-${clipId}` });
 }
 
+const lastAlert = new Map<string, number>();
+/** True when the same job type + error was alerted in the last 10 minutes (a batch failing the same way gives one push). */
+export function alertSeen(key: string, now = Date.now()): boolean {
+  const seen = now - (lastAlert.get(key) ?? -Infinity) < 10 * 60_000;
+  if (!seen) lastAlert.set(key, now);
+  return seen;
+}
+
 export async function alertFailure(job: Job) {
   const err = redact(job.error ?? '').split('\n')[0].slice(0, 200);
+  if (alertSeen(`${job.type}|${err.replace(/\d+/g, '#')}`)) return log.warn(`alert for job ${job.id} skipped: same error alerted recently`);
   await bark(`Job failed: ${job.type} #${job.id}`, `After ${job.attempts} attempts. ${err}`, { url: reviewUrl(), level: 'timeSensitive' })
     .catch((e) => log.error('alert failed', { error: String(e) }));
 }

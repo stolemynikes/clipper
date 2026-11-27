@@ -39,3 +39,11 @@ test('rating: 1-10 relative to the best moment of the stream', async () => {
   assert.equal(rating(-2, 10), 1);
   assert.equal(rating(3, 0), 5);
 });
+
+test('alertSeen: same error within 10 minutes alerts once', async () => {
+  const { alertSeen } = await import('./review.ts');
+  assert.equal(alertSeen('t|x', 0), false);
+  assert.equal(alertSeen('t|x', 60_000), true);
+  assert.equal(alertSeen('t|y', 60_000), false);
+  assert.equal(alertSeen('t|x', 11 * 60_000), false);
+});
