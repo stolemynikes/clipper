@@ -7,7 +7,7 @@ import { paths } from '../env.ts';
 
 type Num = { type: 'number'; min: number; max: number; step?: number; unit?: string };
 type Kind = Num | { type: 'bool' } | { type: 'choice'; options: string[] };
-export type Field = Kind & { key: string; group: string; label: string; help: string };
+export type Field = Kind & { key: string; group: string; label: string; help: string; def?: number | boolean }; // def: code default when the yaml lacks the key
 
 const n = (min: number, max: number, unit?: string, step = 1): Num => ({ type: 'number', min, max, step, unit });
 const bool = { type: 'bool' } as const;
@@ -19,6 +19,7 @@ export const FIELDS: Field[] = [
   { key: 'platforms.youtube', group: 'Posting', label: 'Post to YouTube Shorts', help: 'Kept clips go up as Shorts.', ...bool },
   { key: 'platforms.instagram', group: 'Posting', label: 'Post to Instagram Reels', help: 'Kept clips go up as Reels.', ...bool },
   { key: 'publish.auto', group: 'Posting', label: 'Post kept clips by themselves', help: 'Off: kept clips wait on Ready to post, where you post or download them yourself.', ...bool },
+  { key: 'publish.gapMin', group: 'Posting', label: 'Time between posts', help: 'Posts go up in the evening where the campaign wants viewers (US when the brief names none), this far apart per account.', ...n(15, 480, 'min'), def: 90 },
   { key: 'publish.tiktokPublic', group: 'Posting', label: 'TikTok posts are public', help: 'Only turn on once TikTok approved the app. Off: only you see the posts.', ...bool },
 
   { key: 'clip.minSec', group: 'Clips', label: 'Shortest clip', help: 'Moments shorter than this are dropped.', ...n(5, 60, 's') },
@@ -27,9 +28,10 @@ export const FIELDS: Field[] = [
   { key: 'clip.targetSec.1', group: 'Clips', label: 'Aim for at most', help: 'Short clips got more views in the study of top clips.', ...n(10, 120, 's') },
   { key: 'clip.captionStyle', group: 'Clips', label: 'Caption style', help: 'Look of the words on screen. A streamer can have their own.', type: 'choice', options: ['bold', 'pop', 'clean'] },
   { key: 'clip.disclosure', group: 'Clips', label: '#ad on other campaigns', help: 'Content Rewards clips always get #ad (their rules). This adds it to the rest too.', ...bool },
+  { key: 'clip.chatBurst', group: 'Clips', label: 'Show chat when it goes wild', help: 'Off: chat only shows when the streamer reads or answers a message. A chat box takes much of the screen.', ...bool, def: false },
   { key: 'clip.disclosureSec', group: 'Clips', label: '#ad shown for', help: 'How long #ad stays on screen at the start.', ...n(1, 10, 's') },
 
-  { key: 'scoring.topN', group: 'Finding moments', label: 'Moments per VOD', help: 'How many of the best moments of a stream become clips.', ...n(1, 30) },
+  { key: 'scoring.perHour', group: 'Finding moments', label: 'Moments per hour of stream', help: 'Longer streams get more clips: at least 5, at most 20 per VOD.', ...n(1, 10), def: 4 },
   { key: 'scoring.weights.chatRate', group: 'Finding moments', label: 'Weight: chat gets busy', help: 'Weekly learning also changes these.', ...n(0, 5, undefined, 0.05) },
   { key: 'scoring.weights.emoteScore', group: 'Finding moments', label: 'Weight: laughing emotes', help: 'Emote spam alone picked worse moments in tests.', ...n(0, 5, undefined, 0.05) },
   { key: 'scoring.weights.viewerClipHits', group: 'Finding moments', label: 'Weight: viewers clipped it', help: 'Clips made by viewers are the strongest sign.', ...n(0, 5, undefined, 0.05) },
@@ -54,7 +56,7 @@ const pathOf = (key: string) => key.split('.').map((p) => (/^\d+$/.test(p) ? Num
 /** Fields with their current values. */
 export function getSettings(text = readFileSync(file(), 'utf8')) {
   const doc = parseDocument(text);
-  return FIELDS.map((f) => ({ ...f, value: doc.getIn(pathOf(f.key)) ?? null }));
+  return FIELDS.map((f) => ({ ...f, value: doc.getIn(pathOf(f.key)) ?? f.def ?? null }));
 }
 
 /** Checks and parses a dashboard value; throws with a plain message. */

@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickMoments, scoreWindows, type ScoringConfig, type ChatMessage } from "./scoring.ts";
+import { momentCount, pickMoments, scoreWindows, type ScoringConfig, type ChatMessage } from "./scoring.ts";
 
 const cfg: ScoringConfig = {
   windowSec: 5,
-  topN: 10,
   leadInSec: [30, 60],
   weights: { chatRate: 1, emoteScore: 0.8, viewerClipHits: 2, audioPeak: 0.5 },
   emotes: { KEKW: 1, LUL: 1 },
@@ -48,9 +47,16 @@ test("overlapping peaks merge only within maxSec, distant peaks stay separate", 
   assert.deepEqual(m.map((x) => x.peakAt).sort((a, b) => a - b), [300, 900]);
 });
 
-test("respects topN and clip start never below 0", () => {
-  const m = pickMoments({ durationSec: 3000, chat: chat(3000, [10, 500, 1000, 1500, 2000]) }, { ...cfg, topN: 3 }, limits);
-  assert.equal(m.length, 3);
+test("moment count scales with VOD length, clamped 5..20", () => {
+  assert.equal(momentCount(1800), 5);
+  assert.equal(momentCount(3 * 3600), 12);
+  assert.equal(momentCount(10 * 3600), 20);
+  assert.equal(momentCount(3600, 8), 8);
+});
+
+test("respects moment count and clip start never below 0", () => {
+  const m = pickMoments({ durationSec: 3000, chat: chat(3000, [10, 400, 800, 1200, 1600, 2000, 2400]) }, cfg, limits);
+  assert.equal(m.length, 5);
   const early = pickMoments({ durationSec: 600, chat: chat(600, [10]) }, cfg, limits);
   assert.equal(early[0].start, 0);
 });

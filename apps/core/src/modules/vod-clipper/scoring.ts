@@ -6,12 +6,16 @@ export interface ViewerClip { offset: number; duration: number } // Twitch Clips
 
 export interface ScoringConfig {
   windowSec: number;
-  topN: number;
+  perHour?: number; // moments per hour of VOD (default 4), clamped to MIN_N..MAX_N
   leadInSec: [number, number];
   tailSec?: number; // keep this long after the peak window, so the reaction is in the clip
   weights: { chatRate: number; emoteScore: number; viewerClipHits: number; audioPeak: number };
   emotes: Record<string, number>;
 }
+
+const MIN_N = 5, MAX_N = 20;
+/** How many moments a VOD gets: long streams have more good moments, but not unlimited. */
+export const momentCount = (durationSec: number, perHour = 4) => Math.min(MAX_N, Math.max(MIN_N, Math.round(perHour * durationSec / 3600)));
 
 export interface ClipLimits { minSec: number; maxSec: number }
 
@@ -72,9 +76,10 @@ export function pickMoments(input: ScoreInput, cfg: ScoringConfig, limits: ClipL
   const len = Math.min(limits.maxSec, Math.max(limits.minSec, cfg.leadInSec[1] + w));
   const order = windows.map((x, i) => ({ ...x, i })).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
   const picked: Moment[] = [];
+  const topN = momentCount(input.durationSec, cfg.perHour);
 
   for (const x of order) {
-    if (picked.length >= cfg.topN) break;
+    if (picked.length >= topN) break;
     const end = Math.min(input.durationSec, (x.i + 1) * w + (cfg.tailSec ?? 0));
     const start = Math.max(0, end - len);
     if (end - start < limits.minSec) continue;

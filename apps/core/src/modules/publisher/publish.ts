@@ -1,10 +1,10 @@
 // Posts approved clips to every connected account of the clip's campaign. Official APIs only:
 // YouTube Data API (resumable upload); TikTok and Instagram via PostPeer when POSTPEER_API_KEY is set, else TikTok Content Posting API.
 import { readFileSync, statSync } from 'node:fs';
-import { and, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
-import { accounts, clips, moments, posts } from '../../db/schema.ts';
+import { accounts, clips, jobs, moments, posts } from '../../db/schema.ts';
 import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import type { AccountPlatform, Platform } from '../../review/setup.ts';
@@ -14,6 +14,7 @@ import { discordPosted } from '../../discord/bot.ts';
 import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
 import { needsDisclosure } from '../compliance/compliance.ts';
+import { audienceZone, nextPostAt } from './post-time.ts';
 
 const log = logger('publisher');
 const TIKTOK_MAX_ONE_CHUNK = 64 * 1024 * 1024;
@@ -100,6 +101,15 @@ export function pickAccounts<T extends { id: number; platform: string }>(list: T
 const POLITICS = /\b(trump|biden|kamala|harris|obama|election|democrats?|republicans?|maga|congress|senate|vote for|president(ial)?)\b/i;
 export const politicsBlocked = (platform: string, text: string) => (platform === 'tiktok' || platform === 'x') && POLITICS.test(text);
 
+/** When this account may post next: in the evening of the campaign's audience, gapMin after its last or queued post. */
+function postTime(db: Db, accountId: number, audience: unknown, after = new Date()): Date {
+  const lastPost = db.select({ at: posts.postedAt }).from(posts).where(eq(posts.accountId, accountId)).orderBy(desc(posts.postedAt)).get()?.at ?? null;
+  const queued = db.select({ at: jobs.runAt, p: jobs.payload }).from(jobs).where(and(eq(jobs.type, 'clip.publish'), eq(jobs.status, 'queued'))).all()
+    .filter((j) => (j.p as { accountId?: number }).accountId === accountId).map((j) => j.at);
+  const last = [lastPost, ...queued].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  return nextPostAt(after, last, audienceZone(audience), loadSettings().publish?.gapMin ?? 90);
+}
+
 /** Called on approve: one publish job per connected account of the clip's campaign. */
 export function queuePublish(db: Db, clipId: number) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
@@ -110,7 +120,7 @@ export function queuePublish(db: Db, clipId: number) {
   const on = loadSettings().platforms;
   const ready = db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()
     .filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && canUpload(a));
-  for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id });
+  for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id }, { runAt: postTime(db, a.id, cfg.campaign?.rules?.audience) });
 }
 
 async function youtube(token: string, file: string, t: { title: string; description: string }, paid: boolean, placement = true): Promise<{ externalId: string; url: string }> {
@@ -174,22 +184,22 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const settings = loadSettings();
   if (!settings.platforms[account.platform]) return log.info(`${account.platform} is off in settings, clip ${clipId} not posted`);
 
+  const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
+  const { cfg } = sourceContext(db, moment.sourceId);
   const now = new Date();
   const today = new Date(now); today.setHours(0, 0, 0, 0);
   const done = db.select().from(posts).where(and(eq(posts.accountId, accountId), gte(posts.postedAt, today))).all().length;
   if (done >= settings.limits.maxPostsPerAccountPerDay) {
-    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: nextDay(now) });
+    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg.campaign?.rules?.audience, nextDay(now)) });
     return log.info(`account ${accountId} hit its daily limit, clip ${clipId} moved to tomorrow`);
   }
   // Terms 7.14: too many unapproved submissions pause the account; CR reviews pending ones after 7 days (7.2).
   const week = db.select().from(posts).where(and(eq(posts.accountId, accountId), gte(posts.postedAt, new Date(now.getTime() - 7 * 86_400_000)))).all().length;
   if (week >= (settings.limits.maxPostsPerAccountPerWeek ?? 10)) {
-    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: nextDay(now) });
+    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg.campaign?.rules?.audience, nextDay(now)) });
     return log.info(`account ${accountId} hit its weekly limit, clip ${clipId} moved to tomorrow`);
   }
 
-  const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
-  const { cfg } = sourceContext(db, moment.sourceId);
   if (!campaignAllows(cfg.campaign?.rules, account.platform)) return log.info(`${account.platform} does not count for this campaign, clip ${clipId} not posted`);
   if (politicsBlocked(account.platform, `${clip.title ?? ''} ${clip.transcript ?? ''}`)) return log.warn(`clip ${clipId} touches politics, not posted to ${account.platform} (campaign rule)`);
   const { paid, text } = clipText(clip, cfg, account.platform as AccountPlatform);
