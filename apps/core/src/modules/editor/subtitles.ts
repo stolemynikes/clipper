@@ -35,7 +35,7 @@ export type CaptionStyle = keyof typeof STYLES;
  * bold: Russo One, yellow active word. pop: Archivo Black, green active word that pops. clean: Anton on a dark box. */
 export const STYLES = {
   bold: { font: 'Russo One', size: 84, active: YELLOW, outline: 7, shadow: 3, box: false, per: 3, pop: false },
-  pop: { font: 'Archivo Black', size: 78, active: '&H0080DE4A', outline: 8, shadow: 2, box: false, per: 2, pop: true }, // #4ADE80
+  pop: { font: 'Archivo Black', size: 78, active: '&H0080DE4A', outline: 8, shadow: 2, box: false, per: 3, pop: true }, // #4ADE80; 3 words: owner pick Nov 27
   clean: { font: 'Anton', size: 96, active: YELLOW, outline: 12, shadow: 0, box: true, per: 3, pop: false },
 } as const;
 const POP = '\\fscx100\\fscy100\\t(0,70,\\fscx118\\fscy118)\\t(70,160,\\fscx108\\fscy108)';

@@ -187,7 +187,8 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
     return log.info(`moment ${momentId}: nothing new to re-test`); }
 
   let layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
-  if ((layout.faces ?? 0) >= 2) await tagSpeakers(src, lead, cut, words); // 2+ people on screen: caption colour per speaker
+  // 2+ people on screen: caption colour per speaker, only when live or a tested proposal wants it (owner: test first).
+  if ((layout.faces ?? 0) >= 2 && (live.speakerColors || props.some((p) => p.change.speakerColors))) await tagSpeakers(src, lead, cut, words);
   if (proof) log.info(`proof layout: ${JSON.stringify(layout)}; music spans: ${JSON.stringify(music?.musicSec ?? [])}`); // why a proposal does or does not change the output
   if (layout.fit === 'full' && !proof) {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
@@ -235,7 +236,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
     const subs = out.replace('.mp4', '.ass');
     const captionY = capY(ch), spot = chatSpot(lay, captionY); // fullcam: a free spot beside the head, null = no box
     writeFileSync(join(dir, subs), buildAss({
-      words: !cfg.captionStyle && genre?.captions === null ? [] : words, durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen
+      words: !cfg.captionStyle && genre?.captions === null ? [] : ch.speakerColors ? words : words.map(({ sp: _, ...w }) => w), durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen
       disclosureSec: settings.clip.disclosureSec, chat: burstOn(ch) ? chat : calm,
       // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
       disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
@@ -255,7 +256,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : null;
+    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
