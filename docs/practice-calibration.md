@@ -92,7 +92,7 @@ Measured on the stems of live vs. duck render (RMS per 0.1 s, speech = voice ste
 | 934 | -48.0 to -53.2 | -22.3 to -22.1 | -45.1 to -49.0 |
 | 147 | -64.9 to -72.0 | -20.5 to -20.0 | -58.8 to -67.7 |
 
-923 and 925 were skipped: no music detected inside the clip window. Music under speech drops 5-15 dB and the voice does not change. Integrated loudness of the duck render is about 1.7 LU below live (913: -15.2 vs. -13.5 LUFS, one loudnorm pass after the mix). The music stem also holds game sound, so that is ducked under speech too. A render takes about 5 minutes per moment.
+923 and 925 were skipped: no music detected inside the clip window. Music under speech drops 5-15 dB and the voice does not change. Integrated loudness of the duck render vs. live (one loudnorm pass after the mix): 913 -15.2 vs. -13.5, 914 -14.8 vs. -13.4, 920 -13.4 vs. -13.1, 934 -14.8 vs. -14.8, 147 -14.2 vs. -14.6 LUFS. So up to 1.7 LU quieter. The music stem also holds game sound, so that is ducked under speech too. A render takes about 5 minutes per moment.
 
 **sound-deadair-2:** in 1 of the last 12 clips the first word comes after 2 s (4.52 s). Dead air at the start is rare, so the proposal applies to few clips.
 
