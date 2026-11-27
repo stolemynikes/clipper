@@ -63,9 +63,9 @@ const busy = (db: Db, types: string) => !!db.$client.prepare(`select 1 from jobs
 export const liveBusy = (db: Db) => busy(db, "'vod.analyze','clip.render','clip.judge'");
 export const practiceHeld = () => !isPractice() || Date.now() < readState().pauseUntil;
 
-/** Best practice VOD: 3-14 days old (newer ones belong to the watcher), not seen before, most views first. */
+/** Best practice VOD: 3-60 days old (newer ones belong to the watcher; Twitch keeps partner VODs 60 days), not seen before, most views first. */
 export function pickVod(vods: Vod[], known: Set<string>, now: number): Vod | undefined {
-  return vods.filter((v) => { const age = now - new Date(v.created_at).getTime(); return age >= 3 * DAY && age <= 30 * DAY && !known.has(v.url); })
+  return vods.filter((v) => { const age = now - new Date(v.created_at).getTime(); return age >= 3 * DAY && age <= 60 * DAY && !known.has(v.url); })
     .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))[0];
 }
 
@@ -171,7 +171,7 @@ export async function practiceTick(db: Db, now = new Date()) {
     } catch (e) { log.warn(`practice: ${cfg.name} VOD list failed: ${String(e).slice(0, 200)}`); }
   }
   if (!best && fallback(db, known, ids)) return;
-  if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-30 days old, not done yet)'); } return; }
+  if (!best) { if (now.getTime() - lastNoVod > HOUR) { lastNoVod = now.getTime(); log.info('practice: no VOD available (3-60 days old, not done yet)'); } return; }
   const row = db.insert(sources).values({ url: best.vod.url, streamerId: best.streamerId, durationSec: parseDuration(best.vod.duration) }).onConflictDoNothing().returning().get();
   if (!row) return;
   enqueue(db, 'practice.analyze', { sourceId: row.id, vodId: best.vod.id, practice: true }, { maxAttempts: 2 });

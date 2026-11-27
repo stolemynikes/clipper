@@ -13,10 +13,10 @@ test('3 failures pause once, the next 3 stop, a success resets', () => {
   ({ s } = nextState({ ...s0, fails: 2, retried: true }, true, 0)); assert.deepEqual([s.fails, s.retried], [0, false]);
 });
 
-test('pickVod: 3-30 days old, unseen, most views', () => {
+test('pickVod: 3-60 days old, unseen, most views', () => {
   const now = Date.UTC(2026, 10, 25), d = (n: number) => new Date(now - n * 86_400_000).toISOString();
   const v = (id: string, age: number, views: number) => ({ id, user_id: '1', user_login: 'x', title: '', created_at: d(age), duration: '1h', url: `u${id}`, view_count: views });
-  const vods = [v('new', 1, 9999), v('old', 40, 9999), v('seen', 5, 5000), v('a', 4, 100), v('b', 10, 300)];
+  const vods = [v('new', 1, 9999), v('old', 70, 9999), v('seen', 5, 5000), v('a', 4, 100), v('b', 10, 300)];
   assert.equal(pickVod(vods, new Set(['useen']), now)?.id, 'b');
   assert.equal(pickVod([v('new', 1, 1)], new Set(), now), undefined);
 });
