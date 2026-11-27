@@ -81,7 +81,7 @@ export interface Earnings { estimated: number; paid: number; pending: number; pa
 export interface HistoryRow extends PostRow { streamer: string }
 export interface Month { month: string; clips: number; views: number; earned: number; paid: number; campaigns: number }
 export interface History { months: Month[]; ended: { name: string; endsAt: string; earned: number; posts: number; paid: number }[]; posts: HistoryRow[] }
-export interface Account { id: number; platform: string; label: string; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean; today: number;
+export interface Account { id: number; platform: string; label: string; name: string; kind: 'streamers' | 'talk' | 'music' | 'product'; streamer: string | null; pool: boolean; posts: number; views: number; earned: number; connected: boolean; today: number;
   via: 'oauth' | 'postpeer' | 'needs_postpeer'; connectUrl: string }
 export interface AppSetup { platform: string; label: string; ready: boolean; steps: string[]; fields: { key: string; label: string; secret: boolean; saved: boolean }[] }
 export interface Accounts { limit: number; hours: (number | null)[][]; accounts: Account[]; apps: AppSetup[]; campaigns: { id: number; name: string }[];

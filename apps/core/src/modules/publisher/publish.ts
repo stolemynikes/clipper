@@ -15,6 +15,7 @@ import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
 import { needsDisclosure } from '../compliance/compliance.ts';
 import { audienceZone, nextPostAt } from './post-time.ts';
+import { bark } from '../../review/review.ts';
 
 const log = logger('publisher');
 const TIKTOK_MAX_ONE_CHUNK = 64 * 1024 * 1024;
@@ -110,6 +111,16 @@ function postTime(db: Db, accountId: number, audience: unknown, after = new Date
   return nextPostAt(after, last, audienceZone(audience), loadSettings().publish?.gapMin ?? 90);
 }
 
+export type AccountKind = 'streamers' | 'talk' | 'music' | 'product';
+/** Which account niche a campaign posts to: streams and gaming, podcast and show, music or product. */
+export function kindOf(cfg: Pick<StreamerConfig, 'platform' | 'genre'>): AccountKind {
+  if (cfg.platform !== 'footage') return 'streamers';
+  return cfg.genre === 'music' ? 'music' : cfg.genre === 'product' ? 'product' : 'talk';
+}
+/** An account posts a campaign when it is tied to that streamer, or is a shared account of the campaign's kind. */
+export const accountFits = (a: { streamerId: number | null; kind: string }, streamerId: number, kind: AccountKind) =>
+  a.streamerId === streamerId || (a.streamerId === null && a.kind === kind);
+
 /** Called on approve: one publish job per connected account of the clip's campaign. */
 export function queuePublish(db: Db, clipId: number) {
   const clip = db.select().from(clips).where(eq(clips.id, clipId)).get();
@@ -118,8 +129,13 @@ export function queuePublish(db: Db, clipId: number) {
   const { source, cfg } = sourceContext(db, moment.sourceId);
   if (!source.streamerId) return;
   const on = loadSettings().platforms;
-  const ready = db.select().from(accounts).where(eq(accounts.streamerId, source.streamerId)).all()
+  const sid = source.streamerId, kind = kindOf(cfg);
+  const ready = db.select().from(accounts).all().filter((a) => accountFits(a, sid, kind))
     .filter((a) => on[a.platform] && campaignAllows(cfg.campaign?.rules, a.platform) && canUpload(a));
+  if (!ready.length) {
+    log.warn(`publish: clip ${clipId} has no ${kind} account`);
+    bark('Not posted', `Clip ${clipId} is approved, but there is no ${kind} account to post it on. Add one under Money.`).catch(() => {});
+  }
   for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id }, { runAt: postTime(db, a.id, cfg.campaign?.rules?.audience) });
 }
 

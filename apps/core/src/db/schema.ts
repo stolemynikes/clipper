@@ -68,6 +68,7 @@ export const accounts = sqliteTable('accounts', {
   platform: text('platform', { enum: ['tiktok', 'youtube', 'instagram'] }).notNull(),
   name: text('name').notNull(),
   streamerId: integer('streamer_id').references(() => streamers.id),
+  kind: text('kind', { enum: ['streamers', 'talk', 'music', 'product'] }).notNull().default('streamers'), // which campaigns it posts: one niche per account
   createdAt: createdAt(),
 });
 

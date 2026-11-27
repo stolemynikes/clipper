@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { campaignAllows, parsePostUrl, fallbackTitle, nextDay, pickAccounts, politicsBlocked, postText } from './publish.ts';
+import { accountFits, campaignAllows, kindOf, parsePostUrl, fallbackTitle, nextDay, pickAccounts, politicsBlocked, postText } from './publish.ts';
 import { chunk } from '../tracker/track.ts';
 
 test('fallback title: first sentence, capped, no angle brackets', () => {
@@ -111,4 +111,17 @@ test('parsePostUrl: pasted links give the id the tracker needs, other sites are 
   assert.equal(parsePostUrl('youtube', 'https://notyoutube.com/shorts/abcDEF12345'), null);
   assert.equal(parsePostUrl('youtube', 'http://youtube.com/shorts/abcDEF12345'), null);
   assert.equal(parsePostUrl('youtube', 'not a link'), null);
+});
+
+test('kindOf + accountFits: footage genre picks the niche account, a tied account always fits', () => {
+  assert.equal(kindOf({ platform: 'twitch' }), 'streamers');
+  assert.equal(kindOf({ platform: 'footage', genre: 'podcast' }), 'talk');
+  assert.equal(kindOf({ platform: 'footage', genre: 'show' }), 'talk');
+  assert.equal(kindOf({ platform: 'footage' }), 'talk');
+  assert.equal(kindOf({ platform: 'footage', genre: 'music' }), 'music');
+  assert.equal(kindOf({ platform: 'footage', genre: 'product' }), 'product');
+  assert.ok(accountFits({ streamerId: 3, kind: 'music' }, 3, 'streamers'));
+  assert.ok(accountFits({ streamerId: null, kind: 'streamers' }, 3, 'streamers'));
+  assert.ok(!accountFits({ streamerId: null, kind: 'music' }, 3, 'streamers'));
+  assert.ok(!accountFits({ streamerId: 4, kind: 'streamers' }, 3, 'streamers'));
 });

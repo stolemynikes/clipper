@@ -126,6 +126,8 @@ export function History() {
 }
 
 const PLATFORMS: [string, string][] = [['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['instagram', 'Instagram']];
+const KINDS: [Account['kind'], string][] = [['streamers', 'Streams and gaming'], ['talk', 'Podcast and show'], ['music', 'Music'], ['product', 'Product']];
+const kindName = (k: string) => KINDS.find(([v]) => v === k)?.[1] ?? k;
 const PROFILE: Record<string, string> = { youtube: 'https://www.youtube.com/@', tiktok: 'https://www.tiktok.com/@', instagram: 'https://www.instagram.com/' };
 // Fan/clip page names: platforms ban accounts that pose as the streamer, so every idea says "clips".
 // Less common combos first: short ones like "<name>clips" are usually taken already.
@@ -176,12 +178,19 @@ function AccountCard({ a, data }: { a: Account; data: AccountsData }) {
     try { await post(`/setup/account/${a.id}/delete`); toast({ text: `Removed ${a.name}`, tone: 'down' }); await qc.invalidateQueries({ queryKey: ['accounts'] }); }
     catch (e) { toast({ text: e instanceof Error && e.message.length > 3 ? e.message : 'That did not work. Try again.', tone: 'info' }); setBusy(false); setSure(false); }
   };
+  const [opening, setOpening] = useState(false);
+  const openLogin = async () => {
+    setOpening(true);
+    try { await post(`/setup/account/${a.id}/browser`); toast({ text: `Chrome is open on the PC. Log in to ${a.name} there.`, tone: 'info' }); }
+    catch (e) { toast({ text: e instanceof Error && e.message.length > 3 ? e.message : 'That did not work. Try again.', tone: 'info' }); }
+    setOpening(false);
+  };
   const [tone, label] = a.via === 'postpeer' ? ['var(--color-up)', 'Via PostPeer'] : a.via === 'needs_postpeer' ? ['var(--color-warn)', 'Needs PostPeer']
     : a.connected ? ['var(--color-up)', 'Connected'] : ['var(--color-warn)', 'Not connected'];
   return (
     <motion.section layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.2 }} className="card flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col min-w-0"><span className="font-semibold truncate">{a.name}</span><span className="text-sm text-m">{a.label} · {a.streamer ?? 'no campaign'} · {a.today} of {data.limit} today</span></div>
+        <div className="flex flex-col min-w-0"><span className="font-semibold truncate">{a.name}</span><span className="text-sm text-m">{a.label} · {a.streamer ?? kindName(a.kind)} · {a.today} of {data.limit} today</span></div>
         <span className="pill shrink-0"><span className="dot" style={{ background: tone }} />{label}</span>
       </div>
       <div className="grid grid-cols-3 gap-3 text-sm">
@@ -193,10 +202,12 @@ function AccountCard({ a, data }: { a: Account; data: AccountsData }) {
         : a.via === 'needs_postpeer' ? <p className="text-[13px] text-warn m-0">{a.label} posts go through PostPeer. Add its key to .env first.</p>
         : !app?.ready ? <p className="text-[13px] text-warn m-0">Set up the {app?.label ?? a.label} app below first.</p>
         : a.platform === 'youtube' && !a.connected && !/^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? <PasteBack /> : null}
-      <div className="flex gap-2 mt-auto">
+      <div className="flex flex-wrap gap-2 mt-auto">
         {a.via === 'oauth' ? (app?.ready
           ? <a href={a.connectUrl} className={`btn flex-1 no-underline ${a.connected ? '' : 'btn-1'}`}><Icon name="link" size={16} />{a.connected ? 'Connect again' : 'Connect account'}</a>
           : <button className="btn flex-1" disabled><Icon name="link" size={16} />Connect account</button>) : <span className="flex-1" />}
+        {a.platform !== 'youtube' ? <button className="btn" onClick={openLogin} disabled={opening} aria-busy={opening} title="Opens this account's own Chrome window on the PC">
+          {opening ? <span className="spin" aria-hidden /> : <Icon name="key" size={16} />}Log in</button> : null}
         <button className={`btn ${sure ? '!text-down !border-[var(--color-down)]' : ''}`} onClick={remove} disabled={busy} aria-busy={busy} aria-label={sure ? `Yes, remove ${a.name}` : `Remove ${a.name}`}>
           {busy ? <span className="spin" aria-hidden /> : <Icon name="trash" size={16} />}{sure ? 'Sure? Remove' : 'Remove'}</button>
       </div>
@@ -225,13 +236,13 @@ function PasteBack() {
 
 function AddAccount({ data, onDone }: { data: AccountsData; onDone: () => void }) {
   const qc = useQueryClient(), toast = useToast();
-  const [platform, setPlatform] = useState('tiktok'), [camp, setCamp] = useState(data.campaigns[0]?.id ?? 0);
+  const [platform, setPlatform] = useState('tiktok'), [camp, setCamp] = useState(0), [kind, setKind] = useState<Account['kind']>('streamers');
   const [name, setName] = useState<string | null>(null), [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const [free, setFree] = useState<Record<string, boolean | null>>({});
   const streamer = data.campaigns.find((c) => c.id === camp)?.name ?? '';
-  const n = (streamer || 'stream').toLowerCase().replace(/[^a-z0-9]/g, ''), ideas = ideasFor(n);
+  const n = (streamer || { streamers: 'stream', talk: 'podcast', music: 'music', product: 'product' }[kind]).toLowerCase().replace(/[^a-z0-9]/g, ''), ideas = ideasFor(n);
   const plat = PLATFORMS.find(([k]) => k === platform)![1];
-  const shown = name ?? `${streamer ? streamer[0].toUpperCase() + streamer.slice(1) + ' clips' : 'Clips'} ${plat}`;
+  const shown = name ?? `${streamer ? streamer[0].toUpperCase() + streamer.slice(1) + ' clips' : kindName(kind)} ${plat}`;
   // Only YouTube can say if a handle is free (Data API key); other platforms: open the profile and look (no scraping).
   useEffect(() => {
     if (platform !== 'youtube' || !data.canCheckNames) return;
@@ -244,7 +255,7 @@ function AddAccount({ data, onDone }: { data: AccountsData; onDone: () => void }
     e.preventDefault();
     if (!shown.trim()) return setErr('Give it a name.');
     setBusy(true); setErr('');
-    try { await post('/setup/account', { platform, streamerId: camp || null, name: shown.trim() }); toast({ text: `Added ${shown.trim()}`, tone: 'up' }); await qc.invalidateQueries({ queryKey: ['accounts'] }); onDone(); }
+    try { await post('/setup/account', { platform, kind, streamerId: camp || null, name: shown.trim() }); toast({ text: `Added ${shown.trim()}`, tone: 'up' }); await qc.invalidateQueries({ queryKey: ['accounts'] }); onDone(); }
     catch (e) { setErr(e instanceof Error && e.message.length > 3 ? e.message : 'That did not work. Try again.'); }
     setBusy(false);
   };
@@ -252,13 +263,16 @@ function AddAccount({ data, onDone }: { data: AccountsData; onDone: () => void }
     <motion.form id="add-account" onSubmit={submit} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}
       className="card flex flex-col gap-5" aria-labelledby="add-h">
       <div className="flex flex-col gap-1"><h2 id="add-h" className="text-lg font-semibold m-0">Add an account</h2>
-        <p className="text-sm text-m m-0">Make the account on the platform first, then add it here and press Connect.</p></div>
+        <p className="text-sm text-m m-0">One account per kind of clip grows faster. Make the account on the platform, add it here, then press Log in or Connect.</p>
+        <p className="text-sm text-m m-0">Tip: turn on a passkey or an authenticator app for each account. Then logging in is one tap, and you never type a code from a text message.</p></div>
+      <fieldset className="flex flex-col gap-2 m-0 p-0 border-0"><legend className="text-sm text-m mb-2">What it posts</legend>
+        <div className="segs self-start flex-wrap" role="group">{KINDS.map(([k, l]) => <button type="button" key={k} className="seg" aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}</div></fieldset>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <fieldset className="flex flex-col gap-2 m-0 p-0 border-0"><legend className="text-sm text-m mb-2">Platform</legend>
           <div className="segs self-start" role="group">{PLATFORMS.map(([k, l]) => <button type="button" key={k} className="seg" aria-pressed={platform === k} onClick={() => setPlatform(k)}>{l}</button>)}</div></fieldset>
         <label className="flex flex-col gap-2 text-sm text-m">Campaign
           <select className="field" value={camp} onChange={(e) => setCamp(Number(e.target.value))}>
-            {data.campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}<option value={0}>No campaign</option></select></label>
+            <option value={0}>Every {kindName(kind).toLowerCase()} campaign</option>{data.campaigns.map((c) => <option key={c.id} value={c.id}>Only {c.name}</option>)}</select></label>
         <label className="flex flex-col gap-2 text-sm text-m">Name in Snip
           <input className="field" value={shown} onChange={(e) => setName(e.target.value)} maxLength={60} autoComplete="off" /></label>
       </div>

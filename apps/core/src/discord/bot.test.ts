@@ -4,7 +4,7 @@ import type { StreamerConfig } from '../config.ts';
 import { categoryName, clipCard, infoEmbed, statsText, totalsText } from './bot.ts';
 
 const acct = (o: Partial<{ streamer: string; platform: 'tiktok' | 'youtube'; name: string; pool: boolean; posts: number; views: number; earned: number }>) =>
-  ({ id: 1, platform: 'tiktok' as const, name: 'acc', streamer: 'lacy', pool: false, posts: 1, views: 1000, earned: 1, ...o });
+  ({ id: 1, platform: 'tiktok' as const, name: 'acc', kind: 'streamers', streamer: 'lacy', pool: false, posts: 1, views: 1000, earned: 1, ...o });
 
 test('stats: sums only this campaign, money for rate campaigns', () => {
   const t = statsText('lacy', [acct({ views: 12_000, earned: 3.5 }), acct({ platform: 'youtube', views: 3000, earned: 1.25 }), acct({ streamer: 'kai', earned: 99 })]);

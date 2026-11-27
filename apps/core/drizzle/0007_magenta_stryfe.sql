@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `kind` text DEFAULT 'streamers' NOT NULL;

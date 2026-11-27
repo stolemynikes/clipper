@@ -3,6 +3,8 @@
 import { styleStats, styleWinner } from '../modules/learner/title-style.ts';
 import { hasPostpeer } from '../modules/publisher/postpeer.ts';
 import { randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { eq } from 'drizzle-orm';
@@ -14,6 +16,10 @@ import { logger } from '../log.ts';
 const log = logger('setup');
 export type Platform = 'youtube' | 'tiktok'; // platforms with our own OAuth app
 export type AccountPlatform = Platform | 'instagram'; // Instagram only via PostPeer
+const KINDS = ['streamers', 'talk', 'music', 'product'] as const;
+const isKind = (k: unknown): k is (typeof KINDS)[number] => KINDS.includes(k as never);
+const LOGIN: Record<AccountPlatform, string> = { tiktok: 'https://www.tiktok.com/login', youtube: 'https://accounts.google.com/', instagram: 'https://www.instagram.com/accounts/login/' };
+const CHROME = [join(process.env.ProgramFiles ?? 'C:/Program Files', 'Google/Chrome/Application/chrome.exe'), join(process.env['ProgramFiles(x86)'] ?? 'C:/Program Files (x86)', 'Google/Chrome/Application/chrome.exe'), join(process.env.LOCALAPPDATA ?? '', 'Google/Chrome/Application/chrome.exe')];
 export const LABEL: Record<AccountPlatform, string> = { youtube: 'YouTube Shorts', tiktok: 'TikTok', instagram: 'Instagram Reels' };
 const port = () => Number(process.env.REVIEW_PORT || 8787);
 
@@ -76,14 +82,14 @@ export function earn(views: number, ratePer1k: number, maxPerClip: number): numb
 interface CampaignCfg { ratePer1k?: number; maxPerClip?: number }
 export function accountStats(db: Db) {
   const rows = db.$client.prepare(`
-    select a.id, a.platform, a.name, s.name streamer, s.config,
+    select a.id, a.platform, a.name, a.kind, s.name streamer, s.config,
       (select views from stats st where st.post_id = p.id order by measured_at desc limit 1) views, p.id post
     from accounts a left join streamers s on s.id = a.streamer_id left join posts p on p.account_id = a.id order by a.id`).all() as
-    { id: number; platform: AccountPlatform; name: string; streamer: string | null; config: string | null; views: number | null; post: number | null }[];
-  const out = new Map<number, { id: number; platform: AccountPlatform; name: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number }>();
+    { id: number; platform: AccountPlatform; name: string; kind: string; streamer: string | null; config: string | null; views: number | null; post: number | null }[];
+  const out = new Map<number, { id: number; platform: AccountPlatform; name: string; kind: string; streamer: string | null; pool: boolean; posts: number; views: number; earned: number }>();
   for (const r of rows) {
     const c = (r.config ? (JSON.parse(r.config) as { campaign?: CampaignCfg }).campaign : undefined) ?? {};
-    const a = out.get(r.id) ?? { id: r.id, platform: r.platform, name: r.name, streamer: r.streamer, pool: !c.ratePer1k, posts: 0, views: 0, earned: 0 };
+    const a = out.get(r.id) ?? { id: r.id, platform: r.platform, name: r.name, kind: r.kind, streamer: r.streamer, pool: !c.ratePer1k, posts: 0, views: 0, earned: 0 };
     if (r.post) { a.posts++; a.views += r.views ?? 0; a.earned += earn(r.views ?? 0, c.ratePer1k ?? 0, c.maxPerClip ?? 0); }
     out.set(r.id, a);
   }
@@ -221,7 +227,20 @@ export async function setupRoute(db: Db, req: IncomingMessage, res: ServerRespon
     if (!(isPlatform(b.platform) || b.platform === 'instagram') || !name) return (text(res, 400, 'Pick a platform and give it a name.'), true);
     const sid = b.streamerId ? Number(b.streamerId) : null;
     if (sid !== null && !db.select().from(streamers).where(eq(streamers.id, sid)).get()) return (text(res, 400, 'Unknown campaign.'), true);
-    db.insert(accounts).values({ platform: b.platform, name, streamerId: sid }).run();
+    const kind = b.kind ?? 'streamers';
+    if (!isKind(kind)) return (text(res, 400, 'Pick what kind of clips this account posts.'), true);
+    db.insert(accounts).values({ platform: b.platform, name, streamerId: sid, kind }).run();
+    return (res.writeHead(204).end(), true);
+  }
+  const login = /^\/setup\/account\/(\d+)\/browser$/.exec(p);
+  if (login) {
+    const a = db.select().from(accounts).where(eq(accounts.id, Number(login[1]))).get();
+    if (!a) return (text(res, 404, 'Account not found.'), true);
+    const exe = CHROME.find(existsSync);
+    if (!exe) return (text(res, 500, 'Chrome is not installed on the PC.'), true);
+    // Own profile per account, so the owner logs in once and it stays logged in. The owner types the password; Snip never does.
+    spawn(exe, [`--user-data-dir=${join(paths.dataDir, 'accounts', `${a.id}-chrome`)}`, '--no-first-run', LOGIN[a.platform]], { detached: true, stdio: 'ignore' }).unref();
+    log.info(`opened login window for account ${a.id}`);
     return (res.writeHead(204).end(), true);
   }
   const del = /^\/setup\/account\/(\d+)\/delete$/.exec(p);
