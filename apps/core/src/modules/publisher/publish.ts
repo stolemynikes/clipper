@@ -9,7 +9,7 @@ import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import type { AccountPlatform, Platform } from '../../review/setup.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
-import { tweaks } from '../practice/proposals.ts';
+import { kindFor, tweaks } from '../practice/proposals.ts';
 import { discordPosted } from '../../discord/bot.ts';
 import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
@@ -61,7 +61,7 @@ export function clipText(clip: { title: string | null; transcript: string | null
   const settings = loadSettings(), rules = cfg.campaign?.rules;
   const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure);
   const text = postText(platform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks().hashtags, hashtags: (Array.isArray(rules?.hashtags) ? rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks(undefined, kindFor(cfg)).hashtags, hashtags: (Array.isArray(rules?.hashtags) ? rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
   return { paid, text };
 }
 

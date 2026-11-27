@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { paths } from '../../env.ts';
 import type { Rect } from '../editor/render.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
+import type { StreamerConfig } from '../../config.ts';
+import type { Kind } from '../learner/patterns.ts';
 
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
 export type Change = {
@@ -21,6 +23,7 @@ export const isLength = (c: Change) => c.leadSec !== undefined || c.maxLen !== u
 export type Pair = { clipId: number; newFirst: boolean; pick: 'new' | 'old' | 'same'; why: string; at: number };
 export type Proposal = {
   id: string; title: string; why: string; change: Change;
+  kind?: Kind; // which clips it is tested on and changes; unset = gaming (all early proposals were stream tests)
   status: 'testing' | 'ready' | 'approved' | 'rejected'; created: number; decided?: number;
   untested?: boolean; // from study, no A/B: gemma cannot judge metadata. Real views after posting measure it.
   evidence?: string; // untested by the judge but checked another way (e.g. weights on real views), shown instead of "not tested"
@@ -36,11 +39,15 @@ export function proposals(): Proposal[] {
 }
 export const saveProposals = (ps: Proposal[]) => writeFileSync(file(), JSON.stringify(ps, null, 1));
 /** Proposals tested on the next practice clip: all of them at once (one render of the moment, one encode per variant). */
-export const activeProposals = (max = 6) => proposals().filter((p) => p.status === 'testing' && !p.untested).sort((a, b) => a.created - b.created).slice(0, max);
+export const kindOf = (p: Pick<Proposal, 'kind'>): Kind => p.kind ?? 'gaming';
+/** Kind of clip a campaign makes: streams = gaming, footage music = music, other footage (podcast, show, product) = talk. */
+export const kindFor = (cfg: Pick<StreamerConfig, 'platform' | 'genre'>): Kind => cfg.platform !== 'footage' ? 'gaming' : cfg.genre === 'music' ? 'music' : 'talk';
+/** Up to max testing proposals of one kind (or of every kind when unset), oldest first. */
+export const activeProposals = (max = 6, kind?: Kind) => proposals().filter((p) => p.status === 'testing' && !p.untested && (!kind || kindOf(p) === kind)).sort((a, b) => a.created - b.created).slice(0, max);
 
 /** Approved changes in approval order; later ones win. The live render uses only these. */
-export const tweaks = (ps = proposals()): Change =>
-  Object.assign({}, ...ps.filter((p) => p.status === 'approved').sort((a, b) => (a.decided ?? 0) - (b.decided ?? 0)).map((p) => p.change));
+export const tweaks = (ps = proposals(), kind: Kind = 'gaming'): Change =>
+  Object.assign({}, ...ps.filter((p) => p.status === 'approved' && kindOf(p) === kind).sort((a, b) => (a.decided ?? 0) - (b.decided ?? 0)).map((p) => p.change));
 
 /** Wins of the proposal (a "same" counts half) with a 95% Wilson interval. null below MIN_PAIRS. */
 export function score(p: Pick<Proposal, 'pairs'>) {
@@ -94,6 +101,17 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   // Calibration (docs/practice-calibration.md): lacy's chat overlay (top-right, y < 0.18) cuts into the center crop. Same 1080:1152 shape, below it.
   add({ id: 'crop-lacy', title: 'Lacy: game part without his chat box', why: 'The judge saw his stream chat overlay inside the game part. It sits top-right; this crop starts below it (zoom 1.2x).', change: { gameCrop: { lacy: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
+  // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
+  const t = (id: string, title: string, why: string, change: Change, kind: Kind) => add({ id: `${id}-${kind}`, title, why, change, kind });
+  if (fewer !== cur.per) t(`words-${fewer}`, `${fewer} words per caption line`, `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, { wordsPerChunk: fewer }, 'talk');
+  t('captions-lower', 'Captions 150 px lower', 'Lower captions cover less of the faces; still above the app buttons.', { captionShift: 150 }, 'talk');
+  for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) t(`style-${s}`, `Caption style "${s}"`, `Test the ${s} caption look against the current "${cur.style}".`, { captionStyle: s }, 'talk');
+  // Length for podcasts and music (music has no captions to test).
+  for (const kind of ['talk', 'music'] as Kind[]) {
+    t('lead-6', 'Shorter build-up (6 s before the peak)', 'Gets to the point faster; most viewers decide in the first seconds. Now 12 s.', { leadSec: 6 }, kind);
+    t('lead-18', 'Longer build-up (18 s before the peak)', 'More context, so the moment makes sense to someone who never saw the episode. Now 12 s.', { leadSec: 18 }, kind);
+    t('max-20', 'Clips at most 20 s', 'Shorter clips are watched to the end more often. Now up to 26 s.', { maxLen: 20 }, kind);
+  }
   saveProposals(ps);
 }
 

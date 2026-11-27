@@ -5,9 +5,11 @@ import { basename, join } from 'node:path';
 import { activeStreamers, loadSettings } from '../../config.ts';
 import { STYLES } from '../editor/subtitles.ts';
 import { weeklyInsights } from '../learner/weekly.ts';
-import { activeProposals, isLength, seedProposals, seedStudy } from './proposals.ts';
+import { activeProposals, isLength, kindFor, seedProposals, seedStudy } from './proposals.ts';
+import { sourceContext } from '../vod-clipper/analyze.ts';
 import type { Db } from '../../db/client.ts';
 import { moments, sources } from '../../db/schema.ts';
+import { eq } from 'drizzle-orm';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { enqueue, type Job } from '../../queue/queue.ts';
@@ -94,17 +96,24 @@ export function pickStudy(rows: StudyRow[], known: Set<string>, names: Set<strin
 }
 
 /** No VOD: re-test a stored window on proposals it has not seen, else use a study clip. Only while proposals wait for pairs. */
+/** Active proposal ids for the kind of clip this moment makes; none when its campaign ended. */
+function activeFor(db: Db, momentId: number) {
+  try {
+    const m = db.select({ sourceId: moments.sourceId }).from(moments).where(eq(moments.id, momentId)).get();
+    return m ? activeProposals(6, kindFor(sourceContext(db, m.sourceId).cfg)).map((p) => p.id) : [];
+  } catch { return []; }
+}
+
 function fallback(db: Db, known: Set<string>, ids: Map<string, number>) {
-  const active = activeProposals().map((p) => p.id);
-  if (!active.length) return false;
-  const w = windows().find((x) => { const t = new Set(tried(x.p)); return active.some((id) => !t.has(id)); });
+  if (!activeProposals().length) return false;
+  const w = windows().find((x) => { const t = new Set(tried(x.p)); return activeFor(db, x.id).some((id) => !t.has(id)); });
   if (w) {
     enqueue(db, 'practice.render', { momentId: w.id, practice: true, retest: true }, { maxAttempts: 2 });
     log.info(`practice: re-test moment ${w.id}`);
     return true;
   }
   // Study clips are short viewer clips: length proposals give "same cut" on them, so only render proposals use them.
-  if (!activeProposals().some((p) => !isLength(p.change))) return false;
+  if (!activeProposals(6, 'gaming').some((p) => !isLength(p.change))) return false;
   let rows: StudyRow[] = [];
   try { rows = Object.values(JSON.parse(readFileSync(join(paths.dataDir, 'study-eval.json'), 'utf8'))); } catch { /* no study yet */ }
   const r = pickStudy(rows, known, new Set(ids.keys()), existsSync);
@@ -120,8 +129,23 @@ function fallback(db: Db, known: Set<string>, ids: Map<string, number>) {
   return true;
 }
 
+type FootRow = { id: number; sourceId: number; startSec: number; endSec: number; signals: string | null; url: string };
+/** Podcast and music proposals: practice on a copy of a real footage moment that was cut already. The footage file stays on disk. */
+function footage(db: Db) {
+  const rows = db.$client.prepare(`select m.id, m.source_id sourceId, m.start_sec startSec, m.end_sec endSec, m.signals, s.url from moments m join sources s on s.id = m.source_id
+    where s.url not like 'http%' and m.status = 'rendered' order by m.id desc limit 200`).all() as FootRow[];
+  const done = new Set(db.$client.prepare(`select json_extract(signals, '$.practiceOf') p from moments where json_extract(signals, '$.practiceOf') is not null`).all().map((r) => (r as { p: number }).p));
+  const r = rows.find((x) => !done.has(x.id) && !JSON.parse(x.signals ?? '{}').practiceOf && existsSync(x.url) && activeFor(db, x.id).length);
+  if (!r) return false;
+  const m = db.insert(moments).values({ sourceId: r.sourceId, startSec: r.startSec, endSec: r.endSec, score: 0, signals: { ...JSON.parse(r.signals ?? '{}'), practiceOf: r.id } }).returning().get();
+  enqueue(db, 'practice.render', { momentId: m.id, practice: true }, { maxAttempts: 2 });
+  log.info(`practice: footage moment ${r.id} as ${m.id}`);
+  return true;
+}
+
 /** One tick (every minute): disk guard, morning summary, and queue the next VOD when practice is idle. */
 let lastNoVod = 0; // tick runs every minute: say it at most once an hour
+let footTurn = false; // every other practice job is a footage clip, so podcast and music tests are not starved by VODs
 export async function practiceTick(db: Db, now = new Date()) {
   morning(db, now);
   { const style = loadSettings().clip.captionStyle ?? 'bold'; seedProposals({ per: STYLES[style].per, style, weeklyPer: weeklyInsights().wordsPerLine }); } // idempotent by id: new seeds (e.g. length) join an existing proposals.json
@@ -132,6 +156,8 @@ export async function practiceTick(db: Db, now = new Date()) {
     log.error(`practice stopped: only ${freeGb().toFixed(0)} GB free on the data disk`);
     return bark('Practice stopped', `Less than 100 GB free on the data disk (${freeGb().toFixed(0)} GB).`).catch(() => {});
   }
+  footTurn = !footTurn;
+  if (footTurn && footage(db)) return;
   const known = new Set(db.select({ url: sources.url }).from(sources).all().map((r) => r.url));
   let best: { vod: Vod; streamerId: number } | undefined;
   const ids = new Map<string, number>(); // streamer name -> id, for study clips

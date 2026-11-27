@@ -1,6 +1,6 @@
 // JSON for the dashboard (apps/dashboard). Read-only GETs; actions reuse the existing POST routes.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { aaBias, proposals, score } from '../modules/practice/proposals.ts';
+import { aaBias, kindOf, proposals, score } from '../modules/practice/proposals.ts';
 import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
@@ -253,7 +253,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/ready') return json(res, ready(db)), true;
   if (url.pathname === '/api/rate') return usdRate().then((r) => json(res, r), () => json(res, rate ?? { eurPerUsd: null, date: '', at: 0 })), true;
   if (url.pathname === '/api/learning') return json(res, learning(db)), true;
-  if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
+  if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, kind: kindOf(p), pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
   if (m) return json(res, detail(db, m[1])), true;
   return false;

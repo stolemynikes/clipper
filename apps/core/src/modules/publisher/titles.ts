@@ -7,7 +7,8 @@ import { logger } from '../../log.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
-import { tweaks } from '../practice/proposals.ts';
+import type { Kind } from '../learner/patterns.ts';
+import { kindFor, tweaks } from '../practice/proposals.ts';
 import { sourceContext } from '../vod-clipper/analyze.ts';
 
 const log = logger('titles');
@@ -48,7 +49,8 @@ Return JSON with:
 - "hook": max 6 words shown on screen in the first second, same language, a teaser that makes people stay (not the same words as the title). Vary the wording: avoid "actually".`;
 }
 
-export async function generateTitle(transcript: string, streamer: string, model: string, style: TitleStyle = 'mild'): Promise<TitleOut> {
+export async function generateTitle(transcript: string, streamer: string, model: string, style: TitleStyle = 'mild', kind: Kind = 'gaming'): Promise<TitleOut> {
+  const tw = tweaks(undefined, kind);
   const t0 = Date.now();
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST',
@@ -57,22 +59,22 @@ export async function generateTitle(transcript: string, streamer: string, model:
       keep_alive: '2m', // free VRAM soon: Whisper needs it for the next render
       format: { type: 'object', properties: { moment: { type: 'string' }, title: { type: 'string' }, hook: { type: 'string' } }, required: ['moment', 'title', 'hook'] },
       options: { temperature: 0.7 },
-      messages: [{ role: 'user', content: titlePrompt(transcript, streamer, style) }],
+      messages: [{ role: 'user', content: titlePrompt(transcript, streamer, style, tw.titleExamples ?? []) }],
     }),
   });
   if (!r.ok) throw new Error(`Ollama ${model} failed: ${r.status} ${(await r.text()).slice(0, 200)}`);
   const j = await r.json() as { message?: { content?: string } };
-  const out = cleanTitle(JSON.parse(j.message?.content ?? '{}'), tweaks().titleMax);
+  const out = cleanTitle(JSON.parse(j.message?.content ?? '{}'), tw.titleMax);
   log.info(`title by ${model} in ${Date.now() - t0} ms`);
   return out;
 }
 
 /** Title + hook for a transcript, or null (then publish uses fallbackTitle). Runs before the final encode so the hook is burned in. */
-export async function makeTitle(transcript: string | null, streamer: string, style: TitleStyle): Promise<(TitleOut & { style: TitleStyle }) | null> {
+export async function makeTitle(transcript: string | null, streamer: string, style: TitleStyle, kind: Kind = 'gaming'): Promise<(TitleOut & { style: TitleStyle }) | null> {
   if (!transcript || transcript.split(' ').length < 8) return null;
   stopWhisper(); // Whisper and the LLM don't both fit in 12 GB VRAM; Whisper restarts on the next render
   try {
-    return { ...(await generateTitle(transcript, streamer, loadSettings().titles?.model ?? 'gemma4:12b', style)), style };
+    return { ...(await generateTitle(transcript, streamer, loadSettings().titles?.model ?? 'gemma4:12b', style, kind)), style };
   } catch (e) {
     log.warn(`no title, using the fallback: ${(e as Error).message}`);
     return null;
@@ -85,7 +87,7 @@ export async function titleClip(db: Db, { clipId }: { clipId: number }, notify =
   if (!clip) return;
   const moment = db.select().from(moments).where(eq(moments.id, clip.momentId)).get()!;
   const { cfg } = sourceContext(db, moment.sourceId);
-  const t = await makeTitle(clip.transcript, cfg.name, pickStyle(styleStats(db)));
+  const t = await makeTitle(clip.transcript, cfg.name, pickStyle(styleStats(db)), kindFor(cfg));
   if (t) db.update(clips).set({ title: t.title, hook: t.hook, titleStyle: t.style }).where(eq(clips.id, clipId)).run();
   if (notify) enqueue(db, 'review.notify', { clipId });
 }

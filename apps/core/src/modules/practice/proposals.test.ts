@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { aaBias, type Pair, type Proposal, score, tweaks } from './proposals.ts';
+import { aaBias, kindFor, type Pair, type Proposal, score, tweaks } from './proposals.ts';
 
 const pairs = (n: number, pick: Pair['pick']): Pair[] => Array.from({ length: n }, (_, i) => ({ clipId: i, newFirst: i % 2 === 0, pick, why: '', at: 0 }));
 const prop = (id: string, change: Proposal['change'], status: Proposal['status'], decided?: number): Proposal =>
@@ -31,4 +31,12 @@ test('study titles become one untested proposal per study run, live only after a
   const p = { ...prop('t', { titleExamples: ['A', 'B'] }, 'ready'), untested: true };
   assert.deepEqual(tweaks([p]), {});
   assert.deepEqual(tweaks([{ ...p, status: 'approved', decided: 1 }]), { titleExamples: ['A', 'B'] });
+});
+
+test('proposals count only for their own kind of clip; no kind = gaming', () => {
+  const ps = [prop('a', { maxLen: 20 }, 'approved', 1), { ...prop('b', { leadSec: 6 }, 'approved', 2), kind: 'talk' as const }];
+  assert.deepEqual(tweaks(ps), { maxLen: 20 });
+  assert.deepEqual(tweaks(ps, 'talk'), { leadSec: 6 });
+  assert.deepEqual(tweaks(ps, 'music'), {});
+  assert.deepEqual([kindFor({ platform: 'twitch' }), kindFor({ platform: 'footage', genre: 'music' }), kindFor({ platform: 'footage', genre: 'podcast' })], ['gaming', 'music', 'talk']);
 });

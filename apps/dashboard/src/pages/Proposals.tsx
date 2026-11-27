@@ -67,17 +67,24 @@ function Card({ p }: { p: Proposal }) {
   );
 }
 
+const KINDS: Record<Proposal['kind'], string> = { gaming: 'Streams and gaming', talk: 'Podcasts and shows', music: 'Music' };
+
 /** Night practice results: each proposal is one editing change, tested by comparing the same moment rendered both ways. */
 export function Proposals() {
-  const { data } = useProposals(), toast = useToast();
+  const { data } = useProposals(), toast = useToast(), [tab, setTab] = useState<Proposal['kind']>('gaming');
   if (!data) return <Page title="Proposals"><div className="flex flex-col gap-3">{[1, 2].map((i) => <Skeleton key={i} className="h-48" />)}</div></Page>;
   const order = { ready: 0, testing: 1, approved: 2, rejected: 3 };
-  const ps = [...data].sort((a, b) => order[a.status] - order[b.status]);
+  const ps = [...data].filter((p) => p.kind === tab).sort((a, b) => order[a.status] - order[b.status]);
   const copy = async () => { try { await navigator.clipboard.writeText(summary(ps)); toast({ text: 'Summary copied', tone: 'up' }); } catch { toast({ text: 'Copy failed', tone: 'info' }); } };
   return (
     <Page kicker="Learned from practice clips at night" title="Proposals" right={ps.length ? <button className="btn" onClick={copy}>Copy summary</button> : undefined}>
+      <div className="flex gap-2 mb-4" role="tablist" aria-label="Kind of clip">
+        {(Object.keys(KINDS) as Proposal['kind'][]).map((k) => (
+          <button key={k} role="tab" className="seg" aria-selected={tab === k} aria-pressed={tab === k} onClick={() => setTab(k)}>
+            {KINDS[k]} <span className="num text-f">{data.filter((p) => p.kind === k).length}</span></button>))}
+      </div>
       {ps.length ? <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 content-start pb-6">{ps.map((p) => <Card key={p.id} p={p} />)}</div></div>
-        : <Empty icon="smile" title="No proposals yet" text="Turn on Practice at night in Settings. Proposals show up here the next morning." />}
+        : <Empty icon="smile" title="No proposals yet" text={`Turn on Practice at night in Settings. ${KINDS[tab]} proposals show up here after practice clips of that kind.`} />}
     </Page>
   );
 }

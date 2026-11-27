@@ -22,6 +22,6 @@ export const DUPLICATE = 0.5;
 /** Id of an earlier clip of this streamer with (mostly) the same speech, or null. */
 export function findDuplicate(db: Db, streamerId: number, transcript: string): number | null {
   const rows = db.$client.prepare(`select c.id, c.transcript from clips c join moments m on m.id = c.moment_id join sources s on s.id = m.source_id
-    where s.streamer_id = ? and c.transcript is not null`).all(streamerId) as { id: number; transcript: string }[];
+    where s.streamer_id = ? and c.transcript is not null and c.status != 'practice'`).all(streamerId) as { id: number; transcript: string }[];
   return rows.find((r) => overlap(transcript, r.transcript) >= DUPLICATE)?.id ?? null;
 }

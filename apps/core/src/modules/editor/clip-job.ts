@@ -21,7 +21,7 @@ import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
 import { transcribe } from './whisper.ts';
-import { activeProposals, type Change, isLength, tweaks } from '../practice/proposals.ts';
+import { activeProposals, type Change, isLength, kindFor, tweaks } from '../practice/proposals.ts';
 import { keepWindow, tried } from '../practice/practice.ts';
 
 const log = logger('editor');
@@ -114,7 +114,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const sc = settings.scoring;
   const maxSec = cfg.campaign?.maxSec ?? settings.clip.maxSec;
   const peakRel = (moment.signals?.peakAt ?? moment.endSec - sc.windowSec - (sc.tailSec ?? 0)) - moment.startSec;
-  const live = tweaks(); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
+  const kind = kindFor(cfg), live = tweaks(undefined, kind); // only owner-approved proposals change live clips (practice-plan: freeze the automatic tweaks)
   const target = settings.clip.targetSec ?? [settings.clip.minSec, maxSec];
   const trimFor = (ch: Change) => trimWindow({ words: t.words, durationSec: moment.endSec - moment.startSec, peakRel, windowSec: sc.windowSec,
     tailSec: sc.tailSec ?? 0, targetSec: [target[0], Math.max(target[0], ch.maxLen ?? target[1])], minSec: settings.clip.minSec, maxSec, leadSec: ch.leadSec, deadAirSec: ch.deadAirSec });
@@ -134,7 +134,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
     disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: cfg.platform === 'footage',
-    transcript, duplicateOf: source.streamerId && !old ? findDuplicate(db, source.streamerId, transcript) : null,
+    transcript, duplicateOf: source.streamerId && !old && !practice ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
   });
@@ -144,8 +144,8 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     return log.warn(`moment ${momentId} blocked: ${compliance.blocks.join('; ')}`);
   }
 
-  // Practice: every testing proposal not tried on this window yet (tried.txt lets a later proposal re-test it).
-  const was = practice ? tried(dir) : [], act = practice ? activeProposals() : [];
+  // Practice: every testing proposal of this kind not tried on this window yet (tried.txt lets a later proposal re-test it).
+  const was = practice ? tried(dir) : [], act = practice ? activeProposals(6, kind) : [];
   const props = act.filter((p) => !was.includes(p.id) && (!p.change.gameCrop || p.change.gameCrop[cfg.name]));
   if (practice) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
   if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
@@ -186,7 +186,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const dy = stackTop(layout);
   const genre = cfg.platform === 'footage' && cfg.genre ? GENRES[cfg.genre] : undefined;
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
-  const title = old ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
+  const title = old ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const encode = async (out: string, ch: Change) => {
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
