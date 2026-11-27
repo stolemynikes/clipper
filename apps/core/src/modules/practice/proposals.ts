@@ -22,7 +22,7 @@ export type Change = {
   speakerColors?: boolean; // caption colour per speaker when 2+ people are on screen (diarize.py)
   chatBurst?: boolean; // our own Twitch chat box when chat goes wild (settings clip.chatBurst is the live default)
   wideGame?: boolean; // whole stream picture under the cam on blur, any streamer (study: 3/13 top clipper Shorts); cam scene only
-  coldOpen?: boolean; // 1-2.5 s of the payoff first, then the clip from the start (crossfade); never when disclosure must open the clip
+  coldOpen?: boolean; // 1-2.5 s of the payoff first, then the clip from the start (crossfade); a required in-video disclosure is burned on the teaser too
   jumpCut?: boolean; // cut mid-clip pauses: no speech AND quiet game sound (-32 dB); never in the disclosure seconds or the payoff
   followFace?: boolean; // fullcam crop pans with the person (IRL / just chatting walks out of a fixed crop); single face only
   gameCrop?: Record<string, Rect & { fit?: 'stack' }>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test

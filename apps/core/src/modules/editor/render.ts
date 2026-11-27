@@ -180,9 +180,10 @@ export function teaserSpan(words: { s: number; e: number }[], peak: number, max 
   return last && last.e - a >= 1 ? [+a.toFixed(2), +(last.e + 0.15).toFixed(2)] : null;
 }
 
-/** Rendered clip with [a, b] of itself in front, joined by a short picture + sound crossfade. */
-export function coldOpenArgs(input: string, output: string, [a, b]: [number, number], encoder: string, fade = 0.3): string[] {
-  const g = `[0:v]split[v0][v1];[v0]trim=${a}:${b},setpts=PTS-STARTPTS[t];[v1]setpts=PTS-STARTPTS[m];`
+/** Rendered clip with [a, b] of itself in front, joined by a short picture + sound crossfade.
+ *  ad: "file.ass:fontsdir=dir" burned on the teaser only, so a required disclosure still opens the clip. */
+export function coldOpenArgs(input: string, output: string, [a, b]: [number, number], encoder: string, fade = 0.3, ad?: string): string[] {
+  const g = `[0:v]split[v0][v1];[v0]trim=${a}:${b},setpts=PTS-STARTPTS${ad ? `,ass=${ad}` : ''}[t];[v1]setpts=PTS-STARTPTS[m];`
     + `[t][m]xfade=transition=fade:duration=${fade}:offset=${+(b - a - fade).toFixed(2)},format=yuv420p[v];`
     + `[0:a]asplit[a0][a1];[a0]atrim=${a}:${b},asetpts=PTS-STARTPTS[ta];[a1]asetpts=PTS-STARTPTS[ma];[ta][ma]acrossfade=d=${fade}[a]`;
   return ['-y', '-hide_banner', '-loglevel', 'error', '-i', input, '-filter_complex', g, '-map', '[v]', '-map', '[a]',

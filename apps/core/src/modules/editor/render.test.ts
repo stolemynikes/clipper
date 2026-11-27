@@ -128,6 +128,8 @@ test('teaserSpan: whole payoff words, 1..2.5 s; coldOpenArgs crossfades the teas
   assert.equal(teaserSpan([{ s: 10, e: 10.3 }], 10), null); // one short word is not a teaser
   const a = coldOpenArgs('in.mp4', 'out.mp4', [10.1, 12.25], 'libx264');
   assert.ok(a[a.indexOf('-filter_complex') + 1].includes('xfade=transition=fade:duration=0.3:offset=1.85'));
+  const ad = coldOpenArgs('in.mp4', 'out.mp4', [10.1, 12.25], 'libx264', 0.3, 'ad.ass:fontsdir=f');
+  assert.ok(ad[ad.indexOf('-filter_complex') + 1].includes('setpts=PTS-STARTPTS,ass=ad.ass:fontsdir=f[t]')); // #AD on the teaser only
 });
 
 test('jumpCuts: only quiet word gaps, padded, not in disclosure or payoff; parseSilence pairs start/end', () => {

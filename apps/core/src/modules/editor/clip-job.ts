@@ -244,9 +244,17 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   // Crop that pans with the person: only a one-face full-cam scene, and only when the face really moves (else a byte copy).
   const follow = layout.scene === 'fullcam' && (layout.faces ?? 1) < 2 && layout.content && (live.followFace || props.some((p) => p.change.followFace));
   const pan = follow ? await facePan(src, layout, lead, cut) : null;
-  // cold open: never when the disclosure is burned in, it must open the clip (hard rule)
-  const teaser = (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) && disclosure ? null : teaserSpan(words, peakRel - lead);
-  const openCold = async (out: string) => { await runCmd('ffmpeg', coldOpenArgs(out, 'cold.mp4', teaser!, hw?.encoder ?? 'libx264'), { cwd: dir }); renameSync(join(dir, 'cold.mp4'), join(dir, out)); };
+  // cold open: a burned-in disclosure must open the clip (hard rule), so the teaser gets it too; the clip's own start keeps it after the crossfade
+  const teaser = teaserSpan(words, peakRel - lead);
+  const adInVideo = (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) && disclosure;
+  const openCold = async (out: string) => {
+    let ad: string | undefined;
+    if (adInVideo) {
+      writeFileSync(join(dir, 'cold-ad.ass'), buildAss({ words: [], durationSec: teaser![1] - teaser![0], tag: '', disclosure, disclosureSec: teaser![1] - teaser![0] }));
+      ad = `cold-ad.ass:fontsdir=${fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts')))}`;
+    }
+    await runCmd('ffmpeg', coldOpenArgs(out, 'cold.mp4', teaser!, hw?.encoder ?? 'libx264', 0.3, ad), { cwd: dir }); renameSync(join(dir, 'cold.mp4'), join(dir, out));
+  };
   // Jump cut on the rendered clip: true when something was cut. Burned-in disclosure seconds and the payoff stay whole.
   const cutQuiet = async (out: string) => {
     const quiet = parseSilence(await runCmd('ffmpeg', ['-hide_banner', '-nostats', '-loglevel', 'error', '-i', out, '-vn', '-af', SILENCE_AF, '-f', 'null', '-'], { cwd: dir }), durationSec);
@@ -286,7 +294,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
     const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here'
-      : p.change.jumpCut && (live.coldOpen || p.change.coldOpen) && teaser ? 'cold open already reorders this clip' : p.change.coldOpen && !teaser ? 'no clean payoff cut, or disclosure must open the clip' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+      : p.change.jumpCut && (live.coldOpen || p.change.coldOpen) && teaser ? 'cold open already reorders this clip' : p.change.coldOpen && !teaser ? 'no clean payoff cut' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
