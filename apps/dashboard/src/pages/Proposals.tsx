@@ -7,6 +7,9 @@ import { Switch } from './Settings.tsx';
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const STATUS: Record<Proposal['status'], string> = { testing: 'Testing', ready: 'Ready to decide', approved: 'Live', rejected: 'Rejected' };
 const label = (p: Proposal) => (p.status === 'approved' && p.off ? 'Off' : STATUS[p.status]);
+/** Streamers a proposal is limited to; empty = all clips of its kind. */
+const only = (p: Proposal) => Object.keys(p.change.gameCrop ?? {});
+const nameOf = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** One line per proposal, plain words: what the owner pastes to Claude. */
 function summary(ps: Proposal[]) {
@@ -47,7 +50,10 @@ function Card({ p }: { p: Proposal }) {
     <section className="card flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1 min-w-0"><h2 className="text-lg font-semibold">{p.title}</h2><p className="text-sm text-m">{p.why}</p></div>
-        <span className="kicker shrink-0">{label(p)}</span>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="kicker">{label(p)}</span>
+          {only(p).length ? <span className="text-xs px-2 py-0.5 rounded-full border border-line text-m">Only {only(p).map(nameOf).join(', ')}</span> : null}
+        </div>
       </div>
       <Score p={p} />
       {p.aa.biased
@@ -78,19 +84,33 @@ const KINDS: Record<Proposal['kind'], string> = { gaming: 'Streams and gaming', 
 
 /** Night practice results: each proposal is one editing change, tested by comparing the same moment rendered both ways. */
 export function Proposals() {
-  const { data } = useProposals(), toast = useToast(), [tab, setTab] = useState<Proposal['kind']>('gaming');
+  const { data } = useProposals(), toast = useToast(), [tab, setTab] = useState<Proposal['kind']>('gaming'), [who, setWho] = useState<string | null>(null);
   if (!data) return <Page title="Proposals"><div className="flex flex-col gap-3">{[1, 2].map((i) => <Skeleton key={i} className="h-48" />)}</div></Page>;
   const order = { ready: 0, testing: 1, approved: 2, rejected: 3 };
   const ps = [...data].filter((p) => p.kind === tab).sort((a, b) => order[a.status] - order[b.status]);
+  const general = ps.filter((p) => !only(p).length), names = [...new Set(ps.flatMap(only))].sort();
+  const mine = ps.filter((p) => only(p).length && (!who || only(p).includes(who)));
+  const grid = (list: Proposal[]) => <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 content-start">{list.map((p) => <Card key={p.id} p={p} />)}</div>;
   const copy = async () => { try { await navigator.clipboard.writeText(summary(ps)); toast({ text: 'Summary copied', tone: 'up' }); } catch { toast({ text: 'Copy failed', tone: 'info' }); } };
   return (
     <Page kicker="Learned from practice clips at night" title="Proposals" right={ps.length ? <button className="btn" onClick={copy}>Copy summary</button> : undefined}>
       <div className="flex gap-2 mb-4" role="tablist" aria-label="Kind of clip">
         {(Object.keys(KINDS) as Proposal['kind'][]).map((k) => (
-          <button key={k} role="tab" className="seg" aria-selected={tab === k} aria-pressed={tab === k} onClick={() => setTab(k)}>
+          <button key={k} role="tab" className="seg" aria-selected={tab === k} aria-pressed={tab === k} onClick={() => { setTab(k); setWho(null); }}>
             {KINDS[k]} <span className="num text-f">{data.filter((p) => p.kind === k).length}</span></button>))}
       </div>
-      {ps.length ? <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 content-start pb-6">{ps.map((p) => <Card key={p.id} p={p} />)}</div></div>
+      {ps.length ? (
+        <div className="scroll flex-1 min-h-0 -mr-2 pr-2"><div className="flex flex-col gap-8 pb-6">
+          {general.length ? <div className="flex flex-col gap-3"><h2 className="kicker">For all clips</h2>{grid(general)}</div> : null}
+          {names.length ? (
+            <div className="flex flex-col gap-3">
+              <h2 className="kicker">Per streamer</h2>
+              <div className="segs w-fit flex-wrap" role="group" aria-label="Streamer">
+                {[null, ...names].map((n) => <button key={n ?? 'all'} className="seg" aria-pressed={who === n} onClick={() => setWho(n)}>{n ? nameOf(n) : 'All streamers'}</button>)}
+              </div>
+              {grid(mine)}
+            </div>) : null}
+        </div></div>)
         : <Empty icon="smile" title="No proposals yet" text={`Turn on Practice at night in Settings. ${KINDS[tab]} proposals show up here after practice clips of that kind.`} />}
     </Page>
   );
