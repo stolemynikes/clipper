@@ -2,16 +2,18 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { post, type Proposal, useProposals } from '../api.ts';
 import { Empty, Icon, Page, Skeleton, useToast } from '../ui.tsx';
+import { Switch } from './Settings.tsx';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const STATUS: Record<Proposal['status'], string> = { testing: 'Testing', ready: 'Ready to decide', approved: 'Live', rejected: 'Rejected' };
+const label = (p: Proposal) => (p.status === 'approved' && p.off ? 'Off' : STATUS[p.status]);
 
 /** One line per proposal, plain words: what the owner pastes to Claude. */
 function summary(ps: Proposal[]) {
   return ps.map((p) => {
     const s = p.untested ? (p.evidence ?? 'from study, not tested') : p.score ? `wins ${p.score.wins} of ${p.score.n} (${pct(p.score.share)}, likely ${pct(p.score.low)}-${pct(p.score.high)})` : `${p.allPairs} of 20 tests`;
     const aa = p.aa.biased ? ', judge leans to one side: score not trusted' : p.aa.n ? `, judge check ${p.aa.n}x ok` : '';
-    return `- ${p.title} [${STATUS[p.status]}]: ${s}${aa}`;
+    return `- ${p.title} [${label(p)}]: ${s}${aa}`;
   }).join('\n');
 }
 
@@ -33,18 +35,19 @@ function Score({ p }: { p: Proposal }) {
 
 function Card({ p }: { p: Proposal }) {
   const qc = useQueryClient(), toast = useToast(), [busy, setBusy] = useState(false);
-  const act = async (ok: boolean) => {
+  const act = async (what: 'approve' | 'reject' | 'on' | 'off') => {
     setBusy(true);
-    try { await post(`/proposals/${p.id}/${ok ? 'approve' : 'reject'}`); toast({ text: ok ? 'Approved: new clips use this now' : 'Rejected', tone: ok ? 'up' : 'down' }); await qc.invalidateQueries({ queryKey: ['proposals'] }); }
+    const done = { approve: 'Approved: new clips use this now', reject: 'Rejected', on: 'Switched on: new clips use this again', off: 'Switched off: new clips no longer use this' }[what];
+    try { await post(`/proposals/${p.id}/${what}`); toast({ text: done, tone: what === 'approve' || what === 'on' ? 'up' : 'down' }); await qc.invalidateQueries({ queryKey: ['proposals'] }); }
     catch { toast({ text: 'That did not work. Try again.', tone: 'info' }); }
     finally { setBusy(false); }
   };
-  const open = p.status === 'testing' || p.status === 'ready';
+  const open = (p.status === 'testing' || p.status === 'ready') && (p.untested || p.allPairs >= 20); // no choice before the tests are done
   return (
     <section className="card flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1 min-w-0"><h2 className="text-lg font-semibold">{p.title}</h2><p className="text-sm text-m">{p.why}</p></div>
-        <span className="kicker shrink-0">{STATUS[p.status]}</span>
+        <span className="kicker shrink-0">{label(p)}</span>
       </div>
       <Score p={p} />
       {p.aa.biased
@@ -60,8 +63,12 @@ function Card({ p }: { p: Proposal }) {
         </div>) : null}
       {open ? (
         <div className="flex gap-3">
-          <button className="btn btn-1" disabled={busy} onClick={() => act(true)}><Icon name="check" size={16} /> Approve</button>
-          <button className="btn" disabled={busy} onClick={() => act(false)}><Icon name="x" size={16} /> Reject</button>
+          <button className="btn btn-1" disabled={busy} onClick={() => act('approve')}><Icon name="check" size={16} /> Approve</button>
+          <button className="btn" disabled={busy} onClick={() => act('reject')}><Icon name="x" size={16} /> Reject</button>
+        </div>) : p.status === 'approved' ? (
+        <div className="flex items-center gap-3 text-sm">
+          <Switch on={!p.off} label={`sw-${p.id}`} busy={busy} onClick={() => act(p.off ? 'on' : 'off')} />
+          <span id={`sw-${p.id}`}>{p.off ? 'Off: new clips do not use this' : 'On: new clips use this'}</span>
         </div>) : null}
     </section>
   );

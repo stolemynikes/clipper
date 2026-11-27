@@ -12,7 +12,7 @@ const Field = ({ id, label, help, children }: { id?: string; label: string; help
   <div className="flex flex-col gap-2">{id ? <label htmlFor={id} className="kicker">{label}</label> : <span className="kicker">{label}</span>}{children}{help ? <span className="text-sm text-m">{help}</span> : null}</div>
 );
 const input = 'h-12 px-4 rounded-[14px] bg-s border border-line text-t text-base focus:outline-none focus:border-a w-full';
-const Switch = ({ on, label, busy, onClick }: { on: boolean; label: string; busy: boolean; onClick: () => void }) => (
+export const Switch = ({ on, label, busy, onClick }: { on: boolean; label: string; busy: boolean; onClick: () => void }) => (
   <button role="switch" aria-checked={on} aria-labelledby={label} disabled={busy} onClick={onClick}
     className={`relative shrink-0 w-[52px] h-8 rounded-full border border-line transition-colors cursor-pointer disabled:opacity-50 ${on ? 'bg-p' : 'bg-r'}`}>
     <span className={`absolute top-[3px] left-[3px] w-6 h-6 rounded-full bg-white transition-transform motion-reduce:transition-none ${on ? 'translate-x-5' : ''}`} />

@@ -40,3 +40,7 @@ test('proposals count only for their own kind of clip; no kind = gaming', () => 
   assert.deepEqual(tweaks(ps, 'music'), {});
   assert.deepEqual([kindFor({ platform: 'twitch' }), kindFor({ platform: 'footage', genre: 'music' }), kindFor({ platform: 'footage', genre: 'podcast' })], ['gaming', 'music', 'talk']);
 });
+
+test('an approved proposal switched off is not used', () => {
+  assert.deepEqual(tweaks([{ ...prop('a', { wordsPerChunk: 4 }, 'approved', 1), off: true }, prop('b', { captionShift: 150 }, 'approved', 2)]), { captionShift: 150 });
+});

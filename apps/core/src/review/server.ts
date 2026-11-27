@@ -1,6 +1,6 @@
 // Review page over Tailscale: plain node:http, no framework needed for a handful of routes.
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
-import { decide as decideProposal, proposalDir } from '../modules/practice/proposals.ts';
+import { decide as decideProposal, proposalDir, setOff as switchProposal } from '../modules/practice/proposals.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -136,7 +136,9 @@ function route(db: Db, req: IncomingMessage, res: ServerResponse) {
   }
   if (req.method !== 'POST' || req.headers['x-clipper'] !== '1') return res.writeHead(404).end();
   const pa = /^\/proposals\/([a-z0-9-]{1,40})\/(approve|reject)$/.exec(url.pathname);
-  if (pa) return res.writeHead(decideProposal(pa[1], pa[2] === 'approve') ? 204 : 404).end();
+  if (pa) return res.writeHead(decideProposal(pa[1], pa[2] === 'approve') ? 204 : 409).end();
+  const po = /^\/proposals\/([a-z0-9-]{1,40})\/(on|off)$/.exec(url.pathname);
+  if (po) return res.writeHead(switchProposal(po[1], po[2] === 'off') ? 204 : 409).end();
   const act = /^\/clip\/(\d+)\/(approve|reject)$/.exec(url.pathname);
   if (act) return res.writeHead(decide(db, Number(act[1]), act[2] === 'approve') ? 204 : 409).end();
   // Discover tab: scan CR and join run as jobs (Chrome clicks take minutes); the page polls /api/discover.

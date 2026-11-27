@@ -25,6 +25,7 @@ export type Proposal = {
   id: string; title: string; why: string; change: Change;
   kind?: Kind; // which clips it is tested on and changes; unset = gaming (all early proposals were stream tests)
   status: 'testing' | 'ready' | 'approved' | 'rejected'; created: number; decided?: number;
+  off?: boolean; // approved but switched off by the owner: kept, not used
   untested?: boolean; // from study, no A/B: gemma cannot judge metadata. Real views after posting measure it.
   evidence?: string; // untested by the judge but checked another way (e.g. weights on real views), shown instead of "not tested"
   pairs: Pair[]; aa: { pick: 0 | 1 | 2 }[]; // A/A control: same clip twice, pick 1 or 2 should be ~50/50 (0 = no difference, the right answer)
@@ -47,7 +48,7 @@ export const activeProposals = (max = 6, kind?: Kind) => proposals().filter((p) 
 
 /** Approved changes in approval order; later ones win. The live render uses only these. */
 export const tweaks = (ps = proposals(), kind: Kind = 'gaming'): Change =>
-  Object.assign({}, ...ps.filter((p) => p.status === 'approved' && kindOf(p) === kind).sort((a, b) => (a.decided ?? 0) - (b.decided ?? 0)).map((p) => p.change));
+  Object.assign({}, ...ps.filter((p) => p.status === 'approved' && !p.off && kindOf(p) === kind).sort((a, b) => (a.decided ?? 0) - (b.decided ?? 0)).map((p) => p.change));
 
 /** Wins of the proposal (a "same" counts half) with a 95% Wilson interval. null below MIN_PAIRS. */
 export function score(p: Pick<Proposal, 'pairs'>) {
@@ -79,8 +80,17 @@ export function recordPair(id: string, r: { pair?: Pair; aa?: 0 | 1 | 2; frames?
 
 export function decide(id: string, approve: boolean) {
   const ps = proposals(), p = ps.find((x) => x.id === id);
-  if (!p) return false;
+  if (!p || (!p.untested && p.pairs.length < MIN_PAIRS)) return false; // no decision before the tests are done
   p.status = approve ? 'approved' : 'rejected'; p.decided = Date.now();
+  saveProposals(ps);
+  return true;
+}
+
+/** Switch an approved proposal off or back on. */
+export function setOff(id: string, off: boolean) {
+  const ps = proposals(), p = ps.find((x) => x.id === id);
+  if (p?.status !== 'approved') return false;
+  p.off = off;
   saveProposals(ps);
   return true;
 }
