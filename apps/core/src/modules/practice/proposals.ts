@@ -110,6 +110,10 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'max-20', title: 'Clips at most 20 s', why: 'Nov 24 study: clips under 20 s beat the streamer median 54% vs ~33% for longer. Now up to 26 s.', change: { maxLen: 20 } });
   // Calibration (docs/practice-calibration.md): lacy's chat overlay (top-right, y < 0.18) cuts into the center crop. Same 1080:1152 shape, below it.
   add({ id: 'crop-lacy', title: 'Lacy: game part without his chat box', why: 'The judge saw his stream chat overlay inside the game part. It sits top-right; this crop starts below it (zoom 1.2x).', change: { gameCrop: { lacy: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
+  // Nov 27 frame check of all streamers: same overlay problem. jasontheween: chat top-left + sub counter top-right (y < 0.17).
+  add({ id: 'crop-jasontheween', title: 'Jasontheween: game part without his chat box', why: 'His stream chat sits top-left and a sub counter top-right inside the game part. This crop starts below both (zoom 1.2x).', change: { gameCrop: { jasontheween: { x: 0.284, y: 0.18, w: 0.432, h: 0.82 } } } });
+  // silky: sub counter top-left, chat top-right (y < 0.12). Same 1080:1152 shape from y 0.13.
+  add({ id: 'crop-silky', title: 'Silky: game part without his chat box', why: 'His stream chat sits top-right and a sub counter top-left inside the game part. This crop starts below both.', change: { gameCrop: { silky: { x: 0.271, y: 0.13, w: 0.458, h: 0.87 } } } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
   const t = (id: string, title: string, why: string, change: Change, kind: Kind) => add({ id: `${id}-${kind}`, title, why, change, kind });
