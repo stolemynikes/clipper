@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { post, type Proposal, useProposals } from '../api.ts';
+import { post, type Proposal, short, useProposals } from '../api.ts';
 import { Empty, Icon, Page, Skeleton, useToast } from '../ui.tsx';
 import { Switch } from './Settings.tsx';
 
@@ -36,6 +36,17 @@ function Score({ p }: { p: Proposal }) {
   );
 }
 
+/** Real views of own posts before vs after going live: the check that matters for money. */
+function Views({ v }: { v: NonNullable<Proposal['views']> }) {
+  const { before: b, after: a, enough } = v, posts = (n: number) => `${n} post${n === 1 ? '' : 's'}`;
+  if (b.n < enough || a.n < enough || b.median == null || a.median == null)
+    return <p className="text-sm text-m">Real views: {posts(a.n)} since it went live, {posts(b.n)} in the 2 weeks before. The comparison shows once both have {enough}.</p>;
+  const diff = a.median / Math.max(1, b.median) - 1;
+  return (
+    <p className="text-sm">Real views, typical post after 2 days: <span className="num font-semibold">{short(b.median)}</span> before ({posts(b.n)}), <span className="num font-semibold">{short(a.median)}</span> since ({posts(a.n)}).{' '}
+      <span className="text-m">{Math.abs(diff) < 0.1 ? 'About the same.' : diff > 0 ? `${Math.round(diff * 100)}% more.` : `${Math.round(-diff * 100)}% fewer.`} Other things change too, so read it as a hint.</span></p>);
+}
+
 function Card({ p }: { p: Proposal }) {
   const qc = useQueryClient(), toast = useToast(), [busy, setBusy] = useState(false);
   const act = async (what: 'approve' | 'reject' | 'on' | 'off') => {
@@ -56,6 +67,7 @@ function Card({ p }: { p: Proposal }) {
         </div>
       </div>
       <Score p={p} />
+      {p.views ? <Views v={p.views} /> : null}
       {p.aa.biased
         ? <p className="text-sm flex items-center gap-2"><Icon name="alert" size={16} /> The judge leans toward one side even when both clips are the same. Do not trust this score yet.</p>
         : p.aa.n ? <p className="text-sm text-m">Judge check: shown the same clip twice {p.aa.n} times, no lean found.</p> : null}

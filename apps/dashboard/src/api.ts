@@ -27,6 +27,8 @@ export interface Proposal {
   aa: { n: number; biased: boolean; firstShare: number | null; sameShare: number | null };
   frames: { clipId: number; old: string; new: string }[];
   untested?: boolean; evidence?: string; change: { titleExamples?: string[]; gameCrop?: Record<string, unknown> }; off?: boolean; kind: 'gaming' | 'talk' | 'music';
+  /** Own posts' median views at 2 days old, 14 days before vs after going live. Null unless approved. */
+  views?: { before: { n: number; median: number | null }; after: { n: number; median: number | null }; enough: number } | null;
 }
 
 const get = async <T,>(path: string): Promise<T> => {
