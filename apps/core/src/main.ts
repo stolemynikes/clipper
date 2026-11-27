@@ -23,6 +23,7 @@ import { enqueue, recoverStale } from './queue/queue.ts';
 import { classifyJob, discoverAll, joinJob, scoutOnce } from './modules/scout/scout.ts';
 import { isPractice, liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
+import { gameRunning, watchGames } from './game.ts';
 
 const log = logger('main');
 const { drift } = checkHardware();
@@ -71,14 +72,16 @@ process.on('message', (m) => { if (m === 'stop') stop(); }); // Windows has no S
 const orphans = recoverStale(db, 0);
 if (orphans) log.warn(`requeued ${orphans} job(s) cut off by the last stop`);
 const opts = { signal: ac.signal, paused: isPaused, onFinalFailure: alertFailure };
+watchGames(ac.signal);
+const playing = () => !!gameRunning(); // heavy GPU/CPU loops wait while the owner plays
 // Separate loops: a review push must not wait behind hours of heavy analyze/render jobs.
 await Promise.all([
-  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, opts),
+  runWorker(db, { 'vod.analyze': (p) => analyzeVod(db, p), 'clip.render': (p) => renderClip(db, p), 'clip.title': (p) => titleClip(db, p), 'clip.judge': (p) => judgeClip(db, p) }, { ...opts, paused: () => isPaused() || playing() }),
   // Own loop so the Settings switch can hold study jobs queued without blocking clips.
-  runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => (isPaused() && !isPractice()) || isOff('study') }), // studies are analysis only: also run in practice mode
+  runWorker(db, { 'campaign.study': (p) => studyJob(p), 'study.weekly': () => weeklyShorts() }, { ...opts, paused: () => (isPaused() && !isPractice()) || isOff('study') || playing() }), // studies are analysis only: also run in practice mode
   // Practice (data/practice): old VODs judged and deleted, never reviewed. Runs while Snip is paused; live work goes first.
   runWorker(db, { 'practice.analyze': tracked((p: any) => analyzeVod(db, p)), 'practice.render': tracked((p: any) => renderClip(db, p)), 'practice.judge': tracked((p: any) => judgeClip(db, p)) },
-    { signal: ac.signal, paused: () => practiceHeld() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),
+    { signal: ac.signal, paused: () => practiceHeld() || playing() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   // Owner's Discover/Join buttons on the dashboard: run even while Snip is paused (one CR tab, one command at a time).
   runWorker(db, { 'campaign.discover': async () => { await discoverAll(); enqueue(db, 'campaign.classify', {}, { maxAttempts: 1 }); }, 'campaign.join': (p) => joinJob(db, p as { id: string }) }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),

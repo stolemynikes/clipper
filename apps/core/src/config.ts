@@ -11,6 +11,7 @@ export interface Settings {
   limits: { maxPostsPerAccountPerDay: number; maxPostsPerAccountPerWeek?: number };
   platforms: Record<'tiktok' | 'youtube' | 'instagram', boolean>;
   publish?: { tiktokPublic?: boolean; auto?: boolean; gapMin?: number };
+  gamePause?: { enabled?: boolean; processes?: string[] }; // heavy jobs wait while a game runs (default on); processes: extra exe names
   titles?: { model: string };
   retention: { keepSourceDays: number };
   queue: { maxAttempts: number };
