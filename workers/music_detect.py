@@ -54,13 +54,31 @@ def summarize(fr: list[tuple[float, dict]], step: float = 0.975) -> dict:
     peak = lambda names: round(max((max(c.get(k, 0) for k in names) for _, c in fr), default=0), 3)
     return {"musicRatio": round(len(music) / n, 3), "vocalRatio": round(len(vocal) / n, 3), "musicSec": spans,
             "laughRatio": share(LAUGH), "cheerRatio": share(CHEER),
-            "laughMax": peak(LAUGH), "cheerMax": peak(CHEER)}
+            "laughMax": peak(LAUGH), "cheerMax": peak(CHEER), "sfx": sfx_spans(fr, step)}
+
+
+SFX = {"laughs": LAUGH, "screams": {"Screaming", "Yell", "Shout"}}
+SFX_MIN = 0.3  # same YAMNet peak cut as lessonRank (LAUGH_CUT)
+
+
+def sfx_spans(fr: list[tuple[float, dict]], step: float = 0.975) -> list[list]:
+    """[[start, end, "laughs"|"screams"]] where a reaction clearly sounds, consecutive frames merged."""
+    out: list[list] = []
+    for t, c in fr:
+        best = max(SFX, key=lambda k: max(c.get(n, 0) for n in SFX[k]))
+        if max(c.get(n, 0) for n in SFX[best]) < SFX_MIN:
+            continue
+        if out and out[-1][2] == best and t - out[-1][1] <= 0.05:
+            out[-1][1] = round(t + step, 2)
+        else:
+            out.append([round(t, 2), round(t + step, 2), best])
+    return out
 
 
 def main() -> None:
     args = json.loads(sys.argv[1])
     audio = load_audio(args["input"])
-    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": [], "laughRatio": 0, "cheerRatio": 0, "laughMax": 0, "cheerMax": 0}, sys.stdout)
+    json.dump(summarize(frames(audio)) if audio.size else {"musicRatio": 0, "vocalRatio": 0, "musicSec": [], "laughRatio": 0, "cheerRatio": 0, "laughMax": 0, "cheerMax": 0, "sfx": []}, sys.stdout)
 
 
 if __name__ == "__main__":

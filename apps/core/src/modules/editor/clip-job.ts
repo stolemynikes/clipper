@@ -83,7 +83,7 @@ export async function footageLayout(src: string, cfg: StreamerConfig, start: num
 }
 
 /** Background music share + spans (YAMNet). null when the check fails: compliance then warns. */
-async function detectMusic(src: string): Promise<(Music & { musicSec: [number, number][] }) | null> {
+async function detectMusic(src: string): Promise<(Music & { musicSec: [number, number][]; sfx?: [number, number, string][] }) | null> {
   try {
     return JSON.parse(await runCmd(paths.pythonBin, [join(paths.rootDir, 'workers', 'music_detect.py'), JSON.stringify({ input: src })]));
   } catch (e) {
@@ -226,6 +226,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
 
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
+  const sfx = (music?.sfx ?? []).map(([a, b, w]) => [a - lead, b - lead, w] as [number, number, string]).filter(([a]) => a >= 0);
   const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
   // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: off the face. Shift capped above the app buttons.
   const capY = (ch: Change, l = layout) => Math.min(1560, (layout.cam ? 900 + stackTop(layout) : layout.scene === 'nocam' ? 1460 : captionSpot(l)) + (ch.captionShift ?? 0));
@@ -241,7 +242,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
       // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
       disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
       style: ch.captionStyle ?? cfg.captionStyle ?? genre?.captions ?? settings.clip.captionStyle,
-      hook: ch.hookTitle ? title?.hook : null, hookKey: true, hookY: hookSpot(lay) ?? undefined,
+      hook: ch.hookTitle ? title?.hook : null, hookKey: true, hookY: hookSpot(lay) ?? undefined, sfx: ch.sfxCaptions ? sfx : [],
       wordsPerChunk: ch.wordsPerChunk, // style default unless an approved proposal sets it
       censor,
       // stack: everything moves down with the centered block; chat sits on the game's bottom edge. Shift capped above the app buttons.
@@ -257,7 +258,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });

@@ -83,3 +83,11 @@ test('hook keyword: CAPS words yellow, else the longest non-stopword; all-caps t
   assert.equal(hookKeyword('I CANT BELIEVE'), `I ${Y('CANT')} ${Y('BELIEVE')}`); // "I" alone is not a caps word
   assert.equal(hookKeyword('😭'), '');
 });
+
+test('sfx captions: *LAUGHS* above the caption line, capped at 1.5 s, one per 3 s', () => {
+  const ass = buildAss({ words: [], durationSec: 10, tag: '', captionY: 900, sfx: [[1, 4, 'laughs'], [2, 3, 'screams'], [5, 6, 'screams']] });
+  const ev = ass.split('\n').filter((l) => l.includes(',Sfx,,'));
+  assert.equal(ev.length, 2);
+  assert.ok(ev[0].startsWith('Dialogue: 0,0:00:01.00,0:00:02.50,Sfx,') && ev[0].endsWith('{\\pos(540,780)\\fad(80,150)}*LAUGHS*'));
+  assert.ok(ev[1].endsWith('*SCREAMS*'));
+});

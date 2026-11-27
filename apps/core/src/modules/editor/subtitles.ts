@@ -23,6 +23,7 @@ export interface AssOptions {
   chat?: Overlay[]; // chat messages he reacts to, shown as a card over the content
   chatY?: number; // top of the chat card
   burstY?: number; // top of the burst stack (rows go down 72px each)
+  sfx?: [number, number, string][]; // reaction sounds (music_detect.py): [start, end, "laughs"], shown as *LAUGHS* above the captions
 }
 
 const WHITE = '&H00FFFFFF';
@@ -120,6 +121,13 @@ export function buildAss(o: AssOptions): string {
     const cy = c.row != null ? (o.burstY ?? o.chatY ?? 1000) + c.row * 72 : (o.chatY ?? 1000);
     ev(c.s, c.e, 'Chat', `{\\pos(60,${cy})\\fad(150,150)}{\\c${YELLOW}}${c.user.replace(/[{}\\]/g, '')}{\\c${WHITE}}  ${text}`);
   }
+  // Sound captions like top clippers' "*LAUGHS*": short pop above the caption line, at most one per 3 s.
+  let lastSfx = -9;
+  for (const [s, e, what] of o.sfx ?? []) {
+    if (s - lastSfx < 3 || s >= o.durationSec) continue;
+    lastSfx = s;
+    ev(s, Math.min(e, s + 1.5, o.durationSec), 'Sfx', `{\\pos(540,${y - 120})\\fad(80,150)}*${clean(what)}*`);
+  }
   if (o.tag) ev(0, o.durationSec, 'Tag', `{\\an3\\pos(1050,1890)}${clean(o.tag).toLowerCase()}`);
   // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
   if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)}${o.hookKey ? hookKeyword(o.hook) : hookText(o.hook)}`);
@@ -138,6 +146,7 @@ Style: Caption,${st.font},${st.size},${WHITE},${WHITE},${st.box ? '&H59000000' :
 Style: Tag,Russo One,44,&H33FFFFFF,${WHITE},${BLACK},&H80000000,0,0,0,0,100,100,1,0,1,3,0,5,60,60,0,1
 Style: Chat,Russo One,40,${WHITE},${WHITE},&H33101010,&H33101010,0,0,0,0,100,100,0,0,3,14,0,7,60,160,0,1
 Style: Hook,Montserrat,66,${WHITE},${WHITE},${BLACK},&H80000000,-1,0,0,0,100,100,0,0,1,5,2,5,90,90,0,1
+Style: Sfx,${st.font},56,${YELLOW},${WHITE},${BLACK},&H80000000,0,-1,0,0,100,100,1,0,1,6,2,5,60,60,0,1
 Style: Disclosure,Russo One,34,${WHITE},${WHITE},&H99000000,&H99000000,0,0,0,0,100,100,1,0,3,10,0,7,60,60,0,1
 
 [Events]
