@@ -104,4 +104,4 @@ export function weightProposal(next: Learned, live: Record<string, number>, now 
   };
 }
 
-export const learnDue = (now = new Date()) => { const l = readLearned(); return !l || now.getTime() - new Date(l.at).getTime() >= 7 * 86_400_000; };
+export const learnDue = (now = new Date()) => { const l = readLearned(); return !l || now.getTime() - new Date(l.at).getTime() >= 86_400_000; }; // daily; changes stay proposals the owner approves

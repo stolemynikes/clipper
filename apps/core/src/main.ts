@@ -44,18 +44,18 @@ const learn = () => {
   try {
     const { next, changes, proposal } = learnOnce(db);
     log.info(`learner: ${next.n} clips, label ${next.label}, auc ${JSON.stringify(next.auc)}`);
-    bark('Weekly learning', proposal ? `New weights proposed (dashboard, Proposals):\n${changes.join('\n')}\n${proposal.evidence}` : `No weight changes (${next.n} clips, label: ${next.label}).`, { level: 'passive' }).catch(() => {});
+    bark('Learning', proposal ? `New weights proposed (dashboard, Proposals):\n${changes.join('\n')}\n${proposal.evidence}` : `No weight changes (${next.n} clips, label: ${next.label}).`, { level: 'passive' }).catch(() => {});
   } catch (e) { log.error('learner failed', { error: String(e) }); }
 };
 learn();
-const learnTimer = setInterval(learn, 24 * 60 * 60_000); // checks daily, runs weekly
+const learnTimer = setInterval(learn, 60 * 60_000); // checks hourly, runs daily
 // Weekly top-Shorts study as a queued job: held by the same pause/study switches as campaign studies.
 const weekly = () => {
   if (isOff('study') || !weeklyDue()) return;
   if (!db.$client.prepare("select 1 from jobs where type = 'study.weekly' and status in ('queued','running')").get()) enqueue(db, 'study.weekly', {});
 };
 weekly();
-const weeklyTimer = setInterval(weekly, 24 * 60 * 60_000);
+const weeklyTimer = setInterval(weekly, 60 * 60_000); // checks hourly, runs daily
 const scout = () => { if (!isPaused() && loadSettings().scout?.enabled !== false) scoutOnce(db).catch((e) => log.error('scout failed', { error: String(e) })); };
 const practice = () => practiceTick(db).catch((e) => log.error('practice tick failed', { error: String(e) }));
 const practiceTimer = setInterval(practice, 60_000);

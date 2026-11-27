@@ -14,7 +14,7 @@ const DAY = 86_400_000;
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const file = () => join(paths.dataDir, 'study', 'weekly.json');
 
-export const weeklyDue = (now = Date.now()) => !existsSync(file()) || now - statSync(file()).mtimeMs > 7 * DAY;
+export const weeklyDue = (now = Date.now()) => !existsSync(file()) || now - statSync(file()).mtimeMs > DAY; // daily: owner wants it learning all day
 
 /** One search.list (100 quota units) + one videos.list; ~25 downloads + Whisper, roughly 10-20 min on the GPU. */
 export async function weeklyShorts(max = 25) {
@@ -24,7 +24,7 @@ export async function weeklyShorts(max = 25) {
   mkdirSync(dir, { recursive: true });
   const out: ShortFacts[] = [];
   // relevanceLanguage only ranks; keep Shorts whose uploader set English audio (unset = unknown, skipped).
-  const found = await topShorts('twitch stream', new Date(Date.now() - 7 * DAY), 50, { videoCategoryId: '20', relevanceLanguage: 'en', regionCode: 'US' });
+  const found = await topShorts('twitch stream', new Date(Date.now() - 2 * DAY), 50, { videoCategoryId: '20', relevanceLanguage: 'en', regionCode: 'US' });
   for (const v of found.filter((x) => x.lang.startsWith('en')).slice(0, max)) {
     const mp4 = join(dir, `${v.id}.mp4`);
     try {

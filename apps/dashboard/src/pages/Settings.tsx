@@ -64,8 +64,8 @@ export function Settings() {
   const work: Row[] = [
     { key: 'study', title: 'Study top clips', text: "Watches the best clips of a new campaign's streamer first. Uses a lot of the PC.", on: data.study,
       path: (on) => `/toggle/study/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Studying is on' : 'Studying is off. Waiting studies stay in line.') },
-    { key: 'learn', title: 'Weekly learning', text: 'Once a week, looks at which clips got views and adjusts how it picks moments.', on: data.learning,
-      path: (on) => `/toggle/learn/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Weekly learning is on' : 'Weekly learning is off') },
+    { key: 'learn', title: 'Daily learning', text: 'Every day, studies the top Shorts and which clips got views, and proposes how to pick moments better.', on: data.learning,
+      path: (on) => `/toggle/learn/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Daily learning is on' : 'Daily learning is off') },
     { key: 'practice', title: 'Practice at night', text: 'Makes practice clips from older VODs. Never posted, deleted after scoring.', on: data.practice,
       path: (on) => `/toggle/practice/${on ? 'on' : 'off'}`, done: (on) => (on ? 'Practice is on' : 'Practice stops after the current step') },
     { key: 'claude', title: 'Claude watches along', text: 'Checks the practice run now and then and fixes errors. Off saves your Claude usage.', on: data.claude,
