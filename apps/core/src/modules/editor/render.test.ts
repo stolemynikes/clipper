@@ -99,3 +99,12 @@ test('faceTrouble: real 912 frames before/after the crop fix', () => {
   assert.match(faceTrouble(ok.map(() => [{ x: 0.5, y: 0.5, w: 0.5, h: 0.3 }]))!, /edge/);
   assert.match(faceTrouble(ok.map(() => [{ x: 0.6, y: 0.5, w: 0.3, h: 0.2 }]))!, /off center/);
 });
+
+test('hookSpot: cam panel bottom, nocam above content, fullcam above hair or null', async () => {
+  const { hookSpot } = await import('./render.ts');
+  assert.equal(hookSpot({ scene: 'cam', cam: { x: 0, y: 0, w: 0.3, h: 0.3 }, content: { x: 0, y: 0, w: 1, h: 1 } }), 690);
+  assert.equal(hookSpot({ scene: 'nocam', content: { x: 0, y: 0, w: 1, h: 1 } }), 470);
+  const c = { x: 0.2, y: 0, w: 0.6, h: 1 };
+  assert.equal(hookSpot({ scene: 'fullcam', content: c, face: { x: 0.4, y: 0.05, w: 0.1, h: 0.15 } }), null); // face near the top
+  assert.ok((hookSpot({ scene: 'fullcam', content: c, face: { x: 0.4, y: 0.5, w: 0.1, h: 0.15 } }) ?? 0) >= 150);
+});

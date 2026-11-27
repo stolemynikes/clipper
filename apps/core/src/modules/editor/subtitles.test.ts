@@ -74,3 +74,12 @@ test('2+ speakers: main speaker white, other speaker pink; one speaker stays whi
   const one = buildAss({ words: [{ w: 'a', s: 0, e: 0.2, sp: 3 }], durationSec: 1, tag: '' });
   assert.ok(!one.includes('B672F4'));
 });
+
+test('hook keyword: CAPS words yellow, else the longest non-stopword; all-caps title falls back', async () => {
+  const { hookKeyword } = await import('./subtitles.ts');
+  const Y = (w: string) => `{\\c&H0015CCFA}${w}{\\c&H00FFFFFF}`;
+  assert.equal(hookKeyword('He says he ALMOST WENT broke'), `He says he ${Y('ALMOST')} ${Y('WENT')} broke`);
+  assert.equal(hookKeyword('Shows up two days late'), `${Y('Shows')} up two days late`);
+  assert.equal(hookKeyword('I CANT BELIEVE'), `I ${Y('CANT')} ${Y('BELIEVE')}`); // "I" alone is not a caps word
+  assert.equal(hookKeyword('😭'), '');
+});

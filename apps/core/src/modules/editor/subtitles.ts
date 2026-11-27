@@ -14,6 +14,7 @@ export interface AssOptions {
   disclosure?: string | null; // e.g. "#ad", shown for disclosureSec at the start
   disclosureSec?: number;
   hook?: string | null;
+  hookKey?: boolean; // colour the payoff word(s) of the hook yellow
   hookY?: number; // title on screen the whole clip (top Shorts, e.g. 1.6M-view Clix one, keep it up), keeps people from swiping
   captionY?: number; // vertical center of captions in the 1080x1920 frame
   wordsPerChunk?: number; // default from the style
@@ -66,6 +67,15 @@ const ts = (sec: number) => {
 const clean = (t: string) => t.replace(/[{}\\]/g, '').toUpperCase();
 // Title like top Shorts: white sentence case, black outline. Emoji dropped: libass draws no colour emoji (they go in the post title).
 const hookText = (t: string) => t.replace(/[{}\\]|\p{Extended_Pictographic}|️/gu, '').replace(/\s+/g, ' ').trim();
+const STOP = new Set('the a an and or but to of in on at for with he she they his her their is was are were be this that it its you your my me i we our just so when what who how why from up out not no'.split(' '));
+/** Top clipper Shorts colour the payoff word(s) of the title red or yellow (8/13): the CAPS words, else the longest non-stopword. */
+export function hookKeyword(t: string): string {
+  const ws = hookText(t).split(' '), bare = (w: string) => w.replace(/[^\p{L}\p{N}']/gu, '');
+  const caps = ws.map((w, i) => i).filter((i) => bare(ws[i]).length >= 2 && /\p{Lu}/u.test(ws[i]) && bare(ws[i]) === bare(ws[i]).toUpperCase());
+  const longest = ws.reduce((b, w, i) => (!STOP.has(bare(w).toLowerCase()) && bare(w).length > (b < 0 ? 0 : bare(ws[b]).length) ? i : b), -1);
+  const key = caps.length && caps.length < ws.length ? caps : longest >= 0 ? [longest] : [];
+  return ws.map((w, i) => (key.includes(i) ? `{\\c${YELLOW}}${w}{\\c${WHITE}}` : w)).join(' ');
+}
 
 /** Masks a word whose letters start with a censored stem: "fucking" -> "F******". */
 export function censorWord(w: string, stems: string[]): string {
@@ -112,7 +122,7 @@ export function buildAss(o: AssOptions): string {
   }
   if (o.tag) ev(0, o.durationSec, 'Tag', `{\\an3\\pos(1050,1890)}${clean(o.tag).toLowerCase()}`);
   // Hook: black on yellow card, below the top UI safe zone, short pop-in (micro-animation).
-  if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)}${hookText(o.hook)}`);
+  if (o.hook?.trim()) ev(0, o.durationSec, 'Hook', `{\\pos(540,${o.hookY ?? 470})\\fad(0,200)}${o.hookKey ? hookKeyword(o.hook) : hookText(o.hook)}`);
   if (o.disclosure) ev(0, o.disclosureSec ?? 3, 'Disclosure', `{\\an3\\pos(1050,1835)}${clean(o.disclosure)}`);
 
   return `[Script Info]

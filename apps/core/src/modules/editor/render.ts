@@ -27,6 +27,15 @@ export function captionSpot(layout: Layout, def = 1300): number {
   return CAP_MAX;
 }
 
+/** On-screen title center y, or null when it would cover the face. cam: over the streamer's chest at the cam panel's bottom
+ *  (captions sit at the seam below); fullcam: above the hair; nocam: over the blurred bg above the content. */
+export function hookSpot(layout: Layout): number | null {
+  if (layout.cam) return 690 + stackTop(layout);
+  const b = faceBand(layout);
+  if (!b) return 470;
+  return b.head - 16 - 80 >= TOP_SAFE ? Math.round(b.head - 16 - 80) : null; // title wraps to 2 lines max: ~80 px half
+}
+
 /** fullcam: top y of the chat box where it covers neither the streamer's head nor the captions; below the chin first, then above the hair.
  *  null = no free spot (box dropped). Other layouts keep their fixed spot (def). */
 export function chatSpot(layout: Layout, captionY: number, def = 400): number | null {

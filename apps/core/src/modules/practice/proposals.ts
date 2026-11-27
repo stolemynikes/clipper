@@ -17,6 +17,7 @@ export type Change = {
   duckVol?: number; deadAirSec?: number; lufs?: number; // sound: the frame judge cannot hear, so these come from the sound study (untested)
   postWindow?: [number, number]; descSource?: boolean; // post hours (US Eastern) and a source link line in the YouTube description, from the weekly study
   hashtags?: string[]; titleMax?: number; // metadata from the weekly study: added after the required tags, never instead of them
+  hookTitle?: boolean; // burn the hook in as an on-screen title, payoff word yellow (top clipper Shorts, 8/13)
   speakerColors?: boolean; // caption colour per speaker when 2+ people are on screen (diarize.py)
   chatBurst?: boolean; // our own Twitch chat box when chat goes wild (settings clip.chatBurst is the live default)
   gameCrop?: Record<string, Rect & { fit?: 'stack' }>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
@@ -124,10 +125,12 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'crop-silky', title: 'Silky: game part without his chat box', why: 'His stream chat sits top-right and a sub counter top-left inside the game part. This crop starts below both.', change: { gameCrop: { silky: { x: 0.271, y: 0.13, w: 0.458, h: 0.87 } } } });
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) add({ id: `style-${s}`, title: `Caption style "${s}"`, why: `Test the ${s} caption look against the current "${cur.style}".`, change: { captionStyle: s } });
   // Nov 27 owner: speaker colours tested first, then switched on where they win.
+  add({ id: 'hook-title', title: 'Title on screen, key word yellow', why: 'Most top clipper Shorts keep a title on screen with the payoff word coloured. Now the hook is only the cover.', change: { hookTitle: true } });
   add({ id: 'speaker-colors', title: 'Caption colour per speaker', why: 'With 2+ people on screen each speaker gets a colour (main speaker white), so viewers follow who talks.', change: { speakerColors: true } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.
   const t = (id: string, title: string, why: string, change: Change, kind: Kind) => add({ id: `${id}-${kind}`, title, why, change, kind });
   if (fewer !== cur.per) t(`words-${fewer}`, `${fewer} word${fewer === 1 ? "" : "s"} per caption line`, `Fewer words at once are faster to read on a phone. Now ${cur.per}.`, { wordsPerChunk: fewer }, 'talk');
+  t('hook-title', 'Title on screen, key word yellow', 'Most top clipper Shorts keep a title on screen with the payoff word coloured.', { hookTitle: true }, 'talk');
   t('speaker-colors', 'Caption colour per speaker', 'Each speaker gets a colour (main speaker white), so viewers follow who talks.', { speakerColors: true }, 'talk');
   t('captions-lower', 'Captions 150 px lower', 'Lower captions cover less of the faces; still above the app buttons.', { captionShift: 150 }, 'talk');
   for (const s of (['pop', 'clean'] as CaptionStyle[]).filter((x) => x !== cur.style)) t(`style-${s}`, `Caption style "${s}"`, `Test the ${s} caption look against the current "${cur.style}".`, { captionStyle: s }, 'talk');

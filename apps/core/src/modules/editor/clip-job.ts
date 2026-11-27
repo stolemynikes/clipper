@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, hookSpot, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -241,6 +241,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
       // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
       disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
       style: ch.captionStyle ?? cfg.captionStyle ?? genre?.captions ?? settings.clip.captionStyle,
+      hook: ch.hookTitle ? title?.hook : null, hookKey: true, hookY: hookSpot(lay) ?? undefined,
       wordsPerChunk: ch.wordsPerChunk, // style default unless an approved proposal sets it
       censor,
       // stack: everything moves down with the centered block; chat sits on the game's bottom edge. Shift capped above the app buttons.
@@ -256,7 +257,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
