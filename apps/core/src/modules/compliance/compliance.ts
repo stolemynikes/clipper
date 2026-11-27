@@ -17,6 +17,7 @@ export interface ComplianceInput {
   disclosure: string | null;
   music?: Music | null;
   ownAudio?: boolean; // footage the brand gave: its music is theirs, not someone else's
+  steadyMusic?: boolean; // music in most moments of this stream: game soundtrack (or a playlist), not one song the streamer put on
   transcript: string;
   sourceDate?: Date | null; // when the stream aired
   budget?: { used: number; total: number } | null; // estimated payout so far vs the campaign budget
@@ -31,6 +32,10 @@ const GAMBLING = /\b(casino|roulette|blackjack|stake\.com|stake code|sportsbook|
 export const MUSIC_BLOCK = 0.5; // over half the clip is someone else's music
 export const VOCAL_BLOCK = 0.15; // sung/rapped song = licensed track
 export const MUSIC_WARN = 0.15;
+
+/** Music ratios of the other measured moments of one stream: steady when 3+ were measured and 70%+ are mostly music. */
+export const isSteadyMusic = (ratios: number[]) =>
+  ratios.length >= 3 && ratios.filter((r) => r >= MUSIC_BLOCK).length / ratios.length >= 0.7;
 
 export function checkClip(i: ComplianceInput): Compliance {
   const now = i.now ?? new Date();
@@ -57,6 +62,8 @@ export function checkClip(i: ComplianceInput): Compliance {
 
   if (i.ownAudio) { /* their own song or show audio: keep it */ } else if (i.music) {
     if (i.music.vocalRatio >= VOCAL_BLOCK) blocks.push('A song with vocals plays in the background');
+    // YAMNet has no working game-music class (max 0.008 on game clips), so a whole-stream pattern stands in for it.
+    else if (i.music.musicRatio >= MUSIC_BLOCK && i.steadyMusic) warnings.push('Music plays through the whole stream (likely the game): listen before you approve');
     else if (i.music.musicRatio >= MUSIC_BLOCK) blocks.push('Mostly music from someone else');
     else if (i.music.musicRatio >= MUSIC_WARN) warnings.push('Some background music (turned down where nobody talks)');
   } else warnings.push('Music check did not run');

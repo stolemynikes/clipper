@@ -13,7 +13,7 @@ import { sourceContext } from '../vod-clipper/analyze.ts';
 import { burstChat, type ChatLine, matchChat } from './chat-overlay.ts';
 import { trimWindow } from './trim.ts';
 import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts';
-import { checkClip, needsDisclosure, type Music } from '../compliance/compliance.ts';
+import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
 import { duckFilter, ffmpegArgs, filterGraph, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
@@ -133,10 +133,15 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const disclosure = needsDisclosure(cfg.campaign, settings.clip.disclosure) ? settings.clip.disclosureText : null;
   const transcript = words.map((w) => w.w).join(' ');
   const music = await detectMusic(src);
+  // Kept on the moment (blocked ones too) so later moments of this stream can tell game music from a song.
+  if (music && !proof) { moment.signals = { ...(moment.signals ?? {}), musicRatio: music.musicRatio }; db.update(moments).set({ signals: moment.signals }).where(eq(moments.id, momentId)).run(); }
+  // shortcut: moments blocked before 3 others were measured stay skipped; re-queue them if game-music streams lose clips
+  const steadyMusic = isSteadyMusic(db.select({ id: moments.id, s: moments.signals }).from(moments).where(eq(moments.sourceId, moment.sourceId)).all()
+    .filter((m) => m.id !== momentId && typeof m.s?.musicRatio === 'number').map((m) => m.s!.musicRatio));
   const used = accountStats(db).filter((a) => a.streamer === cfg.name).reduce((n, a) => n + a.earned, 0);
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
-    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: isFootage(cfg),
+    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: isFootage(cfg), steadyMusic,
     transcript, duplicateOf: source.streamerId && !old && !practice ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly

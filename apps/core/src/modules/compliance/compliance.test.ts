@@ -52,6 +52,17 @@ test('music: song blocks, some music warns', () => {
   assert.match(check({ music: null }).warnings[0], /did not run/);
 });
 
+test('steady music across the stream warns instead of blocks; vocals still block', async () => {
+  const { isSteadyMusic } = await import('./compliance.ts');
+  assert.equal(isSteadyMusic([0.9, 0.8, 0.96]), true);
+  assert.equal(isSteadyMusic([0.9, 0.8]), false); // too few moments measured
+  assert.equal(isSteadyMusic([0.9, 0.1, 0.0, 0.7]), false); // music in half: songs the streamer put on
+  const game = check({ music: { musicRatio: 0.96, vocalRatio: 0 }, steadyMusic: true }); // silky Werewolf: soundtrack all stream
+  assert.deepEqual(game.blocks, []);
+  assert.match(game.warnings[0], /whole stream/);
+  assert.match(check({ music: { musicRatio: 0.9, vocalRatio: 0.3 }, steadyMusic: true }).blocks[0], /song/);
+});
+
 test('budget used up and duplicates block', () => {
   assert.match(check({ budget: { used: 100, total: 100 } }).blocks[0], /budget/);
   assert.equal(check({ budget: { used: 99, total: 100 } }).ok, true);
