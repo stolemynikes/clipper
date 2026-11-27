@@ -21,7 +21,7 @@ export type Change = {
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
 };
 /** Length changes move the cut: judged on the two transcripts, not on frames. */
-export const isLength = (c: Change) => c.leadSec !== undefined || c.maxLen !== undefined;
+export const isLength = (c: Change) => c.leadSec !== undefined || c.maxLen !== undefined || c.deadAirSec !== undefined; // deadAir only moves the cut start
 export type Pair = { clipId: number; newFirst: boolean; pick: 'new' | 'old' | 'same'; why: string; at: number };
 export type Proposal = {
   id: string; title: string; why: string; change: Change;

@@ -155,6 +155,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
 
   const layout = isFootage(cfg) ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  if (proof) log.info(`proof layout: ${JSON.stringify(layout)}; music spans: ${JSON.stringify(music?.musicSec ?? [])}`); // why a proposal does or does not change the output
   if (layout.fit === 'full' && !proof) {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
     db.update(moments).set({ score: moment.score * WEBSITE_PENALTY, signals: { ...(moment.signals ?? {}), website: 1 } }).where(eq(moments.id, momentId)).run();
@@ -191,6 +192,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
   const genre = isFootage(cfg) && cfg.genre ? GENRES[cfg.genre] : undefined;
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = old || proof ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db)), kind); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
+  const quiet = quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words);
   const encode = async (out: string, ch: Change) => {
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
@@ -210,15 +212,22 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
     const lay = own && layout.cam && !layout.fit ? { ...layout, content: own } : layout;
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
-    await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead,
-      duckFilter(quietMusic((isFootage(cfg) ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
+    const duck = duckFilter(quiet, ch.duckVol);
+    await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead, duck, durationSec,
       twitchChat?.file ?? null, ch.lufs), { cwd: dir });
   };
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
+  // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
+  const run = props.filter((p) => {
+    const why = p.change.gameCrop && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : null;
+    if (why) log.info(`${p.id}: ${why}, skipped`);
+    return !why;
+  });
+  if (old && !run.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing here the proposals can change`); }
   await encode(proof ? 'proof-live.mp4' : 'clip.mp4', live);
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
-  for (const p of props) {
+  for (const p of run) {
     if (!isLength(p.change)) { await encode(`${pre}${p.id}.mp4`, { ...live, ...p.change }); continue; }
     // Length: only the cut moves, judged on the transcripts, so no encode needed.
     const v = trimFor({ ...live, ...p.change });
@@ -226,8 +235,8 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof }: 
     writeFileSync(join(dir, `${pre}${p.id}.json`), JSON.stringify({ sec: v.end - v.start, text }));
   }
   if (proof) for (const f of [...(had ? [] : [src]), join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
-  if (proof) return log.info(`proof ${momentId}: ${props.map((p) => p.id).join(', ')} rendered as proof-*.mp4`); // no DB change, no judge
-  if (props.length) writeFileSync(join(dir, 'proposals.txt'), props.map((p) => p.id).join('\n'));
+  if (proof) return log.info(`proof ${momentId}: ${run.map((p) => p.id).join(', ')} rendered as proof-*.mp4`); // no DB change, no judge
+  if (run.length) writeFileSync(join(dir, 'proposals.txt'), run.map((p) => p.id).join('\n'));
   for (const f of [...(practice ? [] : [src]), join(dir, 'twitch-chat.mov'), join(dir, 'twitch-chat.json')]) rmSync(f, { force: true });
 
   if (old) db.update(clips).set({ durationSec, transcript, compliance: { ...compliance, music } }).where(eq(clips.id, old.id)).run();
