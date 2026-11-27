@@ -125,3 +125,12 @@ test('kindOf + accountFits: footage genre picks the niche account, a tied accoun
   assert.ok(!accountFits({ streamerId: null, kind: 'music' }, 3, 'streamers'));
   assert.ok(!accountFits({ streamerId: 4, kind: 'streamers' }, 3, 'streamers'));
 });
+
+test('source line and stream url in the YouTube description', async () => {
+  const { streamUrl } = await import('./publish.ts');
+  const o = { title: 'x', streamer: 'Clix', tag: '@Clix', disclosure: null, source: 'https://www.twitch.tv/clix' };
+  assert.match(postText('youtube', o).description, /^Clip from: https:\/\/www\.twitch\.tv\/clix\n\n@Clix #Clix/);
+  assert.doesNotMatch(postText('tiktok', o).title, /Clip from/);
+  assert.equal(streamUrl({ platform: 'kick', channel: 'x' }), 'https://kick.com/x');
+  assert.equal(streamUrl({ platform: 'youtube', channel: '@pod', genre: 'podcast' }), undefined); // footage gets no link
+});

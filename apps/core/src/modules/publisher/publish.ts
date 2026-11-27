@@ -15,6 +15,7 @@ import { accessToken, hasToken } from './oauth.ts';
 import { hasPostpeer, postpeerPublish } from './postpeer.ts';
 import { needsDisclosure } from '../compliance/compliance.ts';
 import { audienceZone, nextPostAt } from './post-time.ts';
+import { channelUrl } from '../watcher/youtube.ts';
 import { bark } from '../../review/review.ts';
 
 const log = logger('publisher');
@@ -29,12 +30,14 @@ export function fallbackTitle(transcript: string | null, streamer: string): stri
 }
 
 /** Per-platform text: YouTube has a 100-char title plus description, TikTok one caption. */
-export function postText(platform: AccountPlatform, o: { title: string; streamer: string; tag: string; disclosure: string | null; extra?: string[]; hashtags?: string[] }) {
+export function postText(platform: AccountPlatform, o: { title: string; streamer: string; tag: string; disclosure: string | null; extra?: string[]; hashtags?: string[]; source?: string }) {
   const req = [...new Map([o.disclosure, o.tag, `#${o.streamer.replace(/\W/g, '')}`, ...(o.hashtags ?? []), platform === 'youtube' ? '#shorts' : platform === 'instagram' ? '#reels' : '#fyp'].filter(Boolean).map((h) => [String(h).toLowerCase(), h])).values()] as string[]; // campaign hashtags are required; one copy each
   // Approved study hashtags go last, so a length cap can only cut them, never the required ones.
   const tags = [...req, ...(o.extra ?? []).filter((h) => !req.some((r) => r.toLowerCase() === h.toLowerCase()))].join(' ');
   return platform === 'youtube'
-    ? { title: o.title.slice(0, 100), description: tags }
+    ? { title: o.title.slice(0, 100), description: o.source ? `Clip from: ${o.source}
+
+${tags}` : tags }
     : { title: `${o.title} ${tags}`.slice(0, 2200), description: '' };
 }
 
@@ -56,12 +59,16 @@ const viaPostpeer = (platform: string) => platform !== 'youtube' && hasPostpeer(
 /** True when Snip can upload to this account itself (PostPeer or a saved token). */
 export const canUpload = (a: { id: number; platform: string }) => viaPostpeer(a.platform) || hasToken(a.id);
 
+/** Public page of the stream a clip comes from; none for footage (podcast, music). */
+export const streamUrl = (cfg: Pick<StreamerConfig, 'platform' | 'channel' | 'genre'>) =>
+  isFootage(cfg) ? undefined : cfg.platform === 'kick' ? `https://kick.com/${cfg.channel}` : cfg.platform === 'youtube' ? channelUrl(cfg.channel).replace(/\/videos$/, '') : `https://www.twitch.tv/${cfg.channel}`;
+
 /** Title and description for one platform, the same text the publisher posts (also shown on Ready to post for manual posting). */
 export function clipText(clip: { title: string | null; transcript: string | null }, cfg: StreamerConfig, platform: AccountPlatform) {
   const settings = loadSettings(), rules = cfg.campaign?.rules;
-  const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure);
-  const text = postText(platform, {
-    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tweaks(undefined, kindFor(cfg)).hashtags, hashtags: (Array.isArray(rules?.hashtags) ? rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
+  const paid = needsDisclosure(cfg.campaign, settings.clip.disclosure), tw = tweaks(undefined, kindFor(cfg));
+  const text = postText(platform, { source: tw.descSource ? streamUrl(cfg) : undefined,
+    title: clip.title ?? fallbackTitle(clip.transcript, cfg.name), streamer: cfg.name, tag: cfg.tag, disclosure: paid && settings.clip.disclosureInText ? settings.clip.disclosureText : null, extra: tw.hashtags, hashtags: (Array.isArray(rules?.hashtags) ? rules.hashtags : []).map(String) }); // CR FTC page: written #ad plus the paid-promotion toggle
   return { paid, text };
 }
 
@@ -103,12 +110,12 @@ const POLITICS = /\b(trump|biden|kamala|harris|obama|election|democrats?|republi
 export const politicsBlocked = (platform: string, text: string) => (platform === 'tiktok' || platform === 'x') && POLITICS.test(text);
 
 /** When this account may post next: in the evening of the campaign's audience, gapMin after its last or queued post. */
-function postTime(db: Db, accountId: number, audience: unknown, after = new Date()): Date {
+function postTime(db: Db, accountId: number, cfg: StreamerConfig, after = new Date()): Date {
   const lastPost = db.select({ at: posts.postedAt }).from(posts).where(eq(posts.accountId, accountId)).orderBy(desc(posts.postedAt)).get()?.at ?? null;
   const queued = db.select({ at: jobs.runAt, p: jobs.payload }).from(jobs).where(and(eq(jobs.type, 'clip.publish'), eq(jobs.status, 'queued'))).all()
     .filter((j) => (j.p as { accountId?: number }).accountId === accountId).map((j) => j.at);
   const last = [lastPost, ...queued].filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
-  return nextPostAt(after, last, audienceZone(audience), loadSettings().publish?.gapMin ?? 90);
+  return nextPostAt(after, last, audienceZone(cfg.campaign?.rules?.audience), loadSettings().publish?.gapMin ?? 90, tweaks(undefined, kindFor(cfg)).postWindow);
 }
 
 export type AccountKind = 'streamers' | 'talk' | 'music' | 'product';
@@ -136,7 +143,7 @@ export function queuePublish(db: Db, clipId: number) {
     log.warn(`publish: clip ${clipId} has no ${kind} account`);
     bark('Not posted', `Clip ${clipId} is approved, but there is no ${kind} account to post it on. Add one under Money.`).catch(() => {});
   }
-  for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id }, { runAt: postTime(db, a.id, cfg.campaign?.rules?.audience) });
+  for (const a of pickAccounts(ready, clipId)) enqueue(db, 'clip.publish', { clipId, accountId: a.id }, { runAt: postTime(db, a.id, cfg) });
 }
 
 async function youtube(token: string, file: string, t: { title: string; description: string }, paid: boolean, placement = true): Promise<{ externalId: string; url: string }> {
@@ -206,13 +213,13 @@ export async function publishClip(db: Db, { clipId, accountId }: { clipId: numbe
   const today = new Date(now); today.setHours(0, 0, 0, 0);
   const done = db.select().from(posts).where(and(eq(posts.accountId, accountId), gte(posts.postedAt, today))).all().length;
   if (done >= settings.limits.maxPostsPerAccountPerDay) {
-    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg.campaign?.rules?.audience, nextDay(now)) });
+    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg, nextDay(now)) });
     return log.info(`account ${accountId} hit its daily limit, clip ${clipId} moved to tomorrow`);
   }
   // Terms 7.14: too many unapproved submissions pause the account; CR reviews pending ones after 7 days (7.2).
   const week = db.select().from(posts).where(and(eq(posts.accountId, accountId), gte(posts.postedAt, new Date(now.getTime() - 7 * 86_400_000)))).all().length;
   if (week >= (settings.limits.maxPostsPerAccountPerWeek ?? 10)) {
-    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg.campaign?.rules?.audience, nextDay(now)) });
+    enqueue(db, 'clip.publish', { clipId, accountId }, { runAt: postTime(db, accountId, cfg, nextDay(now)) });
     return log.info(`account ${accountId} hit its weekly limit, clip ${clipId} moved to tomorrow`);
   }
 

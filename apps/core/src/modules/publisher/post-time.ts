@@ -42,7 +42,7 @@ export function postSlot(after: Date, tz: string, [from, to] = POST_WINDOW): Dat
 }
 
 /** Next post time for one account: at least gapMin after its last post or queued post, inside the audience's evening. */
-export function nextPostAt(now: Date, last: Date | null, tz: string, gapMin: number): Date {
+export function nextPostAt(now: Date, last: Date | null, tz: string, gapMin: number, window = POST_WINDOW): Date {
   const after = last && last.getTime() + gapMin * 60_000 > now.getTime() ? new Date(last.getTime() + gapMin * 60_000) : now;
-  return postSlot(after, tz);
+  return postSlot(after, tz, window);
 }

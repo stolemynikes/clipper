@@ -8,12 +8,14 @@ import type { Rect } from '../editor/render.ts';
 import type { CaptionStyle } from '../editor/subtitles.ts';
 import { isFootage, type StreamerConfig } from '../../config.ts';
 import type { Kind } from '../learner/patterns.ts';
+import { POST_WINDOW } from '../publisher/post-time.ts';
 
 /** What a proposal changes. Render knobs the frame judge can see, plus metadata from the study (untested). */
 export type Change = {
   wordsPerChunk?: number; captionShift?: number; captionStyle?: CaptionStyle; titleExamples?: string[];
   leadSec?: number; maxLen?: number;
   duckVol?: number; deadAirSec?: number; lufs?: number; // sound: the frame judge cannot hear, so these come from the sound study (untested)
+  postWindow?: [number, number]; descSource?: boolean; // post hours (US Eastern) and a source link line in the YouTube description, from the weekly study
   hashtags?: string[]; titleMax?: number; // metadata from the weekly study: added after the required tags, never instead of them
   gameCrop?: Record<string, Rect>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
@@ -130,13 +132,17 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
 }
 
 /** Metadata from the weekly study becomes an untested proposal, once per study run; live titles never follow the study on their own. */
-export function seedStudy(study: { at: string | null; titles: string[]; hashtags?: string[]; titleLen?: number | null }) {
+export function seedStudy(study: { at: string | null; titles: string[]; hashtags?: string[]; titleLen?: number | null; postHours?: [number, number] | null; sourceShare?: number | null }) {
   if (!study.at) return;
   const day = study.at.slice(0, 10), note = 'From the weekly study, not tested: real views after posting measure it.';
   if (study.titles.length) addProposal({ id: `titles-${day}`, title: "Title style of this week's top Shorts", why: `The title writer copies the style (not the content) of the ${study.titles.length} most-viewed gaming Shorts of the weekly study.`, change: { titleExamples: study.titles } });
   if (study.hashtags?.length) addProposal({ id: `hashtags-${day}`, title: `Add ${study.hashtags.join(' ')}`, why: "General hashtags used by several channels in this week's top gaming Shorts. Added after the streamer tag and #ad, never instead of them.", change: { hashtags: study.hashtags }, evidence: note });
   // 70 = cleanTitle default; only worth asking when the top Shorts clearly differ.
   if (study.titleLen && Math.abs(study.titleLen - 70) >= 15) addProposal({ id: `title-len-${day}`, title: `Titles up to ${study.titleLen} characters`, why: `Median title length of this week's top gaming Shorts is ${study.titleLen}. Now up to 70.`, change: { titleMax: study.titleLen }, evidence: note });
+  // Upload hour of top Shorts is a weak hint (they may also be top because they are older); real views of our posts decide.
+  const ph = study.postHours, clock = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`;
+  if (ph && ph[0] !== POST_WINDOW[0]) addProposal({ id: `post-time-${day}`, title: `Post between ${clock(ph[0])} and ${clock(ph[1])} (US East)`, why: `Most of this week's top gaming Shorts went up in that window. Now ${clock(POST_WINDOW[0])}-${clock(POST_WINDOW[1])} in the audience's time zone.`, change: { postWindow: ph }, evidence: note });
+  if (study.sourceShare != null && study.sourceShare >= 0.4) addProposal({ id: `desc-source-${day}`, title: 'Link the stream in the YouTube description', why: `${Math.round(study.sourceShare * 100)}% of this week's top gaming Shorts credit the source stream in the description ("Clip from: twitch.tv/..."). Now the description has only hashtags.`, change: { descSource: true }, evidence: note });
 }
 
 /** Untested proposal from a study or the learner; waits for the owner ("ready"). Same id twice is ignored. */

@@ -115,12 +115,23 @@ export function genericHashtags(shorts: Pick<ShortFacts, 'channel' | 'hashtags'>
     .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h]) => `#${h}`);
 }
 
-export function weeklyInsights(names: string[] = []): { at: string | null; titles: string[]; wordsPerLine: number | null; hashtags: string[]; titleLen: number | null } {
+/** Busiest 5-hour upload window of the top Shorts in US Eastern hours, or null unless 10+ Shorts and 40%+ of them fall inside it. */
+export function peakWindow(utcHours: number[]): [number, number] | null {
+  // shortcut: fixed UTC-5 (EST, Nov-Mar), off by one hour in summer; store publishedAt in ShortFacts if that matters.
+  const et = utcHours.map((h) => (h + 19) % 24);
+  const best = Array.from({ length: 20 }, (_, from) => ({ from, n: et.filter((h) => h >= from && h < from + 5).length })).sort((a, b) => b.n - a.n)[0];
+  return et.length >= 10 && best.n / et.length >= 0.4 ? [best.from, best.from + 5] : null;
+}
+/** Share of top Shorts whose description links or credits the source stream. */
+export const sourceShare = (descs: string[]) => descs.length ? descs.filter((d) => /twitch\.tv\/|kick\.com\/|clip from|source:|full video/i.test(d)).length / descs.length : null;
+
+export function weeklyInsights(names: string[] = []): { at: string | null; titles: string[]; wordsPerLine: number | null; hashtags: string[]; titleLen: number | null; postHours: [number, number] | null; sourceShare: number | null } {
   try {
     const { at, shorts } = JSON.parse(readFileSync(file(), 'utf8')) as { at: string; shorts: ShortFacts[] };
     const wpl = shorts.map((f) => f.look?.subs.wordsPerLine).filter((x): x is number => !!x);
     // shortcut: wordsPerLine undercounts when captions highlight word by word (each color change counts as a new line); clamp 2-4.
     return { at, titles: [...shorts].sort((a, b) => b.views - a.views).slice(0, 5).map((f) => f.title), wordsPerLine: wpl.length >= 5 ? Math.min(4, Math.max(2, Math.round(median(wpl)))) : null,
-      hashtags: genericHashtags(shorts, names), titleLen: shorts.length >= 5 ? Math.min(100, Math.max(30, median(shorts.map((f) => f.title.length)))) : null };
-  } catch { return { at: null, titles: [], wordsPerLine: null, hashtags: [], titleLen: null }; }
+      hashtags: genericHashtags(shorts, names), titleLen: shorts.length >= 5 ? Math.min(100, Math.max(30, median(shorts.map((f) => f.title.length)))) : null,
+      postHours: peakWindow(shorts.map((f) => f.hour)), sourceShare: shorts.length >= 10 ? sourceShare(shorts.map((f) => f.description)) : null };
+  } catch { return { at: null, titles: [], wordsPerLine: null, hashtags: [], titleLen: null, postHours: null, sourceShare: null }; }
 }
