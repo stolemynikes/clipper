@@ -3,7 +3,7 @@
 const API = 'https://www.googleapis.com/youtube/v3';
 
 export interface Short {
-  id: string; title: string; channel: string; views: number; url: string;
+  id: string; title: string; channel: string; channelId: string; views: number; url: string;
   description: string; tags: string[]; durationSec: number; likes: number; comments: number; publishedAt: string; lang: string;
 }
 
@@ -30,8 +30,20 @@ export async function topShorts(query: string, since: Date, max = 10, extra: Rec
   const { items } = await yt<{ id: string; snippet: { title: string; channelTitle: string; description?: string; tags?: string[]; publishedAt: string; defaultAudioLanguage?: string; defaultLanguage?: string };
     statistics: { viewCount?: string; likeCount?: string; commentCount?: string }; contentDetails: { duration: string } }>(
     'videos', { part: 'snippet,statistics,contentDetails', id: ids });
-  return items.map((v) => ({ id: v.id, title: v.snippet.title, channel: v.snippet.channelTitle, views: Number(v.statistics.viewCount ?? 0),
+  return toShorts(items);
+}
+
+const toShorts = (items: any[]): Short[] => items.map((v) => ({ id: v.id, title: v.snippet.title, channel: v.snippet.channelTitle, channelId: v.snippet.channelId ?? '', views: Number(v.statistics.viewCount ?? 0),
     url: `https://www.youtube.com/shorts/${v.id}`, description: v.snippet.description ?? '', tags: v.snippet.tags ?? [],
     durationSec: isoSeconds(v.contentDetails.duration), likes: Number(v.statistics.likeCount ?? 0), comments: Number(v.statistics.commentCount ?? 0),
     publishedAt: v.snippet.publishedAt, lang: v.snippet.defaultAudioLanguage ?? v.snippet.defaultLanguage ?? '' })).sort((a, b) => b.views - a.views);
+
+/** A channel's own recent Shorts (3-30 days old, so views have mostly settled): the newest 50 uploads, 2 quota units. */
+export async function channelShorts(channelId: string, now = Date.now()): Promise<Short[]> {
+  if (!/^UC[\w-]{22}$/.test(channelId)) return [];
+  const pl = await yt<{ contentDetails: { videoId: string } }>('playlistItems', { part: 'contentDetails', playlistId: `UU${channelId.slice(2)}`, maxResults: '50' });
+  const ids = pl.items.map((i) => i.contentDetails.videoId).join(',');
+  if (!ids) return [];
+  const { items } = await yt<any>('videos', { part: 'snippet,statistics,contentDetails', id: ids });
+  return toShorts(items).filter((v) => { const age = (now - Date.parse(v.publishedAt)) / 86_400_000; return v.durationSec > 0 && v.durationSec <= 180 && age >= 3 && age <= 30; });
 }

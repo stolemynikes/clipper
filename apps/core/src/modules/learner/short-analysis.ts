@@ -65,7 +65,7 @@ export async function lookAt(file: string, durationSec: number, words: number): 
 export type ShortFacts = {
   id: string; title: string; channel: string; url: string; views: number; durationSec: number;
   likeRate: number; commentRate: number; hour: number; weekday: string; tags: string[]; hashtags: string[]; description: string;
-  hook: string; wordsPerSec: number; look: ShortLook | null;
+  hook: string; wordsPerSec: number; look: ShortLook | null; text?: string; // text: transcript start, for labeling why it works
 };
 
 /** Everything we learn from one Short: API stats + Whisper hook/pace + frames. Whisper failure (no speech) keeps the rest. */
@@ -77,7 +77,7 @@ export async function shortFacts(v: Short, file: string, model: string): Promise
     likeRate: v.views ? v.likes / v.views : 0, commentRate: v.views ? v.comments / v.views : 0,
     hour: at.getUTCHours(), weekday: at.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
     tags: v.tags.slice(0, 15), hashtags: [...new Set(v.description.match(/#[\p{L}\p{N}_]+/gu) ?? [])].slice(0, 15), description: v.description.slice(0, 300),
-    hook: t.words.filter((w) => w.s < 3).map((w) => w.w).join(' ').trim(), wordsPerSec: +(t.words.length / dur).toFixed(1),
+    hook: t.words.filter((w) => w.s < 3).map((w) => w.w).join(' ').trim(), wordsPerSec: +(t.words.length / dur).toFixed(1), text: t.words.map((w) => w.w).join(' ').trim().slice(0, 1200),
     look: await lookAt(file, dur, t.words.length).catch(() => null),
   };
 }

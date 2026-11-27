@@ -12,6 +12,7 @@ import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
 import { enqueue } from '../../queue/queue.ts';
 import { stopWhisper } from '../editor/whisper.ts';
+import { judgeHint, type Kind } from '../learner/patterns.ts';
 import { learnedWeights } from '../learner/weights.ts';
 import { tweaks } from '../practice/proposals.ts';
 import { keepWindow } from '../practice/practice.ts';
@@ -39,7 +40,7 @@ export async function useGpu(awayMin: number): Promise<boolean> {
   }
 }
 
-async function askJson(model: string, gpu: boolean, prompt: string, format: object, images?: string[]) {
+export async function askJson(model: string, gpu: boolean, prompt: string, format: object, images?: string[]) {
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST',
     body: JSON.stringify({
@@ -187,7 +188,7 @@ function saveCalibration(clipId: number, frame: string | undefined, transcript: 
 const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
 
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
-export const JUDGE_VERSION = 3; // 2: brief content notes + transcript in the layout check. 3: footage prompts per genre
+export const JUDGE_VERSION = 4; // 2: brief content notes + transcript in the layout check. 3: footage prompts per genre. 4: learned top-vs-flop hints per kind
 
 /** Job: judge one clip, store the signals on its moment, add the proven part to the score, then ask for review. */
 export async function judgeClip(db: Db, { clipId, notify = true, retest }: { clipId: number; notify?: boolean; retest?: boolean }) {
@@ -198,6 +199,8 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
   const s = loadSettings();
   const model = s.titles?.model ?? 'gemma4:12b';
   const footage = cfg.platform === 'footage', focus = footage ? (cfg.genre ? GENRES[cfg.genre].focus : FOOTAGE_FOCUS) : undefined;
+  const kind: Kind | undefined = !footage ? 'gaming' : cfg.genre === 'music' ? 'music' : cfg.genre === 'product' ? undefined : 'talk';
+  const hint = judgeHint(kind);
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;
   const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number; layoutPenalty?: number; judgeVersion?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
 { laughMax: music?.laughMax, cheerMax: music?.cheerMax };
@@ -213,13 +216,13 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
       return keepWindow(dirname(clip.filePath));
     }
     if (clip.transcript && clip.transcript.split(' ').length >= 8 && cfg.genre !== 'music') { // music: the transcript is lyrics
-      const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name), focus));
+      const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name), focus) + hint);
       fun.speech = a.score / 10; why.push(`talk ${a.score}: ${a.why}`);
     }
     let shot: string | undefined;
     if (existsSync(clip.filePath)) {
       const vis = await frames(clip.filePath, clip.durationSec ?? 20); shot = vis[1];
-      const b = await ask(model, gpu, focus ? footageVisualPrompt(focus) : VISUAL_PROMPT, vis);
+      const b = await ask(model, gpu, (focus ? footageVisualPrompt(focus) : VISUAL_PROMPT) + (kind === 'music' ? hint : ''), vis); // music has no speech prompt
       fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
       const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540), clip.transcript ?? '', footage);
       fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;

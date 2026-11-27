@@ -69,3 +69,6 @@ body { margin: 0; background: var(--color-bg); color: var(--color-t); font-famil
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+@keyframes pl { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.pulse { animation: pl 1.6s ease-in-out infinite; }

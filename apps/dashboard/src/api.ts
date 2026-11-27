@@ -47,6 +47,12 @@ export const useReview = () => useQuery({ queryKey: ['review'], queryFn: () => g
 export const useCampaigns = () => useQuery({ queryKey: ['campaigns'], queryFn: () => get<Campaign[]>('/api/campaigns'), ...live });
 export const useCampaign = (name: string) => useQuery({ queryKey: ['campaign', name], queryFn: () => get<CampaignDetail>(`/api/campaigns/${name}`), ...live });
 
+export type LearningKind = { kind: 'gaming' | 'talk' | 'music'; label: string; top: number; flop: number; need: number; works: string[]; weak: string[]; last: string | null };
+export type Learning = {
+  now: { what: string; kind?: string; step: string; done: number; total: number; at: string } | null; queued: string[]; running: string[];
+  kinds: LearningKind[]; weights: { n: number; need: number; label: string | null; at: string | null; weights: Record<string, number> }; studies: { name: string; done: number; total: number }[];
+};
+export const useLearning = () => useQuery({ queryKey: ['learning'], queryFn: () => get<Learning>('/api/learning'), ...live });
 export const useProposals = () => useQuery({ queryKey: ['proposals'], queryFn: () => get<Proposal[]>('/api/proposals'), ...live });
 
 // Client-only settings (localStorage): currency, payout fee %, app name. Nothing is invented: no fee unless the owner sets one.

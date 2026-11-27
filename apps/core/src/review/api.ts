@@ -5,6 +5,8 @@ import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { campaignNotes } from '../modules/compliance/campaign-notes.ts';
 import { readProgress } from '../modules/learner/study.ts';
+import { CATEGORIES, type Kind, learnedLines, NEED, patterns, readNow, readRows } from '../modules/learner/patterns.ts';
+import { MIN_N, readLearned } from '../modules/learner/weights.ts';
 import { accountWarnings, allStreamers, campaignStatus, expectedPerClip } from './campaigns.ts';
 import { bestScores, isOff, pendingClips, rating, status } from './review.ts';
 import { reasons } from './server.ts';
@@ -28,6 +30,20 @@ const allPosts = (db: Db) => db.$client.prepare(`
     (select views from stats st where st.post_id = p.id order by measured_at desc limit 1) views
   from posts p join clips c on c.id = p.clip_id join moments m on m.id = c.moment_id join sources so on so.id = m.source_id
   join streamers s on s.id = so.streamer_id order by p.posted_at desc`).all() as Post[];
+
+/** What Snip is training on right now and what it has learned so far, for the Learning page. */
+function learning(db: Db) {
+  const jobs = db.$client.prepare("select type, status from jobs where type in ('study.weekly','campaign.study') and status in ('queued','running')").all() as { type: string; status: string }[];
+  const rows = readRows();
+  const kinds = (Object.keys(CATEGORIES) as Kind[]).map((kind) => {
+    const mine = rows.filter((r) => r.kind === kind), p = patterns(mine);
+    return { kind, label: CATEGORIES[kind].label, top: p.top, flop: p.flop, need: NEED, ...learnedLines(mine), last: mine[0]?.at ?? null };
+  });
+  const w = readLearned();
+  const studies = allStreamers().filter((s) => s.campaign).flatMap((s) => { const p = readProgress(s.name); return p && !p.finished && !p.error && p.total > 0 ? [{ name: s.name, done: p.done, total: p.total }] : []; });
+  return { now: readNow(), queued: jobs.filter((j) => j.status === 'queued').map((j) => j.type), running: jobs.filter((j) => j.status === 'running').map((j) => j.type),
+    kinds, weights: { n: w?.n ?? 0, need: MIN_N, label: w?.label ?? null, at: w?.at ?? null, weights: w?.weights ?? {} }, studies };
+}
 
 /** Days left including the end date itself (campaignOpen treats endsAt as valid through that day). */
 export const daysLeft = (endsAt: string, now = Date.now()) => Math.max(0, Math.ceil((new Date(endsAt).getTime() + DAY - now) / DAY));
@@ -236,6 +252,7 @@ export function apiRoute(db: Db, req: IncomingMessage, res: ServerResponse, url:
   if (url.pathname === '/api/accounts') return json(res, accounts(db)), true;
   if (url.pathname === '/api/ready') return json(res, ready(db)), true;
   if (url.pathname === '/api/rate') return usdRate().then((r) => json(res, r), () => json(res, rate ?? { eurPerUsd: null, date: '', at: 0 })), true;
+  if (url.pathname === '/api/learning') return json(res, learning(db)), true;
   if (url.pathname === '/api/proposals') return json(res, proposals().map((p) => ({ ...p, pairs: p.pairs.slice(-5), allPairs: p.pairs.length, score: score(p), aa: aaBias(p) }))), true;
   const m = /^\/api\/campaigns\/([a-z0-9_]{2,25})$/.exec(url.pathname);
   if (m) return json(res, detail(db, m[1])), true;

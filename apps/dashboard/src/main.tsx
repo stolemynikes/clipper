@@ -2,13 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig, motion } from 'motion/react';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { pref, setRate, useOverview, useRate } from './api.ts';
+import { pref, setRate, useLearning, useOverview, useRate } from './api.ts';
 import { Icon, Page, Toasts } from './ui.tsx';
 import { Home } from './pages/Home.tsx';
 import { Review } from './pages/Review.tsx';
 import { Campaigns, CampaignPage } from './pages/Campaigns.tsx';
 import { Later } from './pages/Later.tsx';
 import { Settings } from './pages/Settings.tsx';
+import { Learning } from './pages/Learning.tsx';
 import { Proposals } from './pages/Proposals.tsx';
 import { Discover } from './pages/Discover.tsx';
 import { Accounts, Earnings, History } from './pages/Money.tsx';
@@ -29,12 +30,14 @@ const NAV: [string, string, string, string?][] = [
   ['/campaigns', 'Campaigns', 'flag', 'Money'],
   ['/earnings', 'Earnings', 'money'],
   ['/history', 'History', 'clock'],
-  ['/proposals', 'Proposals', 'smile', 'Learning'],
+  ['/learning', 'Training', 'up', 'Learning'],
+  ['/proposals', 'Proposals', 'smile'],
 ];
 const BOTTOM: [string, string, string][] = [['/accounts', 'Accounts', 'user'], ['/settings', 'Settings', 'gear']];
 
 function Side({ route }: { route: string }) {
-  const { data } = useOverview();
+  const { data } = useOverview(), { data: learn } = useLearning();
+  const training = learn?.now ?? (learn?.running.length ? { what: 'Studying a campaign streamer' } : null);
   const cur = (p: string) => (p === '/' ? route === '/' : route.startsWith(p) || (p === '/campaigns' && route === '/discover')) ? 'page' : undefined;
   const link = ([p, label, icon]: [string, string, string, string?]) => (
     <a key={p} href={`#${p}`} className="nav" aria-current={cur(p)}>
@@ -54,6 +57,8 @@ function Side({ route }: { route: string }) {
           <span className="flex-1">{data ? (data.paused ? 'Paused' : 'Running') : 'Connecting…'}</span>
           {data && !data.paused ? <span className="kicker !text-m num">{data.working} job{data.working === 1 ? '' : 's'}</span> : null}
         </div>
+        {training ? <a href="#/learning" className="p-3 rounded-[14px] bg-s border border-line flex items-center gap-2 text-sm no-underline hover:bg-r transition-colors" title={training.what}>
+          <span className="dot pulse" style={{ background: 'var(--color-a)' }} /><span className="flex-1 truncate">Training: {training.what}</span></a> : null}
       </div>
     </aside>
   );
@@ -103,6 +108,7 @@ function App() {
     : route === '/history' ? <History />
     : route === '/accounts' ? <Accounts />
     : route === '/settings' ? <Settings />
+    : route === '/learning' ? <Learning />
     : route === '/proposals' ? <Proposals />
     : route === '/more' ? <More />
     : <Later what={route.slice(1)} />;
