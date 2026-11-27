@@ -47,8 +47,16 @@ export function Home() {
   if (isLoading || !d) return <Page title="Home"><Skeleton className="h-72" /><div className="grid grid-cols-3 gap-6 flex-1">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-64" />)}</div></Page>;
 
   const f = fee(), trend = d.viewsPrevWeek > 0 ? Math.round(((d.viewsWeek - d.viewsPrevWeek) / d.viewsPrevWeek) * 100) : null;
-  const running = d.campaigns.filter((c) => c.open).length;
-  const groups: [string, string, number][] = [['Running', 'var(--color-a)', running], ['Ending soon', 'var(--color-warn)', d.endingSoon.length], ['Can join', 'var(--color-up)', d.canJoin]];
+  const soonest = d.endingSoon.reduce<Campaign | null>((a, c) => (!a || c.daysLeft < a.daysLeft ? c : a), null);
+  const plural = (n: number, w: string) => `${count(n)} ${w}${n === 1 ? '' : 's'}`;
+  // Only things the owner can act on now, most urgent first; a row with nothing to do is hidden.
+  const todo: [boolean, string, string, string, string][] = [
+    [d.toReview > 0, 'play', 'text-a', `Check ${plural(d.toReview, 'new clip')}`, '#/review'],
+    [d.toPost > 0, 'upload', 'text-a', `Post ${plural(d.toPost, 'kept clip')}`, '#/campaigns'],
+    [!!soonest, 'clock', 'text-warn', soonest ? `${soonest.name} ends ${soonest.daysLeft <= 1 ? 'today' : `in ${soonest.daysLeft} days`}` : '', soonest ? `#/campaigns/${soonest.name}` : ''],
+    [d.toDecide > 0, 'smile', 'text-up', `Decide on ${plural(d.toDecide, 'proposal')}`, '#/proposals'],
+    [d.canJoin > 0, 'flag', 'text-up', `Join ${plural(d.canJoin, 'campaign')}`, '#/discover'],
+  ];
   return (
     <Page kicker={d.paused ? 'Paused · nothing gets made' : new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} title="Home" right={<Currency />}>
       <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(0,560px)] gap-6 shrink-0">
@@ -88,11 +96,12 @@ export function Home() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.3fr] gap-6 md:flex-1 md:min-h-0">
-        <ListCard title="Campaigns" right={<a href="#/campaigns" className="text-sm font-semibold no-underline text-a">See all</a>}>
-          {groups.map(([label, color, n]) => (
-            <a key={label} href="#/campaigns" className="flex items-center gap-3 h-14 no-underline border-b border-line last:border-0 hover:text-a transition-colors">
-              <span className="dot" style={{ background: color }} /><span className="flex-1 font-medium">{label}</span><span className="num font-semibold">{n}</span><Icon name="next" size={14} className="text-f" />
-            </a>))}
+        <ListCard title="What to do now">
+          {todo.some(([on]) => on) ? todo.filter(([on]) => on).map(([, icon, tone, text, href]) => (
+            <a key={text} href={href} className="flex items-center gap-3 h-14 no-underline border-b border-line last:border-0 hover:text-a transition-colors">
+              <span className="w-8 h-8 rounded-lg bg-r flex items-center justify-center shrink-0"><Icon name={icon} size={16} className={tone} /></span>
+              <span className="flex-1 min-w-0 truncate font-medium">{text}</span><Icon name="next" size={14} className="text-f" />
+            </a>)) : <Empty icon="check" title="All done" text="Nothing needs you right now. New clips and campaigns show up here." />}
         </ListCard>
         <ListCard title="Ending soon" right={<span className="kicker">Post before</span>}>
           {d.endingSoon.length ? d.endingSoon.map((c: Campaign) => (
