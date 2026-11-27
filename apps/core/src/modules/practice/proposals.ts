@@ -23,6 +23,7 @@ export type Change = {
   chatBurst?: boolean; // our own Twitch chat box when chat goes wild (settings clip.chatBurst is the live default)
   wideGame?: boolean; // whole stream picture under the cam on blur, any streamer (study: 3/13 top clipper Shorts); cam scene only
   coldOpen?: boolean; // 1-2.5 s of the payoff first, then the clip from the start (crossfade); never when disclosure must open the clip
+  jumpCut?: boolean; // cut mid-clip pauses: no speech AND quiet game sound (-32 dB); never in the disclosure seconds or the payoff
   followFace?: boolean; // fullcam crop pans with the person (IRL / just chatting walks out of a fixed crop); single face only
   gameCrop?: Record<string, Rect & { fit?: 'stack' }>; // per streamer: game part under the cam (cam scene only); other streamers' clips skip the test
   funWeights?: Record<string, number>; // fun-signal weights for the score; tested on the study clips with real views, not by the judge // length: build-up before the peak, longest cut (campaign maxSec still caps)
@@ -133,6 +134,7 @@ export function seedProposals(cur: { per: number; style: CaptionStyle; weeklyPer
   add({ id: 'wide-game', title: 'Whole game picture under the cam', why: '3 of 13 top clipper Shorts show the whole stream picture, not a zoomed part, so viewers see the full game moment.', change: { wideGame: true } });
   add({ id: 'follow-face', title: 'Picture follows the streamer', why: 'In 223 of 929 clips the camera is the whole scene; when the streamer moves, a fixed crop cuts them off.', change: { followFace: true } });
   add({ id: 'cold-open', title: 'Show the payoff first', why: 'A second of the funny part before the build-up gives a reason to keep watching. 0 of 16 top clips we studied do it, so it is a test.', change: { coldOpen: true } });
+  add({ id: 'jump-cut', title: 'Cut the quiet pauses', why: 'Top Shorts we measured cut often; our clips have 0 cuts. 14 of our last 34 clips have a pause with no talking and quiet game sound.', change: { jumpCut: true } });
   add({ id: 'sfx-captions', title: 'Show *LAUGHS* and *SCREAMS*', why: 'Top clippers write reaction sounds in the captions, so muted viewers get the moment too.', change: { sfxCaptions: true } });
   add({ id: 'speaker-colors', title: 'Caption colour per speaker', why: 'With 2+ people on screen each speaker gets a colour (main speaker white), so viewers follow who talks.', change: { speakerColors: true } });
   // Podcasts and shows: the same tests on their own clips, since what works for a stream may not for a talk clip.

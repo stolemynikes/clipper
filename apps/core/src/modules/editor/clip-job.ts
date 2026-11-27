@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { captionSpot, chatSpot, coldOpenArgs, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop, teaserSpan } from './render.ts';
+import { captionSpot, chatSpot, coldOpenArgs, jumpCutArgs, jumpCuts, parseSilence, SILENCE_AF, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop, teaserSpan } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -247,6 +247,16 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   // cold open: never when the disclosure is burned in, it must open the clip (hard rule)
   const teaser = (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) && disclosure ? null : teaserSpan(words, peakRel - lead);
   const openCold = async (out: string) => { await runCmd('ffmpeg', coldOpenArgs(out, 'cold.mp4', teaser!, hw?.encoder ?? 'libx264'), { cwd: dir }); renameSync(join(dir, 'cold.mp4'), join(dir, out)); };
+  // Jump cut on the rendered clip: true when something was cut. Burned-in disclosure seconds and the payoff stay whole.
+  const cutQuiet = async (out: string) => {
+    const quiet = parseSilence(await runCmd('ffmpeg', ['-hide_banner', '-nostats', '-loglevel', 'error', '-i', out, '-vn', '-af', SILENCE_AF, '-f', 'null', '-'], { cwd: dir }), durationSec);
+    const inVideo = (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) && disclosure, pk = peakRel - lead;
+    const cuts = jumpCuts(words, quiet, inVideo ? settings.clip.disclosureSec : 0, [pk - 0.5, pk + 3]);
+    if (!cuts.length) return false;
+    await runCmd('ffmpeg', jumpCutArgs(out, 'cut.mp4', cuts, hw?.encoder ?? 'libx264'), { cwd: dir }); renameSync(join(dir, 'cut.mp4'), join(dir, out));
+    log.info(`${out}: ${cuts.length} quiet pause(s) cut, ${cuts.reduce((t, [a, b]) => t + b - a, 0).toFixed(1)} s`);
+    return true;
+  };
   const encode = async (out: string, ch: Change) => {
     const own = ch.gameCrop?.[cfg.name] ?? (ch.wideGame ? { x: 0, y: 0, w: 1, h: 1, fit: 'stack' as const } : undefined); // only the plain cam scene: stack/full layouts already pick their own content
     const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : ch.followFace && pan ? { ...layout, pan } : layout;
@@ -276,7 +286,7 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
     const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here'
-      : p.change.coldOpen && !teaser ? 'no clean payoff cut, or disclosure must open the clip' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+      : p.change.jumpCut && (live.coldOpen || p.change.coldOpen) && teaser ? 'cold open already reorders this clip' : p.change.coldOpen && !teaser ? 'no clean payoff cut, or disclosure must open the clip' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
@@ -303,11 +313,18 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
     layout = next;
     await encode(liveOut, live);
   }
+  if (live.jumpCut && !(live.coldOpen && teaser)) await cutQuiet(liveOut); // shortcut: jump cut and cold open never together (teaser times would shift), combine when both win
   if (live.coldOpen && teaser) await openCold(liveOut); // owner-accepted cold open
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
-  for (const p of run) {
-    if (!isLength(p.change)) { await encode(`${pre}${p.id}.mp4`, { ...live, ...p.change }); if (p.change.coldOpen || live.coldOpen && teaser) await openCold(`${pre}${p.id}.mp4`); continue; }
+  for (const p of [...run]) {
+    if (!isLength(p.change)) {
+      const f = `${pre}${p.id}.mp4`;
+      await encode(f, { ...live, ...p.change });
+      if (p.change.jumpCut && !await cutQuiet(f)) { rmSync(join(dir, f), { force: true }); run.splice(run.indexOf(p), 1); log.info(`${p.id}: no quiet pause here, skipped`); continue; }
+      if (p.change.coldOpen || live.coldOpen && teaser) await openCold(f);
+      continue;
+    }
     // Length: only the cut moves, judged on the transcripts, so no encode needed.
     const v = trimFor({ ...live, ...p.change });
     const text = t.words.filter((w) => w.s >= v.start && w.s < v.end).map((w) => w.w).join(' ');

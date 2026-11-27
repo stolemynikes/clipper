@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { captionSpot, chatSpot, duckFilter, coldOpenArgs, faceTrouble, ffmpegArgs, filterGraph, quietMusic, stackTop, teaserSpan } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, coldOpenArgs, faceTrouble, ffmpegArgs, filterGraph, jumpCutArgs, jumpCuts, parseSilence, quietMusic, stackTop, teaserSpan } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -128,4 +128,15 @@ test('teaserSpan: whole payoff words, 1..2.5 s; coldOpenArgs crossfades the teas
   assert.equal(teaserSpan([{ s: 10, e: 10.3 }], 10), null); // one short word is not a teaser
   const a = coldOpenArgs('in.mp4', 'out.mp4', [10.1, 12.25], 'libx264');
   assert.ok(a[a.indexOf('-filter_complex') + 1].includes('xfade=transition=fade:duration=0.3:offset=1.85'));
+});
+
+test('jumpCuts: only quiet word gaps, padded, not in disclosure or payoff; parseSilence pairs start/end', () => {
+  const w = [{ s: 0, e: 1 }, { s: 3, e: 4 }, { s: 6, e: 7 }, { s: 7.3, e: 8 }, { s: 12, e: 13 }];
+  assert.deepEqual(parseSilence('lavfi.silence_start=1.1\nlavfi.silence_end=2.9\nlavfi.silence_start=8.2\n', 14), [[1.1, 2.9], [8.2, 14]]);
+  const q: [number, number][] = [[1.1, 2.9], [4, 6], [8.2, 14]];
+  assert.deepEqual(jumpCuts(w, q, 0, [9, 10]), [[1.2, 2.8], [4.2, 5.8], [8.2, 9], [10, 11.8]]); // payoff 9..10 kept
+  assert.deepEqual(jumpCuts(w, q, 3, [9, 10]), [[4.2, 5.8], [8.2, 9], [10, 11.8]]); // nothing cut in the disclosure seconds
+  assert.deepEqual(jumpCuts(w, [[4, 4.3]], 0, [99, 99]), []); // loud game in the gap: no cut
+  const a = jumpCutArgs('in.mp4', 'out.mp4', [[1.2, 2.8]], 'libx264');
+  assert.ok(a.includes("select='not(between(t,1.2,2.8))',setpts=N/FRAME_RATE/TB"));
 });

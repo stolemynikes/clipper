@@ -189,6 +189,39 @@ export function coldOpenArgs(input: string, output: string, [a, b]: [number, num
     ...videoCodec(encoder), '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
 }
 
+/** silencedetect + ametadata print to stdout (runCmd only returns stdout): pairs of [start, end] seconds. */
+export const SILENCE_AF = 'silencedetect=n=-32dB:d=0.8,ametadata=mode=print:file=-';
+export function parseSilence(out: string, dur: number): [number, number][] {
+  const r: [number, number][] = [];
+  for (const m of out.matchAll(/silence_(start|end)=(-?[\d.]+)/g)) {
+    if (m[1] === 'start') r.push([Math.max(0, +m[2]), dur]);
+    else if (r.length) r[r.length - 1][1] = +m[2];
+  }
+  return r;
+}
+
+/** Spans to cut: a gap between words (no speech) that is also quiet (no loud game sound). Padded so word edges stay;
+ *  never before `from` (disclosure) and never inside `protect` (the payoff). */
+export function jumpCuts(words: { s: number; e: number }[], quiet: [number, number][], from: number, protect: [number, number], minGap = 0.8, pad = 0.2): [number, number][] {
+  const gaps: [number, number][] = [];
+  for (let i = 1; i < words.length; i++) if (words[i].s - words[i - 1].e >= minGap) gaps.push([words[i - 1].e + pad, words[i].s - pad]);
+  const cuts: [number, number][] = [];
+  for (const [ga, gb] of gaps) for (const [qa, qb] of quiet) {
+    const a = Math.max(ga, qa, from), b = Math.min(gb, qb);
+    const parts: [number, number][] = a < protect[1] && b > protect[0] ? [[a, Math.min(b, protect[0])], [Math.max(a, protect[1]), b]] : [[a, b]];
+    for (const [x, y] of parts) if (y - x >= 0.4) cuts.push([+x.toFixed(2), +y.toFixed(2)]);
+  }
+  return cuts;
+}
+
+/** Rendered clip with the cut spans removed (burned-in captions move with the picture). */
+export function jumpCutArgs(input: string, output: string, cuts: [number, number][], encoder: string): string[] {
+  const keep = `not(${cuts.map(([a, b]) => `between(t,${a},${b})`).join('+')})`;
+  return ['-y', '-hide_banner', '-loglevel', 'error', '-i', input,
+    '-vf', `select='${keep}',setpts=N/FRAME_RATE/TB`, '-af', `aselect='${keep}',asetpts=N/SR/TB`,
+    ...videoCodec(encoder), '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
+}
+
 export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null, lufs = -14): string[] {
   const video = videoCodec(encoder);
   return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, ...(overlayInput ? ['-i', overlayInput] : []), '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
