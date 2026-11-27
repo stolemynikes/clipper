@@ -75,3 +75,11 @@ Audio could still help as a content signal (laughter, shouting) later, not as an
 - Instrumental music is caught. Quiet background music lands around MUSIC_WARN (0.15) and stays well under MUSIC_BLOCK (0.5). That fits: it warns and ducks, and does not block.
 - Not tested: `vocalRatio` on a real song with vocals (no licensed or CC song on disk). That is the riskier block. Test it once a CC vocal track is available.
 - gemma4 is no referee for music: on the 6 highest-musicRatio study clips it said "no music" 5 times.
+
+## Sound and crop measurements (Nov 27)
+
+**sound-duck-0.3:** proof renders on the 7 moments with the most music (913, 914, 920, 923, 925, 934, 147). It was skipped on every one with "no music without speech here". The music in these clips always sits under the streamer's voice, so ducking only the speech-free spans never applies. As built, the proposal cannot change a clip. To be useful, it must duck music under speech too (sidechain), which is a new design.
+
+**sound-deadair-2:** in 1 of the last 12 clips the first word comes after 2 s (4.52 s). Dead air at the start is rare, so the proposal applies to few clips.
+
+**kaicenat gameCrop:** not measured. The streamer has no active campaign, so the proof render stops on the hard rule, and no rendered kaicenat clip is left on disk. Measure once a campaign is active again.
