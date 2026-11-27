@@ -39,8 +39,9 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
   const clips = (await getTopClips(await getUserId(s.channel), since, top)).slice(0, top);
   // Bare names ("silky") match unrelated Shorts; keep titles that name the streamer and add stream context to the query.
   const name = new RegExp(`\\b${s.name}\\b`, 'i');
-  // The streamer's own channel ("Fanum Live", "Clix") has millions of subs: its views say nothing about the edit. Fan channels ("xQc Clips") stay.
-  const shortsList = hasYoutubeKey() ? (await topShorts(`${s.name} twitch`, since, top)).filter((x) => name.test(x.title) && !ownChannel(s.name, x.channel)) : [];
+  const shortsList = hasYoutubeKey() ? (await topShorts(`${s.name} twitch`, since, top)).filter((x) => name.test(x.title)) : [];
+  // The streamer's own channel ("Fanum Live", "Clix") is studied for its edit, but its millions of subs make its views useless as a clipper baseline.
+  const clipperShorts = shortsList.filter((x) => !ownChannel(s.name, x.channel));
   const p: Progress = { done: 0, total: clips.length + shortsList.length };
   onProgress(p);
   const dir = join(dirOf(), s.name);
@@ -69,23 +70,24 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
   if (hasYoutubeKey()) {
     const out: string[] = [];
     for (const v of shortsList) {
+      const who = ownChannel(s.name, v.channel) ? `${v.channel} (streamer's own channel, views not counted)` : v.channel;
       const file = join(dir, `yt-${v.id}.mp4`), sheet = join(dir, `yt-${v.id}.jpg`);
       try {
         if (!existsSync(file)) await runCmd('yt-dlp', ['-q', '--no-warnings', '-f', 'b[height<=1280]/b/bv*+ba', '--merge-output-format', 'mp4', '-o', file, v.url], { timeoutMs: 10 * 60_000 });
         // 4 frames side by side (one per 6s): shows cam size, caption style, hook text, layout
         if (!existsSync(sheet)) await runCmd('ffmpeg', ['-v', 'error', '-y', '-i', file, '-vf',
           "select='isnan(prev_selected_t)+gte(t-prev_selected_t\\,6)',scale=270:-2,tile=4x1", '-frames:v', '1', sheet]);
-        out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n${factLines(await shortFacts(v, file, model))}\n- Frames: ${sheet}\n`);
+        out.push(`### ${v.views.toLocaleString('en-US')} views · ${who} · ${v.title}\n${v.url}\n\n${factLines(await shortFacts(v, file, model))}\n- Frames: ${sheet}\n`);
         log.info(`${s.name}: short ${v.views} views "${v.title}"`);
       } catch (e) {
-        out.push(`### ${v.views.toLocaleString('en-US')} views · ${v.channel} · ${v.title}\n${v.url}\n\n- Skipped: ${(e as Error).message.slice(0, 200)}\n`);
+        out.push(`### ${v.views.toLocaleString('en-US')} views · ${who} · ${v.title}\n${v.url}\n\n- Skipped: ${(e as Error).message.slice(0, 200)}\n`);
       }
       p.done++; onProgress(p);
     }
     shorts = '\n## Shorts by other clippers (YouTube, most viewed)\n\n' + out.join('\n');
   }
   writeFileSync(join(dirOf(), `${s.name}.md`), head + rows.join('\n') + shorts);
-  return { ...p, finished: new Date().toISOString(), medianClipViews: median(clips.map((c) => c.view_count)), medianShortViews: median(shortsList.map((v) => v.views)) };
+  return { ...p, finished: new Date().toISOString(), medianClipViews: median(clips.map((c) => c.view_count)), medianShortViews: median(clipperShorts.map((v) => v.views)) };
 }
 
 /** Queue job: study one campaign streamer, progress in data/study/<name>.progress.json for the campaigns page. */
