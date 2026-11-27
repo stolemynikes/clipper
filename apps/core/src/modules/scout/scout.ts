@@ -8,7 +8,7 @@ import type { Db } from '../../db/client.ts';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
-import { allStreamers, extract, isGambling, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
+import { allStreamers, classifyBrief, extract, isGambling, type Kind, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
 import { bark } from '../../review/review.ts';
 
 const log = logger('scout');
@@ -30,17 +30,31 @@ export const twitchOf = (c: CrCampaign) =>
 /** Platforms where views pay: pool counts all listed, rate campaigns only those with a rate above 0. */
 const paying = (c: CrCampaign) => c.payouts.filter((p) => PAYING.includes(p.platform) && (p.payoutType === 'pool' || (p.rateCents ?? 0) > 0)).map((p) => p.platform);
 
+const KINDS_FILE = join(paths.dataDir, 'cr-kinds.json');
+/** What the local model says a campaign without a Twitch streamer wants, by campaign id (job campaign.classify). */
+export const cachedKinds = (): Record<string, Kind> => existsSync(KINDS_FILE) ? JSON.parse(readFileSync(KINDS_FILE, 'utf8')) : {};
+const KIND_WHY: Record<Kind, string> = {
+  footage: 'Gives its own videos (Snip can not use those yet)',
+  youtube: 'YouTube creator (Snip clips Twitch only for now)',
+  kick: 'Kick streamer (Snip clips Twitch only for now)',
+  logo: "Logo on any streamer: not allowed without the streamer's OK",
+  music: 'Music campaign: wants edits with their song',
+  ugc: 'Wants your own videos or slideshows',
+  gambling: 'Gambling',
+  other: 'No Twitch streamer',
+};
+
 /** Why a campaign can't be joined (plain words for the dashboard), or null when it can. */
-export function whyNot(c: CrCampaign, saved: StreamerConfig[]): string | null {
+export function whyNot(c: CrCampaign, saved: StreamerConfig[], kinds: Record<string, Kind> = {}): string | null {
   const text = [c.name, c.description, c.organizationName].join(' ');
   if (c.status !== 'active') return 'Not running';
   if (c.private) return 'Private';
   if (c.requiresApplication) return 'Needs an application';
-  if (isGambling(text)) return 'Gambling';
+  if (isGambling(text) || kinds[c.id] === 'gambling') return 'Gambling';
   if (DRUGS.test(text)) return 'Drugs or vapes';
   if (!paying(c).length) return 'Pays on no platform we post to';
   const ch = twitchOf(c);
-  if (!ch) return 'No Twitch streamer';
+  if (!ch) return KIND_WHY[kinds[c.id] ?? 'other'];
   if (saved.some((s) => s.channel === ch || s.campaign?.url === PAGE + c.id)) return 'Already joined';
   return null;
 }
@@ -83,6 +97,17 @@ async function rulesDocs(c: CrCampaign): Promise<string> {
     if (r?.ok) out.push((await r.text()).replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').slice(0, 8000));
   }
   return out.join('\n');
+}
+
+const linksOf = (c: CrCampaign) => (c.referenceMaterials ?? []).map((r) => r.url).join(' ');
+
+/** Job campaign.classify: sorts the open campaigns without a Twitch streamer by kind, once per campaign. Saved after each one. */
+export async function classifyJob(list = cachedDiscover().campaigns) {
+  const kinds = cachedKinds();
+  for (const c of list.filter((x) => x.status === 'active' && !twitchOf(x) && !kinds[x.id])) {
+    kinds[c.id] = await classifyBrief([c.name, c.organizationName, c.description, linksOf(c)].join('\n'));
+    writeFileSync(KINDS_FILE, JSON.stringify(kinds));
+  }
 }
 
 const DISCOVER_FILE = join(paths.dataDir, 'cr-discover.json');
@@ -149,7 +174,7 @@ export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: stri
 export async function joinJob(db: Db, { id }: { id: string }) {
   const c = cachedDiscover().campaigns.find((x) => x.id === id);
   if (!c) throw new Error(`campaign ${id} not in the Discover list`);
-  const why = whyNot(c, allStreamers());
+  const why = whyNot(c, allStreamers(), cachedKinds());
   if (why) throw new Error(`can't join: ${why}`);
   const r = await joinCampaign(db, c);
   if (!r.name) throw new Error(r.reason);

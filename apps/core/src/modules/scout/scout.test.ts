@@ -59,6 +59,8 @@ test('whyNot gives a plain reason per blocked campaign', async () => {
   assert.equal(whyNot(base, []), null);
   assert.equal(whyNot({ ...base, name: 'Stake casino clips' }, []), 'Gambling');
   assert.equal(whyNot({ ...base, referenceMaterials: [] }, []), 'No Twitch streamer');
+  assert.equal(whyNot({ ...base, referenceMaterials: [] }, [], { [base.id]: 'footage' }), 'Gives its own videos (Snip can not use those yet)');
+  assert.equal(whyNot({ ...base, referenceMaterials: [] }, [], { [base.id]: 'gambling' }), 'Gambling');
   assert.equal(whyNot(base, [{ name: 'somebody', channel: 'somebody' } as never]), 'Already joined');
 });
 

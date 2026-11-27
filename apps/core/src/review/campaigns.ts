@@ -22,7 +22,7 @@ type Campaign = NonNullable<StreamerConfig['campaign']>;
 const PLATFORMS = ['tiktok', 'youtube', 'instagram', 'x'] as const;
 
 /** Hard rule: no gambling campaigns. Checked on the brief text, not only on what the model says. */
-const GAMBLING = /\b(casinos?|gambl\w*|betting|bets?|slots?|1win|vavada|stake\.com|roulette|poker|gattouz|sportsbooks?|blackjack|jackpot)\b/i;
+const GAMBLING = /\b(casinos?|gambl\w*|betting|bets?|slots?|1win|vavada|stake\.com|roulette|poker|gattouz|sportsbooks?|blackjack|jackpot|lvbet|bookmakers?|kasyn\w*|apuestas?)\b/i;
 export const isGambling = (text: string) => GAMBLING.test(text);
 
 export type Extract = {
@@ -96,6 +96,37 @@ ${text.slice(0, 12_000)}`;
     hashtags: String(raw.hashtags ?? '').split(/[\s,]+/).filter(Boolean).slice(0, 10), name: String(raw.name ?? '').toLowerCase().replace(/[^a-z0-9_]/g, ''), channel: (/twitch\.tv\/(\w+)/i.exec(text)?.[1] ?? String(raw.channel ?? '').replace(/^.*twitch\.tv\//i, '')).toLowerCase().replace(/[^a-z0-9_]/g, '') };
   fields.gambling = Boolean(raw.gambling) || isGambling(text);
   return { fields, check: unverified(fields, text) };
+}
+
+export const KINDS = ['footage', 'youtube', 'kick', 'logo', 'music', 'ugc', 'gambling', 'other'] as const;
+export type Kind = typeof KINDS[number];
+
+/** Ollama reads a campaign without a Twitch streamer and says what kind of work it wants. Gambling is also checked on the text. */
+export async function classifyBrief(text: string): Promise<Kind> {
+  if (isGambling(text)) return 'gambling';
+  const prompt = `A clipping campaign has no Twitch streamer. Read it and pick ONE kind:
+- footage: the brand or creator gives its own videos (Google Drive, Dropbox, a podcast, shows, performances) to cut into clips.
+- youtube: clip videos from a YouTube channel.
+- kick: clip a Kick streamer.
+- logo: put their logo or watermark on clips of any streamer or game.
+- music: make edits that use their song or sound.
+- ugc: film yourself, make slideshows, app or product videos you create from scratch, or repost their posts without editing.
+- gambling: casino, betting, slots or any gambling.
+- other: none of these.
+
+Campaign:
+${text.slice(0, 6000)}`;
+  const r = await fetch(`${OLLAMA}/api/chat`, {
+    method: 'POST', signal: AbortSignal.timeout(600_000),
+    body: JSON.stringify({
+      model: loadSettings().titles?.model ?? 'gemma4:12b', stream: false, think: false, keep_alive: '2m',
+      format: { type: 'object', properties: { kind: { type: 'string', enum: KINDS } }, required: ['kind'] }, options: { temperature: 0, num_predict: 30 },
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!r.ok) throw new Error(`Ollama failed: ${r.status}`);
+  const kind = JSON.parse(((await r.json()) as { message: { content: string } }).message.content).kind;
+  return (KINDS as readonly string[]).includes(kind) ? kind : 'other';
 }
 
 /** Rate campaigns: what one clip earns at the median views of other clippers' Shorts. Pool: null (a share, unknown). */

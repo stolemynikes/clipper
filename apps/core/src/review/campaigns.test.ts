@@ -26,6 +26,8 @@ test('made-up numbers, dates and channels are flagged', () => {
 test('gambling briefs are caught', () => {
   assert.ok(isGambling('Promote 1WIN casino in your clips'));
   assert.ok(isGambling('stake.com partner stream'));
+  assert.ok(isGambling('LVBET Kliping: klipo saturu'));
+  assert.ok(!isGambling('Clip the best Valorant plays'));
   assert.ok(isGambling('Betting highlights'));
   assert.ok(!isGambling(brief));
   assert.ok(!isGambling('Fortnite clips, best moments'));

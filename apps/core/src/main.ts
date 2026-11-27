@@ -18,7 +18,7 @@ import { titleClip } from './modules/publisher/titles.ts';
 import { studyJob } from './modules/learner/study.ts';
 import { weeklyDue, weeklyShorts } from './modules/learner/weekly.ts';
 import { enqueue, recoverStale } from './queue/queue.ts';
-import { discoverAll, joinJob, scoutOnce } from './modules/scout/scout.ts';
+import { classifyJob, discoverAll, joinJob, scoutOnce } from './modules/scout/scout.ts';
 import { isPractice, liveBusy, practiceFailed, practiceHeld, practiceTick, tracked } from './modules/practice/practice.ts';
 import { startDiscord, stopDiscord, syncDiscord } from './discord/bot.ts';
 
@@ -79,7 +79,9 @@ await Promise.all([
     { signal: ac.signal, paused: () => practiceHeld() || (!isPaused() && liveBusy(db)), onFinalFailure: practiceFailed }),
   runWorker(db, { 'review.notify': (p) => notifyReview(db, p) }, opts),
   // Owner's Discover/Join buttons on the dashboard: run even while Snip is paused (one CR tab, one command at a time).
-  runWorker(db, { 'campaign.discover': async () => { await discoverAll(); }, 'campaign.join': (p) => joinJob(db, p as { id: string }) }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),
+  runWorker(db, { 'campaign.discover': async () => { await discoverAll(); enqueue(db, 'campaign.classify', {}, { maxAttempts: 1 }); }, 'campaign.join': (p) => joinJob(db, p as { id: string }) }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),
+  // Own loop: the first sort of ~200 campaigns takes a while and must not hold the Join button.
+  runWorker(db, { 'campaign.classify': () => classifyJob() }, { signal: ac.signal, paused: () => false, onFinalFailure: alertFailure }),
   runWorker(db, { 'clip.publish': (p) => publishClip(db, p), 'post.submit': (p) => askSubmit(db, p), 'post.track': () => trackOnce(db) }, opts),
 ]);
 process.exit(0); // loops end only on stop; Discord and sockets would keep the process alive

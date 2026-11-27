@@ -80,7 +80,7 @@ function Card({ c, onJoin }: { c: DiscoverCampaign; onJoin: () => void }) {
       </div>
       {c.joinError && !c.joining && c.why !== JOINED ? <p className="text-[13px] text-warn m-0 break-words">Last try failed: {joinFail(c.joinError)}</p> : null}
       {c.why === JOINED ? <a href={c.streamer ? `#/campaigns/${c.streamer}` : '#/campaigns'} className="btn no-underline"><Icon name="check" size={16} />Joined · open campaign</a>
-        : c.why ? <span className="pill self-start"><span className="dot" style={{ background: 'var(--color-f)' }} />{c.why}</span>
+        : c.why ? <p className="text-[13px] text-m m-0 flex items-start gap-2"><span className="dot shrink-0 mt-[5px]" style={{ background: 'var(--color-f)' }} />{c.why}</p>
         : <button className="btn btn-1" onClick={onJoin} disabled={c.joining} aria-busy={c.joining}>{c.joining ? <><span className="spin" aria-hidden />Joining…</> : <><Icon name="plus" size={16} />Join</>}</button>}
     </motion.section>
   );

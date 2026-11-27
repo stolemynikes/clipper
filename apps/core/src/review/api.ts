@@ -17,7 +17,7 @@ import { accounts as accountRows, clips, moments, posts as postRows } from '../d
 import { sourceContext } from '../modules/vod-clipper/analyze.ts';
 import { campaignAllows, canUpload, clipText } from '../modules/publisher/publish.ts';
 import type { AccountPlatform } from './setup.ts';
-import { cachedDiscover, crState, twitchOf, whyNot } from '../modules/scout/scout.ts';
+import { cachedDiscover, cachedKinds, crState, twitchOf, whyNot } from '../modules/scout/scout.ts';
 
 const DAY = 86_400_000;
 type Post = { id: number; clip: number; account: number; title: string | null; platform: string; url: string | null; postedAt: number | null; submitted: number; streamer: string; views: number | null };
@@ -201,7 +201,7 @@ async function usdRate() {
 
 /** Discover tab: every CR campaign from the last scan, with plain reasons for the ones we can't join, and running scan/join jobs. */
 function discover(db: Db) {
-  const { at, campaigns } = cachedDiscover(), saved = allStreamers();
+  const { at, campaigns } = cachedDiscover(), saved = allStreamers(), kinds = cachedKinds();
   const jobs = db.$client.prepare(`select type, payload, status, error, created_at t from jobs where type in ('campaign.discover','campaign.join') and created_at > ? order by id`)
     .all(Date.now() - DAY) as { type: string; payload: string; status: string; error: string | null; t: number }[];
   const live = (j: { status: string }) => j.status === 'queued' || j.status === 'running';
@@ -215,7 +215,7 @@ function discover(db: Db) {
         id: c.id, name: c.name, org: c.organizationName ?? '', streamer: twitchOf(c), pool: c.payoutType === 'pool',
         budget: c.budgetCents / 100, left: Math.max(0, c.budgetCents - (c.metrics?.budgetSpentCents ?? 0)) / 100,
         pays: c.payouts.filter((p) => p.payoutType === 'pool' || (p.rateCents ?? 0) > 0).map((p) => ({ platform: p.platform, ratePer1k: (p.rateCents ?? 0) / 100, maxPerClip: (p.maxPayoutCents ?? 0) / 100 })),
-        why: whyNot(c, saved), joining: Boolean(j && live(j)), joinError: j?.status === 'failed' ? j.error : null,
+        why: whyNot(c, saved, kinds), joining: Boolean(j && live(j)), joinError: j?.status === 'failed' ? j.error : null,
       };
     }).sort((a, b) => Number(Boolean(a.why)) - Number(Boolean(b.why)) || b.left - a.left),
   };
