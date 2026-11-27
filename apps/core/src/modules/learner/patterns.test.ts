@@ -27,3 +27,12 @@ test('trait common in top, rare in flop, becomes a line; shared trait does not',
   assert.ok(works.every((l) => !l.startsWith('someone talks')));
   assert.equal(weak[0], 'advice (in 40% of top Shorts, 90% of weak ones)');
 });
+
+test('difference that may be chance is not a line', () => {
+  const rows = [ // 5/15 vs 2/15: lift 0.2 but z 1.29
+    ...[...Array(15)].map((_, i) => row(i, 'top', i < 5 ? ['hot take'] : ['advice'])),
+    ...[...Array(15)].map((_, i) => row(i, 'flop', i < 2 ? ['hot take'] : ['advice'])),
+  ];
+  assert.equal(patterns(rows).list.find((x) => x.trait === 'hot take')!.lift, 0.2);
+  assert.ok(learnedLines(rows).works.every((l) => !l.startsWith('hot take')));
+});

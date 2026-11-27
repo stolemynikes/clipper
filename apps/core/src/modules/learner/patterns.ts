@@ -13,10 +13,11 @@ export const CATEGORIES: Record<Kind, { label: string; query: string; category?:
 };
 export const LABELS = ['punchline', 'hot take', 'argument', 'surprising fact', 'emotional story', 'advice', 'big reaction', 'skill play', 'fail or rage', 'performance', 'other'] as const;
 
-export type Row = { id: string; kind: Kind; group: 'top' | 'flop'; at: string; views: number; labels: string[]; question: boolean; hook: boolean; laugh: boolean; cheer: boolean; fast: boolean };
+export type Row = { id: string; kind: Kind; group: 'top' | 'flop'; at: string; views: number; labels: string[]; question: boolean; hook: boolean; laugh: boolean; cheer: boolean; fast: boolean; laughScore?: number; cheerScore?: number }; // raw YAMNet peaks, to tune the 0.3 cut later
 const FEATURES: Record<string, string> = { question: 'asks the viewer a question', hook: 'someone talks in the first 3 seconds', laugh: 'audible laughter', cheer: 'cheering or applause', fast: 'fast talking (3+ words a second)' };
 export const NEED = 15; // per group, before a pattern counts
 const MIN_SUPPORT = 5;
+const Z_MIN = 1.645;
 const KEEP_DAYS = 60, MAX_ROWS = 400;
 
 const file = () => join(paths.dataDir, 'study', 'patterns.json');
@@ -40,7 +41,7 @@ export const studied = (kind: Kind) => new Set(readRows().filter((r) => r.kind =
 const traits = (r: Row) => [...r.labels.filter((l) => l !== 'other'), ...Object.keys(FEATURES).filter((f) => r[f as keyof Row] === true)];
 export const describe = (t: string) => t.split(' + ').map((x) => FEATURES[x] ?? x).join(' + ');
 
-export type Pattern = { trait: string; top: number; flop: number; lift: number; n: number };
+export type Pattern = { trait: string; top: number; flop: number; lift: number; n: number; z: number };
 /** Share of top vs flop rows per trait and per pair of traits. Ready once both groups have NEED rows. */
 export function patterns(rows: Row[]) {
   const top = rows.filter((r) => r.group === 'top'), flop = rows.filter((r) => r.group === 'flop');
@@ -56,7 +57,9 @@ export function patterns(rows: Row[]) {
   const list: Pattern[] = [...new Set([...ct.keys(), ...cf.keys()])].map((trait) => {
     const a = ct.get(trait) ?? 0, b = cf.get(trait) ?? 0;
     const p = a / (top.length || 1), q = b / (flop.length || 1);
-    return { trait, top: +p.toFixed(2), flop: +q.toFixed(2), lift: +(p - q).toFixed(2), n: a + b };
+    // two-proportion z-test: how sure the difference is not chance
+    const pool = (a + b) / ((top.length + flop.length) || 1), se = Math.sqrt(pool * (1 - pool) * (1 / (top.length || 1) + 1 / (flop.length || 1)));
+    return { trait, top: +p.toFixed(2), flop: +q.toFixed(2), lift: +(p - q).toFixed(2), n: a + b, z: se ? +((p - q) / se).toFixed(2) : 0 };
   }).filter((x) => x.n >= MIN_SUPPORT);
   return { top: top.length, flop: flop.length, ready: top.length >= NEED && flop.length >= NEED, list: list.sort((x, y) => y.lift - x.lift) };
 }
@@ -68,7 +71,8 @@ export function learnedLines(rows: Row[]) {
   if (!p.ready) return { works: [] as string[], weak: [] as string[] };
   const solo = new Map(p.list.filter((x) => !x.trait.includes(' + ')).map((x) => [x.trait, x.lift]));
   // a combo only counts when it beats both of its parts alone; else it repeats the stronger part
-  const list = p.list.filter((x) => !x.trait.includes(' + ') || x.trait.split(' + ').every((t) => Math.abs(x.lift) >= Math.abs(solo.get(t) ?? 0) + 0.05));
+  // |z| >= 1.645: p < 0.1 two-sided; below that the difference may be chance
+  const list = p.list.filter((x) => Math.abs(x.z) >= Z_MIN).filter((x) => !x.trait.includes(' + ') || x.trait.split(' + ').every((t) => Math.abs(x.lift) >= Math.abs(solo.get(t) ?? 0) + 0.05));
   const line = (x: Pattern) => `${describe(x.trait)} (in ${pct(x.top)} of top Shorts, ${pct(x.flop)} of weak ones)`;
   return { works: list.filter((x) => x.lift >= 0.15).slice(0, 3).map(line), weak: list.filter((x) => x.lift <= -0.15).reverse().slice(0, 2).map(line) };
 }

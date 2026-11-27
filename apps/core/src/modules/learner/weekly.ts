@@ -73,7 +73,7 @@ export async function weeklyShorts() {
         if (!l) continue;
         // shortcut: a 0.3 YAMNet peak as "audible" is a guess; tune once rows show how the scores spread.
         rows.push({ id: f.id, kind, group: p.group, at: new Date().toISOString(), views: f.views, labels: l.labels, question: l.question,
-          hook: f.hook.split(' ').filter(Boolean).length >= 2, laugh: laugh >= 0.3, cheer: cheer >= 0.3, fast: f.wordsPerSec >= 3 });
+          hook: f.hook.split(' ').filter(Boolean).length >= 2, laugh: laugh >= 0.3, cheer: cheer >= 0.3, fast: f.wordsPerSec >= 3, laughScore: +laugh.toFixed(3), cheerScore: +cheer.toFixed(3) });
       }
       saveRows(rows);
       if (kind === 'gaming') writeGaming(facts.filter((x) => tops.includes(x.p.v)).map((x) => x.f));
