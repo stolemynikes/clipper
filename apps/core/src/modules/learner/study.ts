@@ -28,6 +28,10 @@ export function readProgress(name: string): Progress | null {
 
 export const pay = (s: StudyTarget) => (s.campaign ? `first $10 at ~${viewsToPay(s.campaign).toLocaleString('en-US')} views, ~$${profitScore(s.campaign).toFixed(1)} per 1K (rough)` : 'no campaign, study only');
 
+const key = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+/** shortcut: name match only, misses own channels with other names; use the channel id from streamers.yaml if that happens. */
+export const ownChannel = (streamer: string, channel: string) => new RegExp(`^${key(streamer)}(live|tv|official|vods?)?$`).test(key(channel));
+
 export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p: Progress) => void = () => {}): Promise<Progress> {
   const model = readHardwareConfig()?.whisperModelVod ?? 'medium';
   const from = s.campaign?.rules?.sourceFrom ? new Date(String(s.campaign.rules.sourceFrom)) : new Date(0);
@@ -35,7 +39,8 @@ export async function studyStreamer(s: StudyTarget, top: number, onProgress: (p:
   const clips = (await getTopClips(await getUserId(s.channel), since, top)).slice(0, top);
   // Bare names ("silky") match unrelated Shorts; keep titles that name the streamer and add stream context to the query.
   const name = new RegExp(`\\b${s.name}\\b`, 'i');
-  const shortsList = hasYoutubeKey() ? (await topShorts(`${s.name} twitch`, since, top)).filter((x) => name.test(x.title)) : [];
+  // The streamer's own channel ("Fanum Live", "Clix") has millions of subs: its views say nothing about the edit. Fan channels ("xQc Clips") stay.
+  const shortsList = hasYoutubeKey() ? (await topShorts(`${s.name} twitch`, since, top)).filter((x) => name.test(x.title) && !ownChannel(s.name, x.channel)) : [];
   const p: Progress = { done: 0, total: clips.length + shortsList.length };
   onProgress(p);
   const dir = join(dirOf(), s.name);
