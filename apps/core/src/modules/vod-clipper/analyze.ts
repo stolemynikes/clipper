@@ -7,7 +7,7 @@ import { moments, sources, streamers } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
-import { enqueue } from '../../queue/queue.ts';
+import { enqueue, Stop } from '../../queue/queue.ts';
 import { getVod, getVodClips } from '../../twitch.ts';
 import { pickMoments, type ChatMessage } from './scoring.ts';
 
@@ -48,7 +48,7 @@ export function sourceContext(db: Db, sourceId: number) {
   if (!source) throw new Error(`source ${sourceId} not found`);
   const streamer = db.select().from(streamers).where(eq(streamers.id, source.streamerId!)).get();
   const cfg = activeStreamers().find((s) => s.name === streamer?.name);
-  if (!cfg) throw new Error(`streamer of source ${sourceId} has no active campaign; stopping (hard rule)`);
+  if (!cfg) throw new Stop(`streamer of source ${sourceId} has no active campaign; stopping (hard rule)`);
   return { source, cfg };
 }
 

@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { Db } from '../db/client.ts';
 import { logger } from '../log.ts';
-import { claim, complete, fail, recoverStale, type Job } from './queue.ts';
+import { claim, complete, fail, recoverStale, Stop, type Job } from './queue.ts';
 
 export type Handler = (payload: any, job: Job) => Promise<void>;
 
@@ -26,6 +26,11 @@ export async function runOnce(db: Db, handlers: Record<string, Handler>, opts: W
     complete(db, job.id);
     log.info(`job ${job.id} (${job.type}) done`);
   } catch (err) {
+    if (err instanceof Stop) {
+      fail(db, job, err.message, undefined, true);
+      log.warn(`job ${job.id} (${job.type}) stopped: ${err.message}`);
+      return true;
+    }
     const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
     const updated = fail(db, job, msg);
     if (updated.status === 'failed') {

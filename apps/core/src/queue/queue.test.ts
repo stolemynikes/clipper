@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openDb } from '../db/client.ts';
-import { backoffMs, claim, enqueue, recoverStale } from './queue.ts';
+import { backoffMs, claim, enqueue, recoverStale, Stop } from './queue.ts';
 import { runOnce } from './worker.ts';
 
 test('claim returns due jobs once, in runAt order, filtered by type', () => {
@@ -37,6 +37,15 @@ test('failing job retries with backoff, then fails permanently and alerts', asyn
   assert.equal((statusOf() as { status: string }).status, 'failed');
   assert.match((statusOf() as { error: string }).error, /nope/);
   assert.deepEqual(alerts, [job.id]);
+});
+
+test('Stop ends the job at once without retry or alert', async () => {
+  const db = openDb(':memory:');
+  const job = enqueue(db, 'halt', {}, { maxAttempts: 3 });
+  const alerts: number[] = [];
+  await runOnce(db, { halt: async () => { throw new Stop('campaign ended'); } }, { onFinalFailure: (j) => { alerts.push(j.id); } });
+  assert.deepEqual(db.$client.prepare('select status, attempts, error from jobs where id=?').get(job.id), { status: 'failed', attempts: 1, error: 'campaign ended' });
+  assert.deepEqual(alerts, []);
 });
 
 test('successful job is marked done', async () => {

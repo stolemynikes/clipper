@@ -44,9 +44,12 @@ export function complete(db: Db, id: number) {
   db.update(jobs).set({ status: 'done', lockedAt: null, error: null }).where(eq(jobs.id, id)).run();
 }
 
+/** A deliberate stop (hard rule, e.g. campaign ended): no retries, no alert. */
+export class Stop extends Error {}
+
 /** Requeues with backoff, or marks failed after the last attempt. Returns the updated job. */
-export function fail(db: Db, job: Job, error: string, now = new Date()): Job {
-  const final = job.attempts >= job.maxAttempts;
+export function fail(db: Db, job: Job, error: string, now = new Date(), stop = false): Job {
+  const final = stop || job.attempts >= job.maxAttempts;
   return db
     .update(jobs)
     .set(
