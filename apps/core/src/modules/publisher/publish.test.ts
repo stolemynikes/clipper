@@ -134,3 +134,10 @@ test('source line and stream url in the YouTube description', async () => {
   assert.equal(streamUrl({ platform: 'kick', channel: 'x' }), 'https://kick.com/x');
   assert.equal(streamUrl({ platform: 'youtube', channel: '@pod', genre: 'podcast' }), undefined); // footage gets no link
 });
+
+test('title examples lose hashtags and "| Channel" tails', async () => {
+  const { titlePrompt } = await import('./titles.ts');
+  const p = titlePrompt('he won', 'Clix', 'mild', ['Who is this guy? 🚬 | Gorgc #dota2 #shorts', 'this guy is TOO good #pummelparty']);
+  assert.match(p, /"Who is this guy\? 🚬", "this guy is TOO good"/);
+  assert.doesNotMatch(p, /Gorgc|#dota2|#pummelparty/);
+});

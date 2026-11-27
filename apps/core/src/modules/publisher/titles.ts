@@ -34,8 +34,8 @@ const STYLE: Record<TitleStyle, string> = {
 };
 
 export function titlePrompt(transcript: string, streamer: string, style: TitleStyle = 'mild', top = tweaks().titleExamples ?? []) {
-  // Top titles from an approved study proposal: style examples only, never facts for this clip.
-  const week = top.length ? `\n  Most-viewed gaming Shorts this week were titled (copy the style, not the content): ${top.map((t) => `"${t.replace(/["\n]/g, ' ').slice(0, 80)}"`).join(', ')}.` : '';
+  // Top titles from an approved study proposal: style examples only, never facts for this clip. Hashtags and "| Channel" tails cut so other streamers' names don't leak in.
+  const week = top.length ? `\n  Most-viewed gaming Shorts this week were titled (copy the style, not the content): ${top.map((t) => `"${t.replace(/\|.*$|#\S+/g, '').replace(/["\n]/g, ' ').trim().slice(0, 80)}"`).join(', ')}.` : '';
   return `You write titles for short vertical gaming clips (TikTok, YouTube Shorts) of the streamer ${streamer}.
 Transcript of the clip:
 """${transcript.slice(0, 2000)}"""
