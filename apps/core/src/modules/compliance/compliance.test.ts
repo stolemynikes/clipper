@@ -43,6 +43,7 @@ test('gambling blocks, gaming slang does not', () => {
 });
 
 test('music: song blocks, some music warns', () => {
+  assert.deepEqual(check({ music: { musicRatio: 0.9, vocalRatio: 0.8 }, ownAudio: true }).blocks, []); // brand footage: their own song
   assert.match(check({ music: { musicRatio: 0.3, vocalRatio: 0.2 } }).blocks[0], /song/);
   assert.match(check({ music: { musicRatio: 0.6, vocalRatio: 0 } }).blocks[0], /music/);
   const some = check({ music: { musicRatio: 0.24, vocalRatio: 0 } }); // clip 23: Team Falcons video in the background

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rating } from '../../review/review.ts';
-import { LAYOUT_PREFIX, layoutResult, layoutRules } from './layout.ts';
+import { LAYOUT_PREFIX, layoutPrompt, layoutResult, layoutRules } from './layout.ts';
 
 const presets = {
   base: [{ id: 'head-cut', penalty: 3, check: 'Whole head visible.' }, { id: 'cam-twice', penalty: 2, check: 'No webcam in the game.' }],
@@ -36,4 +36,12 @@ test('brief notes: content notes become rules, posting/paying notes are skipped'
   const r = layoutRules(c, presets).filter((x) => x.id.startsWith('note-'));
   assert.deepEqual(r.map((x) => x.check), ['JasonTheWeen must be the main focus of the clip', 'No logos, no negative or hate-farm clips']);
   assert.equal(r[0].penalty, 2);
+});
+
+test('footage prompts: brand video wording, stream wording stays without a focus', async () => {
+  const { speechPrompt, footageVisualPrompt } = await import('./judge.ts');
+  assert.match(speechPrompt('hi', [], 'the chorus'), /brand's own video[\s\S]*the chorus/);
+  assert.doesNotMatch(speechPrompt('hi', []), /brand's own video/);
+  assert.match(footageVisualPrompt('the chorus'), /the chorus/);
+  assert.match(layoutPrompt([], '', true), /brand's own video/);
 });

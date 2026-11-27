@@ -16,6 +16,7 @@ export interface ComplianceInput {
   disclosureRequired: boolean;
   disclosure: string | null;
   music?: Music | null;
+  ownAudio?: boolean; // footage the brand gave: its music is theirs, not someone else's
   transcript: string;
   sourceDate?: Date | null; // when the stream aired
   budget?: { used: number; total: number } | null; // estimated payout so far vs the campaign budget
@@ -54,7 +55,7 @@ export function checkClip(i: ComplianceInput): Compliance {
   const bet = GAMBLING.exec(i.transcript);
   if (bet) blocks.push(`Gambling content ("${bet[0]}")`);
 
-  if (i.music) {
+  if (i.ownAudio) { /* their own song or show audio: keep it */ } else if (i.music) {
     if (i.music.vocalRatio >= VOCAL_BLOCK) blocks.push('A song with vocals plays in the background');
     else if (i.music.musicRatio >= MUSIC_BLOCK) blocks.push('Mostly music from someone else');
     else if (i.music.musicRatio >= MUSIC_WARN) warnings.push('Some background music (turned down where nobody talks)');

@@ -23,8 +23,8 @@ export function layoutRules(campaign: StreamerConfig['campaign'], presets: Recor
   return [...presets.base, ...(preset ? presets[preset] ?? [] : []), ...extra, ...briefRules(campaign)];
 }
 
-export const layoutPrompt = (rules: Rule[], transcript = '') =>
-  `These are frames from a vertical 9:16 short made from a stream: webcam panel on top, game or screen below, on a blurred background.
+export const layoutPrompt = (rules: Rule[], transcript = '', footage = false) =>
+  `These are frames from a vertical 9:16 short made from ${footage ? "a brand's own video: the whole frame on a blurred background, or cropped to the speaker" : 'a stream: webcam panel on top, game or screen below, on a blurred background'}.
 Captions, a chat box, an @tag and #AD are added on purpose. Check each rule against the frames${transcript ? ' and what is said' : ''}. A rule about something that is not in the clip passes.
 ${transcript ? `What is said: "${transcript.slice(0, 1500)}"
 ` : ''}Rules:

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { StreamerConfig } from '../../config.ts';
 import { toEntry } from '../../review/campaigns.ts';
-import { type CrCampaign, crState, formOf, syncCrState, pickCampaigns } from './scout.ts';
+import { type CrCampaign, crState, formOf, hrefsOf, slugOf, syncCrState, pickCampaigns, whyNot } from './scout.ts';
 import { campaignOpen } from '../../config.ts';
 
 const camp = (o: Partial<CrCampaign> = {}): CrCampaign => ({
@@ -59,7 +59,7 @@ test('whyNot gives a plain reason per blocked campaign', async () => {
   assert.equal(whyNot(base, []), null);
   assert.equal(whyNot({ ...base, name: 'Stake casino clips' }, []), 'Gambling');
   assert.equal(whyNot({ ...base, referenceMaterials: [] }, []), 'No Twitch streamer');
-  assert.equal(whyNot({ ...base, referenceMaterials: [] }, [], { [base.id]: 'footage' }), 'Gives its own videos (Snip can not use those yet)');
+  assert.equal(whyNot({ ...base, referenceMaterials: [] }, [], { [base.id]: 'footage' }), 'Gives its own videos, but not as a Google Drive or Dropbox folder');
   assert.equal(whyNot({ ...base, referenceMaterials: [] }, [], { [base.id]: 'gambling' }), 'Gambling');
   assert.equal(whyNot(base, [{ name: 'somebody', channel: 'somebody' } as never]), 'Already joined');
 });
@@ -81,4 +81,17 @@ test('syncCrState: closed CR campaign is marked closed and stops being open', ()
   assert.equal(saved['Kai Cenat'].closed, true);
   assert.equal(campaignOpen({ ...camp, ...saved['Kai Cenat'] }), false);
   assert.equal(campaignOpen(camp), true);
+});
+
+test('footage campaigns: joinable with a Drive link, a plain reason without', () => {
+  const f = camp({ id: 'ft', name: 'Brand podcast clips', organizationName: 'Big Pod Co.', referenceMaterials: [{ url: 'https://drive.google.com/drive/folders/abc123defg45' }] });
+  assert.equal(whyNot(f, [], { ft: 'footage' }), null);
+  assert.match(whyNot({ ...f, referenceMaterials: [] }, [], { ft: 'footage' }) ?? '', /Drive or Dropbox/);
+  assert.equal(slugOf(f), 'big_pod_co');
+  const entry = toEntry(formOf(f, {}, new Date('2026-11-24'), ['https://drive.google.com/drive/folders/abc123defg45']));
+  assert.equal(entry.platform, 'footage'); assert.equal(entry.stage, 'clips'); assert.equal(entry.enabled, false); assert.equal(entry.tag, '');
+  assert.deepEqual(entry.footage, ['https://drive.google.com/drive/folders/abc123defg45']);
+  assert.deepEqual(hrefsOf('<a href="https://www.google.com/url?q=https://www.dropbox.com/scl/fo/x/y?rlkey%3Dk%26dl%3D0&amp;sa=D">HERE</a> <a href="https://a.b/c?d=1&amp;e=2">x</a>'),
+    ['https://www.dropbox.com/scl/fo/x/y?rlkey=k&dl=0', 'https://a.b/c?d=1&e=2']);
+  assert.equal(whyNot(f, [entry], { ft: 'footage' }), 'Already joined');
 });

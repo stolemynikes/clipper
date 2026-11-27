@@ -22,7 +22,7 @@ export function Discover() {
     for (const c of all) {
       if (c.joining) { watching.current.add(c.id); continue; }
       if (!watching.current.delete(c.id)) continue;
-      if (c.why === JOINED) { toast({ text: `Joined ${c.name}. Studying top clips now.`, tone: 'up' }); qc.invalidateQueries({ queryKey: ['campaigns'] }); }
+      if (c.why === JOINED) { toast({ text: `Joined ${c.name}. ${c.streamer ? 'Studying top clips now.' : 'Switch it on to make clips from their videos.'}`, tone: 'up' }); qc.invalidateQueries({ queryKey: ['campaigns'] }); }
       else toast({ text: `Could not join ${c.name}`, tone: 'down' });
     }
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -68,7 +68,7 @@ function Card({ c, onJoin }: { c: DiscoverCampaign; onJoin: () => void }) {
       <div className="flex items-start gap-3">
         <span className="av !w-10 !h-10 !rounded-[12px] !text-sm" aria-hidden>{(c.streamer ?? c.name)[0].toUpperCase()}</span>
         <div className="flex flex-col min-w-0 flex-1"><span className="font-semibold leading-snug line-clamp-2">{c.name}</span>
-          <span className="text-sm text-m truncate">{c.streamer ? `twitch.tv/${c.streamer}` : 'No Twitch channel'}{c.org ? ` · ${c.org}` : ''}</span></div>
+          <span className="text-sm text-m truncate">{c.streamer ? `twitch.tv/${c.streamer}` : !c.why || c.why === JOINED ? 'Their own videos' : 'No Twitch channel'}{c.org ? ` · ${c.org}` : ''}</span></div>
       </div>
       <ul className="flex flex-col gap-1.5 m-0 p-0 list-none text-sm">
         {c.pays.length ? c.pays.map((p) => <li key={p.platform} className="flex justify-between gap-3"><span className="text-m">{PLATFORM[p.platform] ?? p.platform}</span><span className="num">{rate(p, c.pool)}</span></li>)

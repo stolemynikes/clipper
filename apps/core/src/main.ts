@@ -8,6 +8,7 @@ import { publishClip } from './modules/publisher/publish.ts';
 import { askSubmit } from './modules/submitter/submit.ts';
 import { trackOnce } from './modules/tracker/track.ts';
 import { analyzeVod } from './modules/vod-clipper/analyze.ts';
+import { watchFootage } from './modules/watcher/footage.ts';
 import { watchOnce } from './modules/watcher/watcher.ts';
 import { runWorker } from './queue/worker.ts';
 import { alertFailure, bark, isOff, isPaused, notifyReview } from './review/review.ts';
@@ -32,7 +33,7 @@ const server = process.argv.includes('--no-server') ? null : startReviewServer(d
 startDiscord(db).catch((e) => log.error('Discord failed to start', { error: String(e) }));
 const ac = new AbortController();
 
-const watch = () => { if (!isPaused() && loadSettings().watcher.enabled !== false) watchOnce(db).catch((e) => log.error('watcher failed', { error: String(e) })); };
+const watch = () => { if (!isPaused() && loadSettings().watcher.enabled !== false) watchOnce(db).then(() => watchFootage(db)).catch((e) => log.error('watcher failed', { error: String(e) })); };
 let lastWatch = Date.now();
 watch();
 // checks each minute so a pollMinutes change from the dashboard applies without a restart

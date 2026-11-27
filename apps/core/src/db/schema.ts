@@ -8,7 +8,7 @@ const json = <T>(name: string) => text(name, { mode: 'json' }).$type<T>();
 export const streamers = sqliteTable('streamers', {
   id: id(),
   name: text('name').notNull(),
-  platform: text('platform', { enum: ['twitch', 'kick', 'youtube'] }).notNull(),
+  platform: text('platform', { enum: ['twitch', 'kick', 'youtube', 'footage'] }).notNull(),
   channelId: text('channel_id').notNull(),
   config: json<Record<string, unknown>>('config'), // snapshot of streamers.yaml entry
   createdAt: createdAt(),

@@ -1,10 +1,11 @@
 // Campaigns page: paste a brief, Ollama reads it, the owner checks the form, saves to streamers.yaml.
 // "On" first runs the study (progress bar); "Make clips" unlocks when the study is done.
+import { footageLinks } from '../modules/watcher/footage.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
-import { campaignOpen, loadSettings, type StreamerConfig } from '../config.ts';
+import { campaignOpen, GENRES, type Genre, loadSettings, type StreamerConfig } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { paths } from '../env.ts';
 import { logger } from '../log.ts';
@@ -116,17 +117,33 @@ export async function classifyBrief(text: string): Promise<Kind> {
 
 Campaign:
 ${text.slice(0, 6000)}`;
+  return pickOne(prompt, KINDS, 'other');
+}
+
+/** Ollama reads a footage campaign and says what kind of video it gives: sets the layout, captions and judge focus. */
+export function footageGenre(text: string): Promise<Genre> {
+  return pickOne(`A clipping campaign gives its own videos to cut into short clips. What kind of video is it? Pick ONE:
+- podcast: people talking (podcast, interview, talk show, commentary).
+- music: a song, concert or live performance.
+- show: a TV show, film, series, reality show or sketch.
+- product: an ad, product demo, app or brand video.
+
+Campaign:
+${text.slice(0, 6000)}`, Object.keys(GENRES) as Genre[], 'show');
+}
+
+async function pickOne<T extends string>(prompt: string, options: readonly T[], fallback: T): Promise<T> {
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST', signal: AbortSignal.timeout(600_000),
     body: JSON.stringify({
       model: loadSettings().titles?.model ?? 'gemma4:12b', stream: false, think: false, keep_alive: '2m',
-      format: { type: 'object', properties: { kind: { type: 'string', enum: KINDS } }, required: ['kind'] }, options: { temperature: 0, num_predict: 30 },
+      format: { type: 'object', properties: { kind: { type: 'string', enum: options } }, required: ['kind'] }, options: { temperature: 0, num_predict: 30 },
       messages: [{ role: 'user', content: prompt }],
     }),
   });
   if (!r.ok) throw new Error(`Ollama failed: ${r.status}`);
   const kind = JSON.parse(((await r.json()) as { message: { content: string } }).message.content).kind;
-  return (KINDS as readonly string[]).includes(kind) ? kind : 'other';
+  return options.includes(kind) ? kind : fallback;
 }
 
 /** Rate campaigns: what one clip earns at the median views of other clippers' Shorts. Pool: null (a share, unknown). */
@@ -164,11 +181,17 @@ export function toEntry(b: Record<string, unknown>): StreamerConfig {
   if (str('accountNote')) rules.accountNote = str('accountNote').slice(0, 200);
   const notes = str('contentRules').split('|').map((n) => n.trim()).filter(Boolean).slice(0, 8);
   if (notes.length) rules.notes = notes; // per-streamer content rules the judge checks
-  const tag = str('tag') || `@${name}`;
+  const footage = (Array.isArray(b.footage) ? b.footage.map(String) : str('footage').split(/\s+/)).map((f) => f.trim()).filter(Boolean);
+  if (footage.some((f) => footageLinks(f)[0] !== f)) throw new Error('Footage link: a Google Drive or Dropbox folder');
+  const genre = str('genre') as Genre | '';
+  if (genre && !(genre in GENRES)) throw new Error('Kind of video: podcast, music, show or product');
+  const tag = str('tag') || (footage.length ? '' : `@${name}`); // footage: no made-up handle, only a tag the brief gives
   const campaign: Campaign = { platform: 'content_rewards', ...(url ? { url } : {}), ratePer1k, maxPerClip: num('maxPerClip'), endsAt, rules,
     ...(b.disclosure === true || b.disclosure === 'true' ? { disclosure: true } : {}) }; // unset: needsDisclosure decides (CR FTC Terms)
   if (pool) campaign.pool = pool;
   if (num('budgetLeft')) campaign.budgetLeft = num('budgetLeft');
+  // Footage has no channel to study top clips of: straight to clips (still off until the owner switches it on).
+  if (footage.length) return { name, platform: 'footage', channel: name, footage, ...(genre ? { genre } : {}), tag: tag && !tag.startsWith('@') ? `@${tag}` : tag, stage: 'clips', enabled: false, campaign } as StreamerConfig;
   return { name, platform: 'twitch', channel, tag: tag.startsWith('@') ? tag : `@${tag}`, stage: 'study', enabled: false, campaign } as StreamerConfig;
 }
 

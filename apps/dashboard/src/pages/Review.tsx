@@ -25,8 +25,18 @@ export function Review({ focus }: { focus?: number }) {
   const { data, isLoading, error } = useReview();
   const qc = useQueryClient(), toast = useToast();
   const [busy, setBusy] = useState(false), [gone, setGone] = useState<number[]>([]);
-  const list = (data ?? []).filter((c) => !gone.includes(c.id)).sort((a, b) => Number(b.id === focus) - Number(a.id === focus));
+  const [only, setOnly] = useState<string | null>(null);
+  const left = (data ?? []).filter((c) => !gone.includes(c.id));
+  const counts = Object.entries(left.reduce<Record<string, number>>((m, c) => ({ ...m, [c.streamer]: (m[c.streamer] ?? 0) + 1 }), {}));
+  const pick = only && counts.some(([n]) => n === only) ? only : null; // campaign done: back to all
+  const list = left.filter((c) => !pick || c.streamer === pick).sort((a, b) => Number(b.id === focus) - Number(a.id === focus));
   const c = list[0];
+  const chips = counts.length > 1 && (
+    <div className="segs self-start flex-wrap" role="group" aria-label="Campaign">
+      <button className="seg" aria-pressed={!pick} onClick={() => setOnly(null)}>All <span className="num text-f">{left.length}</span></button>
+      {counts.map(([n, k]) => <button key={n} className="seg" aria-pressed={pick === n} onClick={() => setOnly(n)}>{n} <span className="num text-f">{k}</span></button>)}
+    </div>
+  );
 
   const decide = useCallback(async (keep: boolean) => {
     if (!c || busy) return;
@@ -57,12 +67,13 @@ export function Review({ focus }: { focus?: number }) {
   const [sLabel, sTone] = strength(c.strength), total = gone.length + list.length;
   return (
     <Page kicker={`Clip ${gone.length + 1} of ${total} · ${c.streamer} · ${ago(c.at)}`} title={c.title ?? `${c.streamer} clip`}>
+      {chips}
       <div className="flex flex-col md:flex-row gap-6 md:flex-1 md:min-h-0">
         <div className="flex flex-col gap-4 md:w-fit md:max-w-[396px] shrink-0 md:min-h-0">
           <AnimatePresence mode="wait">
             <motion.video key={c.id} src={`/clip/${c.id}.mp4`} controls playsInline autoPlay preload="metadata"
               initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, transition: { duration: .12 } }}
-              className="w-full aspect-[9/16] md:w-auto md:h-[min(704px,calc(100vh/var(--z,1)-180px))] rounded-[20px] bg-black object-contain border border-line" />
+              className={`w-full aspect-[9/16] md:w-auto ${chips ? 'md:h-[min(704px,calc(100vh/var(--z,1)-250px))]' : 'md:h-[min(704px,calc(100vh/var(--z,1)-180px))]'} rounded-[20px] bg-black object-contain border border-line`} />
           </AnimatePresence>
           {list.length > 1 ? (
             <div className="hidden md:flex flex-col gap-2 min-h-0">

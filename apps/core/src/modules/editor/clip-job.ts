@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { loadSettings, type StreamerConfig } from '../../config.ts';
+import { GENRES, loadSettings, type StreamerConfig } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { clips, moments } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -45,6 +45,17 @@ async function detectLayout(src: string, hint: StreamerConfig["facecam"], start:
   }
 }
 
+const WHOLE: Layout = { scene: 'nocam', cam: null, content: { x: 0, y: 0, w: 1, h: 1 } };
+
+/** Footage is not a stream: no facecam over gameplay. A podcast follows the speaker's face (fullcam crop);
+ *  a show, film or product video shows the whole frame on blur. cfg.layout forces one. */
+export async function footageLayout(src: string, cfg: StreamerConfig, start: number, end: number): Promise<Layout> {
+  const want = cfg.layout ?? (cfg.genre && GENRES[cfg.genre].layout);
+  if (want === 'whole') return WHOLE;
+  const l = await detectLayout(src, null, start, end);
+  return l.scene === 'fullcam' || (want === 'face' && l.content) ? { ...l, scene: 'fullcam', cam: null, fit: undefined } : WHOLE;
+}
+
 /** Background music share + spans (YAMNet). null when the check fails: compliance then warns. */
 async function detectMusic(src: string): Promise<(Music & { musicSec: [number, number][] }) | null> {
   try {
@@ -64,7 +75,9 @@ async function downloadSection(url: string, from: number, to: number, final: str
   renameSync(out, final);
 }
 
-async function fetchSection(url: string, from: number, to: number, out: string) {
+export async function fetchSection(url: string, from: number, to: number, out: string) {
+  // Footage: a local file. Stream copy, so the start snaps to the keyframe before `from`; the trim then cuts on sentences anyway.
+  if (!/^https?:/i.test(url)) return void await runCmd('ffmpeg', ['-y', '-v', 'error', '-ss', String(from), '-i', url, '-t', String(to - from), '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-avoid_negative_ts', 'make_zero', out]);
   const vodId = vodIdOf(url), timeoutMs = 15 * 60_000; // a stalled download fails the job instead of holding the queue
   if (vodId) {
     try {
@@ -120,7 +133,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   const used = accountStats(db).filter((a) => a.streamer === cfg.name).reduce((n, a) => n + a.earned, 0);
   const compliance = checkClip({
     campaign: cfg.campaign, tag: cfg.tag, durationSec, limits: { minSec: settings.clip.minSec, maxSec: cfg.campaign?.maxSec ?? settings.clip.maxSec },
-    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music,
+    disclosureRequired: needsDisclosure(cfg.campaign, settings.clip.disclosure), disclosure, music, ownAudio: cfg.platform === 'footage',
     transcript, duplicateOf: source.streamerId && !old ? findDuplicate(db, source.streamerId, transcript) : null,
     budget: cfg.campaign?.budget ? { used, total: cfg.campaign.budget } : null,
     sourceDate: null, // shortcut: VOD air date not stored yet, add it in the watcher when a brief sets sourceFrom strictly
@@ -137,7 +150,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
   if (practice) writeFileSync(join(dir, 'tried.txt'), [...new Set([...was, ...act.map((p) => p.id)])].join('\n'));
   if (old && !props.length) { keepWindow(dir); return log.info(`moment ${momentId}: nothing new to re-test`); }
 
-  const layout = await detectLayout(src, cfg.facecam ?? null, lead, cut);
+  const layout = cfg.platform === 'footage' ? await footageLayout(src, cfg, lead, cut) : await detectLayout(src, cfg.facecam ?? null, lead, cut);
   if (layout.fit === 'full') {
     // Static page (website, tweet) under the cam: watches worse than gameplay or a face, so it ranks lower in review.
     db.update(moments).set({ score: moment.score * WEBSITE_PENALTY, signals: { ...(moment.signals ?? {}), website: 1 } }).where(eq(moments.id, momentId)).run();
@@ -171,16 +184,17 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     .map((c) => ({ ...c, s: Math.max(0, c.s - lead), e: Math.min(c.e, cut) - lead })).filter((c) => c.e > 0.5 && c.s < durationSec);
 
   const dy = stackTop(layout);
+  const genre = cfg.platform === 'footage' && cfg.genre ? GENRES[cfg.genre] : undefined;
   const chatTop = 1920 - dy - CHAT_BOX.h - 16;
   const title = old ? null : await makeTitle(transcript, cfg.name, pickStyle(styleStats(db))); // A/B test, leans to the winner once clear. Hook not burned in: owner wants it as cover/thumbnail instead.
   const encode = async (out: string, ch: Change) => {
     const subs = out.replace('.mp4', '.ass');
     const base = layout.cam ? 900 + dy : layout.scene === 'nocam' ? 1460 : 1300;
     writeFileSync(join(dir, subs), buildAss({
-      words, durationSec, tag: cfg.tag, disclosureSec: settings.clip.disclosureSec, chat,
+      words: !cfg.captionStyle && genre?.captions === null ? [] : words, durationSec, tag: cfg.tag, // music: the song speaks, no lyrics on screen disclosureSec: settings.clip.disclosureSec, chat,
       // #ad goes in the post text + platform paid-promotion toggle; burned in only if the campaign brief asks for it.
       disclosure: (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) ? disclosure : null,
-      style: ch.captionStyle ?? cfg.captionStyle ?? settings.clip.captionStyle,
+      style: ch.captionStyle ?? cfg.captionStyle ?? genre?.captions ?? settings.clip.captionStyle,
       wordsPerChunk: ch.wordsPerChunk, // style default unless an approved proposal sets it
       censor,
       // nocam content sits at y~555-1365 on the blurred bg: captions just below it. fullcam: lower, chat card higher.
@@ -193,7 +207,7 @@ export async function renderClip(db: Db, { momentId, practice, retest }: { momen
     const graph = filterGraph(lay, subs, fwd(relative(dir, join(paths.rootDir, 'assets', 'fonts'))),
       twitchChat ? { at: twitchChat.at, dur: twitchChat.dur, x: 16, y: layout.cam ? (dy ? chatTop : 1564) : 400 } : undefined);
     await runCmd('ffmpeg', ffmpegArgs('src.mp4', out, graph, hw?.encoder ?? 'libx264', lead,
-      duckFilter(quietMusic((music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
+      duckFilter(quietMusic((cfg.platform === 'footage' ? [] : music?.musicSec ?? []).map(([a, b]) => [Math.max(0, a - lead), b - lead] as [number, number]).filter(([, b]) => b > 0), words), ch.duckVol), durationSec,
       twitchChat?.file ?? null, ch.lufs), { cwd: dir });
   };
   await encode('clip.mp4', live);

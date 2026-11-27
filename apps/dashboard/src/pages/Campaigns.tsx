@@ -8,6 +8,7 @@ const FILTERS: [string, (c: Campaign) => boolean][] = [['All', () => true], ['Ru
 const tone = (c: Campaign) => !c.open || c.closed ? 'var(--color-f)' : /making/i.test(c.status) ? 'var(--color-up)' : c.on ? 'var(--color-a)' : 'var(--color-warn)';
 const ends = (c: Campaign) => !c.open ? 'Ended' : c.daysLeft === 1 ? 'Last day' : `${c.daysLeft} days`;
 const pay = (c: Campaign) => c.pool ? `${money(c.pool)} pool` : c.ratePer1k ? `${money(c.ratePer1k)} per 1K` : '—';
+const GENRE = { podcast: 'Podcast: cropped to the speaker, bold captions', music: 'Music: whole frame, no captions, song stays on', show: 'Show: whole frame on a blurred background, clean captions', product: 'Product: whole frame, clean captions' } as const;
 
 /** Budget left as on the CR card; nothing when CR shows no budget. */
 function BudgetBar({ c }: { c: Campaign }) {
@@ -41,7 +42,7 @@ export function Campaigns() {
               <thead><tr><th>Streamer</th><th className="hidden lg:table-cell">Platform</th><th className="hidden md:table-cell">Pays</th><th className="r hidden md:table-cell">Your views</th><th className="r hidden sm:table-cell">Earned</th><th className="hidden md:table-cell">Time left</th><th>Status</th><th aria-hidden /></tr></thead>
               <tbody>{more.shown.map((c) => (
                 <tr key={c.name} className="cursor-pointer" onClick={() => { location.hash = `#/campaigns/${c.name}`; }}>
-                  <td><a href={`#/campaigns/${c.name}`} className="no-underline font-medium flex items-center gap-3"><span className="av" aria-hidden>{c.name[0].toUpperCase()}</span>{c.name}</a></td>
+                  <td><a href={`#/campaigns/${c.name}`} className="no-underline font-medium flex items-center gap-3"><span className="av" aria-hidden>{c.name[0].toUpperCase()}</span>{c.name}{c.genre ? <span className="pill capitalize">{c.genre}</span> : null}</a></td>
                   <td className="hidden lg:table-cell text-m capitalize">{c.site.replace(/_/g, ' ')}</td>
                   <td className="hidden md:table-cell text-m num"><div className="flex flex-col gap-1.5 w-[150px]">{pay(c)}<BudgetBar c={c} /></div></td>
                   <td className="r hidden md:table-cell num">{count(c.views)}</td>
@@ -136,7 +137,8 @@ export function CampaignPage({ name }: { name: string }) {
           <section className="card flex flex-col gap-3 md:flex-1 md:min-h-0 scroll">
             <h2 className="text-[17px] font-semibold m-0">Rules</h2>
             <div className="flex flex-wrap gap-2">{c.platforms.map((p) => <span key={p} className="pill">{PLATFORM[p] ?? p}</span>)}</div>
-            <Rule ok text={`Tag ${c.tag}`} />
+            {c.tag ? <Rule ok text={`Tag ${c.tag}`} /> : null}
+            {c.genre ? <Rule ok text={GENRE[c.genre]} /> : null}
             {c.disclosure ? <Rule ok text="#ad on every clip: Content Rewards rule (FTC), not from this brief" /> : null}
             {c.hashtags.length ? <Rule ok text={`Hashtags: ${c.hashtags.join(' ')}`} /> : null}
             {c.facts.map((f) => <Rule key={f} ok text={f} />)}

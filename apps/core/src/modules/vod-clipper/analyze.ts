@@ -9,7 +9,8 @@ import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
 import { enqueue, Stop } from '../../queue/queue.ts';
 import { getVod, getVodClips } from '../../twitch.ts';
-import { pickMoments, type ChatMessage } from './scoring.ts';
+import { pickMoments, type ChatMessage, type Moment, type ScoringConfig } from './scoring.ts';
+import { loudness } from '../watcher/footage.ts';
 
 const log = logger('vod-clipper');
 
@@ -52,6 +53,20 @@ export function sourceContext(db: Db, sourceId: number) {
   return { source, cfg };
 }
 
+const NO_SIGNALS = { chatRate: 0, emoteScore: 0, viewerClipHits: 0, audioPeak: 0 };
+
+/** Footage has no chat: loud stretches (laughs, shouting) pick the moments, the judge sorts them after render.
+ *  A video that already fits a clip is taken whole. About one moment per 10 minutes, at most 5 per video. */
+export function footagePick(durationSec: number, audio: number[], scoring: ScoringConfig, limits: { minSec: number; maxSec: number }): Moment[] {
+  if (durationSec <= limits.maxSec) return durationSec >= Math.min(limits.minSec, 10) ? [{ start: 0, end: durationSec, score: 1, peakAt: durationSec / 2, signals: NO_SIGNALS }] : [];
+  const cfg = { ...scoring, weights: { chatRate: 0, emoteScore: 0, viewerClipHits: 0, audioPeak: 1 } };
+  return pickMoments({ durationSec, chat: [], audio }, cfg, limits).slice(0, Math.min(5, Math.max(1, Math.round(durationSec / 600))));
+}
+
+export async function footageMoments(file: string, durationSec: number, scoring: ScoringConfig, limits: { minSec: number; maxSec: number }) {
+  return footagePick(durationSec, durationSec > limits.maxSec ? await loudness(file, scoring.windowSec) : [], scoring, limits);
+}
+
 export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { sourceId: number; vodId: string; practice?: boolean }) {
   const { source, cfg } = sourceContext(db, sourceId);
   if (db.select().from(moments).where(eq(moments.sourceId, sourceId)).get()) return log.info(`source ${sourceId} already analyzed`);
@@ -59,13 +74,16 @@ export async function analyzeVod(db: Db, { sourceId, vodId, practice }: { source
   const dir = join(paths.dataDir, 'work', String(sourceId));
   mkdirSync(dir, { recursive: true });
 
-  const vod = await getVod(vodId);
-  const chat = await downloadChat(vodId, dir, source.durationSec ?? 0);
-  const viewerClips = (await getVodClips(vod)).map((c) => ({ offset: c.vod_offset!, duration: c.duration }));
-
   const limits = { minSec: settings.clip.minSec, maxSec: Math.min(settings.clip.maxSec, cfg.campaign?.maxSec ?? Infinity) };
-  // shortcut: audioPeak not computed yet (needs the full audio track); weight has no effect until it is.
-  const picked = pickMoments({ durationSec: source.durationSec ?? 0, chat, viewerClips }, settings.scoring, limits);
+  let chat: ChatMessage[] = [], viewerClips: { offset: number; duration: number }[] = [], picked: Moment[];
+  if (cfg.platform === 'footage') picked = await footageMoments(source.url, source.durationSec ?? 0, settings.scoring, limits);
+  else {
+    const vod = await getVod(vodId);
+    chat = await downloadChat(vodId, dir, source.durationSec ?? 0);
+    viewerClips = (await getVodClips(vod)).map((c) => ({ offset: c.vod_offset!, duration: c.duration }));
+    // shortcut: audioPeak not computed for VODs yet (needs the full audio track); weight has no effect until it is.
+    picked = pickMoments({ durationSec: source.durationSec ?? 0, chat, viewerClips }, settings.scoring, limits);
+  }
 
   for (const m of picked) {
     const row = db.insert(moments).values({ sourceId, startSec: m.start, endSec: m.end, score: m.score, signals: { ...m.signals, peakAt: m.peakAt } }).returning().get();

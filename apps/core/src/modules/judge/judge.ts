@@ -4,7 +4,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { loadSettings } from '../../config.ts';
+import { FOOTAGE_FOCUS, GENRES, loadSettings } from '../../config.ts';
 import type { Db } from '../../db/client.ts';
 import { clips, moments } from '../../db/schema.ts';
 import { paths } from '../../env.ts';
@@ -60,8 +60,8 @@ export async function ask(model: string, gpu: boolean, prompt: string, images?: 
 }
 
 const BROKEN = { type: 'object', required: ['broken'], properties: { broken: { type: 'array', items: { type: 'object', required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
-export async function askLayout(model: string, gpu: boolean, rules: Rule[], images: string[], transcript = '') {
-  const j = await askJson(model, gpu, layoutPrompt(rules, transcript), BROKEN, images);
+export async function askLayout(model: string, gpu: boolean, rules: Rule[], images: string[], transcript = '', footage = false) {
+  const j = await askJson(model, gpu, layoutPrompt(rules, transcript, footage), BROKEN, images);
   return layoutResult((Array.isArray(j.broken) ? j.broken : []).map((b: { id?: unknown; why?: unknown }) => ({ id: String(b.id ?? ''), why: String(b.why ?? '').slice(0, 160) })), rules);
 }
 
@@ -72,9 +72,11 @@ export function studyExamples(name: string, n = 3): string[] {
   return [...readFileSync(file, 'utf8').matchAll(/^- Text: (.+)$/gm)].slice(0, n).map((m) => m[1].slice(0, 300));
 }
 
-export const speechPrompt = (transcript: string, examples: string[]) =>
-  `Rate how fun this short stream clip is to watch, from its transcript alone. Funny, dramatic, surprising, a strong reaction or a story with a payoff scores high.
-Loud or busy is not enough. Boring talk, reading a menu, or nothing happening scores low.
+/** focus: footage campaigns (the brand's own video) say what a good clip of their kind is; unset = stream clip. */
+export const speechPrompt = (transcript: string, examples: string[], focus?: string) =>
+  `${focus ? `Rate how well this short clip, cut from a brand's own video, works as a TikTok or Short, from its transcript alone. A good one is ${focus}.
+Intros, rambling, set-up without a payoff, or nothing happening scores low.` : `Rate how fun this short stream clip is to watch, from its transcript alone. Funny, dramatic, surprising, a strong reaction or a story with a payoff scores high.
+Loud or busy is not enough. Boring talk, reading a menu, or nothing happening scores low.`}
 ${examples.length ? `Clips of this streamer that many viewers liked:\n${examples.map((e) => `- "${e}"`).join('\n')}\n` : ''}
 Transcript:
 """${transcript.slice(0, 1500)}"""
@@ -83,6 +85,11 @@ Return JSON: "score" 0-10, "why" one short sentence.`;
 export const VISUAL_PROMPT = `These are 4 frames from a short stream clip, in order. Rate 0-10 how much is visibly happening that makes people keep watching:
 a strong facial reaction, action in the game, something surprising on screen. A static menu, a website, or a calm face scores low.
 Ignore captions, chat boxes and title text drawn on top: an editor added those, they are not what happens.
+Return JSON: "score" 0-10, "why" one short sentence.`;
+
+export const footageVisualPrompt = (focus: string) => `These are 4 frames from a short clip cut from a brand's own video, in order. Rate 0-10 how much makes people keep watching.
+A good one is ${focus}. A static shot, a logo card, a black frame or an empty stage scores low.
+Ignore captions, an @tag and #AD drawn on top: an editor added those.
 Return JSON: "score" 0-10, "why" one short sentence.`;
 
 export async function frames(file: string, dur: number, width = 360, at = [0.2, 0.4, 0.6, 0.8].map((f) => dur * f)): Promise<string[]> { // layout check: 540+, thin strips vanish at 360
@@ -180,7 +187,7 @@ function saveCalibration(clipId: number, frame: string | undefined, transcript: 
 const liveWeights = () => ({ ...learnedWeights(), ...tweaks().funWeights });
 
 /** Bump when a prompt or judge model changes, so the learner can tell judgments apart. */
-export const JUDGE_VERSION = 2; // 2: brief content notes + transcript in the layout check
+export const JUDGE_VERSION = 3; // 2: brief content notes + transcript in the layout check. 3: footage prompts per genre
 
 /** Job: judge one clip, store the signals on its moment, add the proven part to the score, then ask for review. */
 export async function judgeClip(db: Db, { clipId, notify = true, retest }: { clipId: number; notify?: boolean; retest?: boolean }) {
@@ -190,6 +197,7 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
   const { cfg } = sourceContext(db, moment.sourceId);
   const s = loadSettings();
   const model = s.titles?.model ?? 'gemma4:12b';
+  const footage = cfg.platform === 'footage', focus = footage ? (cfg.genre ? GENRES[cfg.genre].focus : FOOTAGE_FOCUS) : undefined;
   const music = (clip.compliance as { music?: FunSignals } | null)?.music;
   const fun: FunSignals & { judgeWhy?: string; judgeGpu?: number; layoutPenalty?: number; judgeVersion?: number } = // judgeWhy: text in the numeric signals JSON, for the review page
 { laughMax: music?.laughMax, cheerMax: music?.cheerMax };
@@ -204,16 +212,16 @@ export async function judgeClip(db: Db, { clipId, notify = true, retest }: { cli
       log.info(`clip ${clipId} re-test: ${r ?? 'no pairs'}`);
       return keepWindow(dirname(clip.filePath));
     }
-    if (clip.transcript && clip.transcript.split(' ').length >= 8) {
-      const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name)));
+    if (clip.transcript && clip.transcript.split(' ').length >= 8 && cfg.genre !== 'music') { // music: the transcript is lyrics
+      const a = await ask(model, gpu, speechPrompt(clip.transcript, studyExamples(cfg.name), focus));
       fun.speech = a.score / 10; why.push(`talk ${a.score}: ${a.why}`);
     }
     let shot: string | undefined;
     if (existsSync(clip.filePath)) {
       const vis = await frames(clip.filePath, clip.durationSec ?? 20); shot = vis[1];
-      const b = await ask(model, gpu, VISUAL_PROMPT, vis);
+      const b = await ask(model, gpu, focus ? footageVisualPrompt(focus) : VISUAL_PROMPT, vis);
       fun.visual = b.score / 10; why.push(`screen ${b.score}: ${b.why}`);
-      const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540), clip.transcript ?? '');
+      const l = await askLayout(model, gpu, layoutRules(cfg.campaign), await frames(clip.filePath, clip.durationSec ?? 20, 540), clip.transcript ?? '', footage);
       fun.layoutPenalty = l.penalty; layoutWarnings = l.warnings;
       if (l.warnings.length) why.push(`layout -${l.penalty}: ${l.warnings.join('; ')}`);
     }

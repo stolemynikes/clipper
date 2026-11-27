@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 export interface Study { done: number; total: number; finished: boolean; error: string | null }
 export interface Campaign {
-  name: string; tag: string; status: string; open: boolean; on: boolean; stage: string; endsAt: string; daysLeft: number;
+  name: string; tag: string; status: string; open: boolean; on: boolean; stage: string; genre: 'podcast' | 'music' | 'show' | 'product' | null; endsAt: string; daysLeft: number;
   /** From the last CR scan: submissions closed, and budget left (null when CR shows none). */
   closed: boolean; budget: number | null; left: number | null;
   ratePer1k: number; maxPerClip: number; pool: number | null; url: string | null; platforms: string[]; site: string;

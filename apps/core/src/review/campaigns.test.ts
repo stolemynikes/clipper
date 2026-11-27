@@ -81,3 +81,10 @@ test('toEntry: content rules become per-streamer notes', () => {
   assert.deepEqual(e.campaign!.rules!.notes, ['Kai must be the main focus', 'no logos']);
   assert.equal(toEntry({ name: 'kai', platforms: 'tiktok', ratePer1k: 1, endsAt: '2099-01-01' }).campaign!.rules!.notes, undefined);
 });
+
+test('toEntry: footage genre is kept, an unknown one throws', () => {
+  const f = { name: 'pod', platforms: 'tiktok', ratePer1k: 1, endsAt: '2099-01-01', footage: 'https://drive.google.com/drive/folders/abc123defg45' };
+  assert.equal(toEntry({ ...f, genre: 'podcast' }).genre, 'podcast');
+  assert.equal(toEntry(f).genre, undefined);
+  assert.throws(() => toEntry({ ...f, genre: 'x' }), /Kind of video/);
+});

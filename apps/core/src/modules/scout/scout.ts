@@ -1,6 +1,7 @@
 // Scout: finds Content Rewards campaigns for Twitch streamers, joins them in the owner's CR Chrome (workers/cr_browser.py),
 // reads the brief and saves them to streamers.yaml in the study stage. Making clips stays a manual switch on /campaigns.
 // Numbers (rate, pool, budget, platforms) come from CR's own API data; the local model only reads tag, hashtags and account rules.
+import { footageLinks } from '../watcher/footage.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { campaignOpen, type StreamerConfig } from '../../config.ts';
@@ -8,7 +9,7 @@ import type { Db } from '../../db/client.ts';
 import { paths } from '../../env.ts';
 import { logger } from '../../log.ts';
 import { runCmd } from '../../proc.ts';
-import { allStreamers, classifyBrief, extract, isGambling, type Kind, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
+import { allStreamers, classifyBrief, extract, footageGenre, isGambling, type Kind, toEntry, update, updateCampaign } from '../../review/campaigns.ts';
 import { bark } from '../../review/review.ts';
 
 const log = logger('scout');
@@ -34,7 +35,7 @@ const KINDS_FILE = join(paths.dataDir, 'cr-kinds.json');
 /** What the local model says a campaign without a Twitch streamer wants, by campaign id (job campaign.classify). */
 export const cachedKinds = (): Record<string, Kind> => existsSync(KINDS_FILE) ? JSON.parse(readFileSync(KINDS_FILE, 'utf8')) : {};
 const KIND_WHY: Record<Kind, string> = {
-  footage: 'Gives its own videos (Snip can not use those yet)',
+  footage: 'Gives its own videos, but not as a Google Drive or Dropbox folder',
   youtube: 'YouTube creator (Snip clips Twitch only for now)',
   kick: 'Kick streamer (Snip clips Twitch only for now)',
   logo: "Logo on any streamer: not allowed without the streamer's OK",
@@ -54,8 +55,9 @@ export function whyNot(c: CrCampaign, saved: StreamerConfig[], kinds: Record<str
   if (DRUGS.test(text)) return 'Drugs or vapes';
   if (!paying(c).length) return 'Pays on no platform we post to';
   const ch = twitchOf(c);
-  if (!ch) return KIND_WHY[kinds[c.id] ?? 'other'];
-  if (saved.some((s) => s.channel === ch || s.campaign?.url === PAGE + c.id)) return 'Already joined';
+  const own = !ch && kinds[c.id] === 'footage' && footageLinks([c.description ?? '', linksOf(c)].join(' ')).length > 0;
+  if (!ch && !own) return KIND_WHY[kinds[c.id] ?? 'other'];
+  if (saved.some((s) => (ch && s.channel === ch) || s.campaign?.url === PAGE + c.id)) return 'Already joined';
   return null;
 }
 
@@ -64,13 +66,16 @@ export function pickCampaigns(list: CrCampaign[], saved: StreamerConfig[], max =
   return list.filter((c) => !whyNot(c, saved)).sort((a, b) => b.budgetCents - a.budgetCents).slice(0, max);
 }
 
+/** Footage campaigns have no channel: a name from the brand (or campaign), fit for streamers.yaml. */
+export const slugOf = (c: CrCampaign) => (c.organizationName || c.name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 25).replace(/_+$/, '') || 'footage';
+
 /** The form fields toEntry validates, from CR's data. Text-only fields (tag, hashtags, rules) come from the brief. */
-export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; contentRules?: string; disclosure?: boolean; minViews?: number; totalViews?: number; endsAt?: string }, now = new Date()) {
+export function formOf(c: CrCampaign, brief: { tag?: string; hashtags?: string[]; accountNote?: string; contentRules?: string; disclosure?: boolean; minViews?: number; totalViews?: number; endsAt?: string }, now = new Date(), footage?: string[]) {
   const pays = c.payouts.filter((p) => paying(c).includes(p.platform));
   const pool = c.payoutType === 'pool';
   const left = c.budgetCents - (c.metrics?.budgetSpentCents ?? 0);
   return {
-    name: twitchOf(c), channel: twitchOf(c), url: PAGE + c.id, platforms: paying(c), brief: [c.name, c.description].join(' '),
+    ...(footage?.length ? { name: slugOf(c), channel: slugOf(c), footage } : { name: twitchOf(c), channel: twitchOf(c) }), url: PAGE + c.id, platforms: paying(c), brief: [c.name, c.description].join(' '),
     ratePer1k: pool ? 0 : Math.max(...pays.map((p) => p.rateCents ?? 0)) / 100,
     maxPerClip: pool ? 0 : Math.max(0, ...pays.map((p) => p.maxPayoutCents ?? 0)) / 100,
     pool: pool ? c.budgetCents / 100 : 0, budgetLeft: left > 0 && left < c.budgetCents ? left / 100 : 0,
@@ -88,16 +93,25 @@ export const datedEnd = (d: string | undefined, now = new Date()) =>
 
 const SOCIAL = /^https:\/\/([\w-]+\.)?(twitch\.tv|youtube\.com|youtu\.be|tiktok\.com|instagram\.com|x\.com|twitter\.com|kick\.com|snapchat\.com|discord\.(gg|com))\//i;
 /** Text of the rules pages linked from the campaign (Google Docs, a "Rules & Requirements" site), not the streamer's social links. */
-async function rulesDocs(c: CrCampaign): Promise<string> {
+export async function rulesDocs(c: CrCampaign): Promise<string> {
   const links = [...new Set([...(c.referenceMaterials ?? []).map((r) => r.url), ...(c.description ?? '').match(/https:\/\/docs\.google\.com\/\S+/g) ?? []]
     .filter((u) => u.startsWith('https://') && !SOCIAL.test(u)))].slice(0, 3);
   const out: string[] = [];
   for (const u of links) {
-    const r = await fetch(u, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
-    if (r?.ok) out.push((await r.text()).replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').slice(0, 8000));
+    // A Google Doc's html export keeps hyperlinks ("the footage is HERE") that its text view drops.
+    const doc = /^https:\/\/docs\.google\.com\/document\/d\/([\w-]+)/.exec(u)?.[1];
+    const r = await fetch(doc ? `https://docs.google.com/document/d/${doc}/export?format=html` : u, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    const html = r?.ok ? await r.text() : '';
+    if (html) out.push(hrefsOf(html).join(' ') + ' ' + html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').slice(0, 8000));
   }
   return out.join('\n');
 }
+
+/** Link targets in html, unwrapped from Google's redirect (google.com/url?q=...). */
+export const hrefsOf = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => {
+  const u = m[1].replace(/&amp;/g, '&');
+  try { const w = new URL(u); return /(^|\.)google\.com$/.test(w.hostname) && w.pathname === '/url' ? w.searchParams.get('q') ?? u : u; } catch { return u; }
+});
 
 const linksOf = (c: CrCampaign) => (c.referenceMaterials ?? []).map((r) => r.url).join(' ');
 
@@ -158,12 +172,16 @@ export function crState(url: string | undefined, names: string[], scan = cachedD
 export async function joinCampaign(db: Db, c: CrCampaign): Promise<{ name?: string; reason?: string }> {
   const page = await cr('join', PAGE + c.id, c.name) as { joined: boolean; text: string; docs?: string };
   if (!page.joined) return { reason: 'CR did not confirm the join' };
-  const text = [c.name, c.description, page.text, page.docs ?? '', await rulesDocs(c)].join('\n');
+  const docs = await rulesDocs(c);
+  const text = [c.name, c.description, page.text, page.docs ?? '', docs].join('\n');
   const { fields } = await extract(text, PAGE + c.id);
   if (fields.gambling || isGambling(text)) return { reason: 'The brief is about gambling' };
   const tag = fields.tag && text.toLowerCase().includes(fields.tag.replace(/^@/, '').toLowerCase()) ? fields.tag : ''; // only a tag written in the brief
-  const entry = toEntry(formOf(c, { ...fields, tag }));
+  const footage = twitchOf(c) ? undefined : footageLinks([c.description ?? '', linksOf(c), page.text, page.docs ?? '', docs].join(' '));
+  if (!twitchOf(c) && !footage?.length) return { reason: 'No Google Drive or Dropbox folder with their videos in the brief' };
+  const entry = toEntry(formOf(c, { ...fields, tag }, new Date(), footage));
   if (!campaignOpen(entry.campaign!)) return { reason: 'Budget or time is used up' };
+  if (footage) entry.genre = await footageGenre(text).catch(() => undefined); // unset: face when one is found, default captions
   if (!datedEnd(fields.endsAt)) entry.campaign!.rules = { ...entry.campaign!.rules, endsAtAssumed: true };
   update(entry.name, entry, true); // opt-in: owner starts study/clips on the campaign page
   log.info(`joined and saved ${entry.name} (${c.name})`);
