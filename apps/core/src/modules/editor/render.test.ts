@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, quietMusic, stackTop } from './render.ts';
+import { captionSpot, chatSpot, duckFilter, coldOpenArgs, faceTrouble, ffmpegArgs, filterGraph, quietMusic, stackTop, teaserSpan } from './render.ts';
 
 test('facecam layout stacks 768 + 1152 = 1920 and burns subs', () => {
   const g = filterGraph({ cam: { x: 0.75, y: 0, w: 0.25, h: 0.25 } }, 'subs.ass', '../fonts');
@@ -119,4 +119,13 @@ test('followPath: still face = one key, moving face pans with dead zone, lost fa
   assert.ok(xs.every((x, i) => !i || x >= xs[i - 1])); // never swings back while the face was lost
   const e = panExpr([[0, 0.1], [2, 0.3]]);
   assert.equal(e, 'if(lt(t,0),0.1,if(lt(t,2),0.1+0.2*(t-0)/2,0.3))');
+});
+
+test('teaserSpan: whole payoff words, 1..2.5 s; coldOpenArgs crossfades the teaser into the clip', () => {
+  const w = [{ s: 5, e: 5.4 }, { s: 10.2, e: 10.6 }, { s: 10.7, e: 11.3 }, { s: 11.4, e: 12.1 }, { s: 12.2, e: 13.5 }];
+  assert.deepEqual(teaserSpan(w, 10), [10.1, 12.25]); // stops before the word that would run past 2.5 s
+  assert.equal(teaserSpan(w, 20), null); // nothing said after the peak
+  assert.equal(teaserSpan([{ s: 10, e: 10.3 }], 10), null); // one short word is not a teaser
+  const a = coldOpenArgs('in.mp4', 'out.mp4', [10.1, 12.25], 'libx264');
+  assert.ok(a[a.indexOf('-filter_complex') + 1].includes('xfade=transition=fade:duration=0.3:offset=1.85'));
 });

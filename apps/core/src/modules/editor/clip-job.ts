@@ -16,7 +16,7 @@ import { CHAT_BOX, CHAT_LAG, renderTwitchChat, vodIdOf } from './twitch-chat.ts'
 import { checkClip, isSteadyMusic, needsDisclosure, type Music } from '../compliance/compliance.ts';
 import { findDuplicate } from '../compliance/duplicate.ts';
 import { accountStats } from '../../review/setup.ts';
-import { captionSpot, chatSpot, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop } from './render.ts';
+import { captionSpot, chatSpot, coldOpenArgs, duckFilter, faceTrouble, ffmpegArgs, filterGraph, followPath, hookSpot, type Layout, quietMusic, type Rect, stackTop, teaserSpan } from './render.ts';
 import { buildAss, type Word } from './subtitles.ts';
 import { makeTitle } from '../publisher/titles.ts';
 import { pickStyle, styleStats } from '../learner/title-style.ts';
@@ -244,6 +244,9 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   // Crop that pans with the person: only a one-face full-cam scene, and only when the face really moves (else a byte copy).
   const follow = layout.scene === 'fullcam' && (layout.faces ?? 1) < 2 && layout.content && (live.followFace || props.some((p) => p.change.followFace));
   const pan = follow ? await facePan(src, layout, lead, cut) : null;
+  // cold open: never when the disclosure is burned in, it must open the clip (hard rule)
+  const teaser = (cfg.campaign?.disclosureInVideo ?? settings.clip.disclosureInVideo) && disclosure ? null : teaserSpan(words, peakRel - lead);
+  const openCold = async (out: string) => { await runCmd('ffmpeg', coldOpenArgs(out, 'cold.mp4', teaser!, hw?.encoder ?? 'libx264'), { cwd: dir }); renameSync(join(dir, 'cold.mp4'), join(dir, out)); };
   const encode = async (out: string, ch: Change) => {
     const own = ch.gameCrop?.[cfg.name] ?? (ch.wideGame ? { x: 0, y: 0, w: 1, h: 1, fit: 'stack' as const } : undefined); // only the plain cam scene: stack/full layouts already pick their own content
     const lay: typeof layout = own && layout.cam && !layout.fit ? { ...layout, content: own, ...(own.fit && { fit: own.fit }) } : ch.followFace && pan ? { ...layout, pan } : layout;
@@ -272,7 +275,8 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
   const pre = proof ? 'proof-' : 'clip-'; // proof never overwrites a real clip.mp4
   // Would be a byte copy of live: no plain cam scene for a crop, no music-only part to duck.
   const run = props.filter((p) => {
-    const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
+    const why = (p.change.gameCrop || p.change.wideGame) && (!layout.cam || layout.fit) ? 'crop not used on this layout' : p.change.followFace && !pan ? 'no single moving face here'
+      : p.change.coldOpen && !teaser ? 'no clean payoff cut, or disclosure must open the clip' : p.change.duckVol !== undefined && !duckFilter(quiet) ? 'no music without speech here' : p.change.chatBurst !== undefined && !burst.length ? 'chat never goes wild here' : p.change.sfxCaptions && !sfx.length ? 'no laughs or screams here' : p.change.hookTitle && !title?.hook ? 'no hook' : p.change.hookTitle && hookSpot(layout) == null ? 'title would cover the face' : p.change.speakerColors && new Set(words.map((w) => w.sp).filter((x) => x != null)).size < 2 ? 'one speaker here' : null;
     if (why) log.info(`${p.id}: ${why}, skipped`);
     return !why;
   });
@@ -299,10 +303,11 @@ export async function renderClip(db: Db, { momentId, practice, retest, proof, re
     layout = next;
     await encode(liveOut, live);
   }
+  if (live.coldOpen && teaser) await openCold(liveOut); // owner-accepted cold open
   // Practice A/B: same moment again with the proposal on top of the live template; the judge compares the two.
   // Every testing proposal gets its own encode of this one download + transcript: several proposals per night instead of one.
   for (const p of run) {
-    if (!isLength(p.change)) { await encode(`${pre}${p.id}.mp4`, { ...live, ...p.change }); continue; }
+    if (!isLength(p.change)) { await encode(`${pre}${p.id}.mp4`, { ...live, ...p.change }); if (p.change.coldOpen || live.coldOpen && teaser) await openCold(`${pre}${p.id}.mp4`); continue; }
     // Length: only the cut moves, judged on the transcripts, so no encode needed.
     const v = trimFor({ ...live, ...p.change });
     const text = t.words.filter((w) => w.s >= v.start && w.s < v.end).map((w) => w.w).join(' ');

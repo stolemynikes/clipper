@@ -168,10 +168,29 @@ export function duckFilter(spans: [number, number][], vol = 0.5, ramp = 0.5): st
 export const loudnorm = (lufs = -14) => `loudnorm=I=${lufs}:LRA=7:TP=-1.5,aresample=48000`; // a sound proposal may change lufs
 export const LOUDNORM = loudnorm();
 
+const videoCodec = (encoder: string) => encoder === 'h264_nvenc'
+  ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
+  : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
+
+/** Cold open: the first whole words of the payoff (clip seconds, from `peak`), 1..max s long. null = no clean cut there. */
+export function teaserSpan(words: { s: number; e: number }[], peak: number, max = 2.5): [number, number] | null {
+  const ws = words.filter((w) => w.s >= peak - 0.3);
+  if (!ws.length) return null;
+  const a = Math.max(0, ws[0].s - 0.1), last = ws.filter((w) => w.e + 0.15 - a <= max).pop();
+  return last && last.e - a >= 1 ? [+a.toFixed(2), +(last.e + 0.15).toFixed(2)] : null;
+}
+
+/** Rendered clip with [a, b] of itself in front, joined by a short picture + sound crossfade. */
+export function coldOpenArgs(input: string, output: string, [a, b]: [number, number], encoder: string, fade = 0.3): string[] {
+  const g = `[0:v]split[v0][v1];[v0]trim=${a}:${b},setpts=PTS-STARTPTS[t];[v1]setpts=PTS-STARTPTS[m];`
+    + `[t][m]xfade=transition=fade:duration=${fade}:offset=${+(b - a - fade).toFixed(2)},format=yuv420p[v];`
+    + `[0:a]asplit[a0][a1];[a0]atrim=${a}:${b},asetpts=PTS-STARTPTS[ta];[a1]asetpts=PTS-STARTPTS[ma];[ta][ma]acrossfade=d=${fade}[a]`;
+  return ['-y', '-hide_banner', '-loglevel', 'error', '-i', input, '-filter_complex', g, '-map', '[v]', '-map', '[a]',
+    ...videoCodec(encoder), '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
+}
+
 export function ffmpegArgs(input: string, output: string, graph: string, encoder: string, startSec = 0, audioFilter: string | null = null, durSec: number | null = null, overlayInput: string | null = null, lufs = -14): string[] {
-  const video = encoder === 'h264_nvenc'
-    ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-b:v', '5M', '-maxrate', '6M', '-bufsize', '10M']
-    : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '6M', '-bufsize', '10M'];
+  const video = videoCodec(encoder);
   return ['-y', '-hide_banner', '-loglevel', 'error', ...(startSec > 0 ? ['-ss', startSec.toFixed(2)] : []), ...(durSec ? ['-t', durSec.toFixed(2)] : []), '-i', input, ...(overlayInput ? ['-i', overlayInput] : []), '-filter_complex', graph, '-map', '[v]', '-map', '0:a?',
     '-af', audioFilter ? `${audioFilter},${loudnorm(lufs)}` : loudnorm(lufs),
     ...video, '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', output];
